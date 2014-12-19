@@ -21,6 +21,8 @@ parfor i = 2:nsongs
         spectrograms(i, :, :) = speck;
 end
 
+spectrogram_avg_img = squeeze(log(sum(abs(spectrograms(:,5:end,:)))));
+
 
 % Construct dataset.
 % Number of samples: (nsongs*(ntimes-time_window))
@@ -47,8 +49,8 @@ end
 spectrograms_ds = spectrograms_ds / prod(img_ds);
 
 
-freq_range_ds = 20:60;
-time_window_ds = 40;
+freq_range_ds = 30:80;
+time_window_ds = 30;
 
 [foo nfreqs_ds ntimes_ds] = size(spectrograms_ds);
 layer0sz = length(freq_range_ds) * time_window_ds;
@@ -64,14 +66,17 @@ testsongs = randomsongs(ntrainsongs+1:end);
 disp(sprintf('(Allocating %g MB for training set X.)', ...
         8 * nsongs * nwindows_per_song * layer0sz / (2^20)));
 nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
-nnsetY = zeros(1, nsongs * nwindows_per_song);
 
 disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % This loop also shuffles the songs according to randomsongs, so we can use
 % contiguous blocks for training / testing
 
-tstep_of_interest = 850
+tstep_of_interest = [ 840 1335 1820 ];
 tstep_of_interest_ds = round(tstep_of_interest/img_ds(2))
+ntsteps_of_interest = length(tstep_of_interest);
+
+nnsetY = zeros(length(tstep_of_interest), nsongs * nwindows_per_song);
+
 
 for song = 1:nsongs
 
@@ -82,8 +87,8 @@ for song = 1:nsongs
                                  freq_range_ds, ...
                                  tstep - time_window_ds + 1  :  tstep), ...
                                  [], 1);
-                if tstep == tstep_of_interest_ds
-                        nnsetY((song-1)*nwindows_per_song + tstep - time_window_ds + 1) = 1;
+                if any(tstep == tstep_of_interest_ds)
+                        nnsetY(:, (song-1)*nwindows_per_song + tstep - time_window_ds + 1) = (tstep == tstep_of_interest_ds);
                 end
         end
 end
@@ -100,18 +105,14 @@ disp('Training...');
 nnset_train = 1:(ntrainsongs * nwindows_per_song);
 nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
-net = feedforwardnet([2]);
+net = feedforwardnet([5]);
 net.trainParam.max_fail = 3;
-%net = train(net, nnsetX(:, nnset_train), nnsetY(nnset_train), {}, {}, 0.1 + nnsetY(nnset_train));
-net = train(net, nnsetX(:, nnset_train), nnsetY(nnset_train));
+%net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
+net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
 
 
 testout = sim(net, nnsetX);
-testout = reshape(testout, nwindows_per_song, nsongs);
-tic;
-timedout = sim(net, nnsetX(:,137));
-doneat = toc;
-disp(sprintf('Evaluation of one timestep: %g ms', doneat * 1000));
+testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
 
 if false
         song_montage = spectrograms_ds;
@@ -124,23 +125,39 @@ end
 
 % Plot the results from the unseen test set
 figure(4);
-subplot(3,1,1);
-imagesc(squeeze(log(sum(abs(spectrograms(:,5:end,:))))));
-line(tstep_of_interest * [1 1], [1 nfreqs], 'Color', [1 0 0]);
+subplot(ntsteps_of_interest+1,1,1);
+imagesc(spectrogram_avg_img);
+line(repmat(tstep_of_interest, 2, 1), repmat([1 nfreqs], ntsteps_of_interest, 1)', 'Color', [1 0 0]);
 ylabel('frequency');
 axis xy;
 
-subplot(3,1,[2 3]);
-foo = reshape(testout, [], nsongs);
-barrr = zeros(time_window_ds, nsongs);
-barrr(:, 1:ntrainsongs) = max(max(foo))/2;
-barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
-foo = [barrr' foo'];
-imagesc(foo);
-xlabel('timestep');
-ylabel('Song (random order)');
-text(time_window_ds/2, ntrainsongs/2, 'train', ...
-     'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-text(time_window_ds/2, ntrainsongs+ntestsongs/2, 'test', ...
-     'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+for i = 1:ntsteps_of_interest
+        figure(4);
+        subplot(ntsteps_of_interest+1,1,i+1);
+        foo = reshape(testout(i,:,:), [], nsongs);
+        barrr = zeros(time_window_ds, nsongs);
+        barrr(:, 1:ntrainsongs) = max(max(foo))/2;
+        barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
+        foo = [barrr' foo'];
+        imagesc(foo);
+        xlabel('timestep');
+        ylabel('Song (random order)');
+        text(time_window_ds/2, ntrainsongs/2, 'train', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+        text(time_window_ds/2, ntrainsongs+ntestsongs/2, 'test', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+        
+end
 
+figure(5);
+for i = 1:size(net.IW{1}, 1)
+        subplot(size(net.IW{1}, 1), 1, i)
+        imagesc(-time_window_ds:0, img_ds(1)*freq_range_ds, ...
+                reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_ds));
+        axis xy;
+        if i == size(net.IW{1}, 1)
+                xlabel('time');
+        end
+        ylabel('frequency');
+        %imagesc(reshape(net.IW{1}(i,:), time_window_ds, length(freq_range_ds)));
+end
