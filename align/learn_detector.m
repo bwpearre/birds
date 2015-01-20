@@ -4,6 +4,12 @@ rng('shuffle');
 
 load aggregated_data;
 
+%some_songs = reshape(MIC_DATA(:, 1:50), [], 1);
+%
+%audiowrite('birdsongs.ogg', ...
+%        some_songs / max([max(max(some_songs)) abs(min(min(some_songs)))]), ...
+%        44100);
+
 %disp('Tossing most of MIC_DATA so things go faster!');
 %MIC_DATA = MIC_DATA(:, 1:11);
 
@@ -49,7 +55,7 @@ end
 spectrograms_ds = spectrograms_ds / prod(img_ds);
 
 
-freq_range_ds = 30:80;
+freq_range_ds = 40:80;
 time_window_ds = 30;
 
 [foo nfreqs_ds ntimes_ds] = size(spectrograms_ds);
@@ -105,7 +111,7 @@ disp('Training...');
 nnset_train = 1:(ntrainsongs * nwindows_per_song);
 nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
-net = feedforwardnet([5]);
+net = feedforwardnet([4]);
 net.trainParam.max_fail = 3;
 %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
 net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
