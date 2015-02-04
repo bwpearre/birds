@@ -54,9 +54,9 @@ for song = 1:nsongs
 end
 spectrograms_ds = spectrograms_ds / prod(img_ds);
 
-
-freq_range_ds = 40:80;
-time_window_ds = 30;
+% Cut out a region of the spectrum (in space and time)
+freq_range_ds = 40:100;
+time_window_ds = 50;
 
 [foo nfreqs_ds ntimes_ds] = size(spectrograms_ds);
 layer0sz = length(freq_range_ds) * time_window_ds;
@@ -77,7 +77,7 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % This loop also shuffles the songs according to randomsongs, so we can use
 % contiguous blocks for training / testing
 
-tstep_of_interest = [ 840 1335 1820 ];
+tstep_of_interest = [ 840 1335 1820 2000 ];
 tstep_of_interest_ds = round(tstep_of_interest/img_ds(2))
 ntsteps_of_interest = length(tstep_of_interest);
 
@@ -111,7 +111,7 @@ disp('Training...');
 nnset_train = 1:(ntrainsongs * nwindows_per_song);
 nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
-net = feedforwardnet([4]);
+net = feedforwardnet([8]);
 net.trainParam.max_fail = 3;
 %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
 net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
@@ -133,6 +133,7 @@ end
 figure(4);
 subplot(ntsteps_of_interest+1,1,1);
 imagesc(spectrogram_avg_img);
+colorbar;
 line(repmat(tstep_of_interest, 2, 1), repmat([1 nfreqs], ntsteps_of_interest, 1)', 'Color', [1 0 0]);
 ylabel('frequency');
 axis xy;
@@ -152,7 +153,7 @@ for i = 1:ntsteps_of_interest
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
         text(time_window_ds/2, ntrainsongs+ntestsongs/2, 'test', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-        
+        colorbar;
 end
 
 figure(5);
