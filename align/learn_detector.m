@@ -55,8 +55,8 @@ end
 spectrograms_ds = spectrograms_ds / prod(img_ds);
 
 % Cut out a region of the spectrum (in space and time)
-freq_range_ds = 40:100;
-time_window_ds =1;
+freq_range_ds = 40:80;
+time_window_ds = 30;
 
 [foo nfreqs_ds ntimes_ds] = size(spectrograms_ds);
 layer0sz = length(freq_range_ds) * time_window_ds;
@@ -77,7 +77,9 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % This loop also shuffles the songs according to randomsongs, so we can use
 % contiguous blocks for training / testing
 
-tstep_of_interest = [ 840 1335 1820 2000 ];
+% These are the timesteps (not downsampled) that we want to try to pick
+% out.
+tstep_of_interest = [ 964 1335 1720 2000 ];
 tstep_of_interest_ds = round(tstep_of_interest/img_ds(2))
 ntsteps_of_interest = length(tstep_of_interest);
 
