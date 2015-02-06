@@ -34,7 +34,7 @@ spectrogram_avg_img = squeeze(log(sum(abs(spectrograms(:,5:end,:)))));
 % Number of samples: (nsongs*(ntimes-time_window))
 % Size of each sample: (ntimes-time_window)*length(freq_range)
 
-img_ds = [2 10];
+img_ds = [2 5];
 
 spectrograms_ds = zeros([nsongs nfreqs-1 ntimes] ./ [1 img_ds]);
 
@@ -56,7 +56,7 @@ spectrograms_ds = spectrograms_ds / prod(img_ds);
 
 % Cut out a region of the spectrum (in space and time)
 freq_range_ds = 40:100;
-time_window_ds = 50;
+time_window_ds =1;
 
 [foo nfreqs_ds ntimes_ds] = size(spectrograms_ds);
 layer0sz = length(freq_range_ds) * time_window_ds;
