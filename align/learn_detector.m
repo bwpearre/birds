@@ -62,7 +62,7 @@ spectrograms_ds = spectrograms_ds / prod(img_ds);
 % Cut out a region of the spectrum (in space and time) to save on compute
 % time:
 freq_range_ds = 40:80;
-time_window_ds = 30;
+time_window_ds = 1;
 
 [foo nfreqs_ds ntimes_ds] = size(spectrograms_ds);
 
