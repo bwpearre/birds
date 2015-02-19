@@ -2,7 +2,18 @@ clear;
 
 rng('shuffle');
 
-load aggregated_data;
+
+if 0
+        load('~/r/data/wintest25/out_MANUALCLUST/extracted_data');
+
+        MIC_DATA = agg_audio.data;
+elseif 1
+        load('/Users/bwpearre/r/data/lg373rblk_2015_01_14/wav/out_MANUALCLUST/extracted_data.mat');
+        MIC_DATA = agg_audio.data;
+    
+else
+        load aggregated_data;
+end
 
 %%% Code snippet to create songs for audio device input
 %some_songs = reshape(MIC_DATA(:, 1:50), [], 1);
@@ -12,34 +23,58 @@ load aggregated_data;
 %        44100);
 
 
-
 nsongs = size(MIC_DATA, 2);
+
+
+%%% Parameter: downsample the "image" (spectrogram) by this much:
+%%% [ frequency_bins  time ]
+img_ds = [2 10];
+
+
 
 % Compute the spectrogram using original parameters (probably far from
 % optimal but I have not played with them).  Compute one to get size, then
 % preallocate memory and compute the rest in parallel.
-speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
-[nfreqs ntimes] = size(speck);
+
+% SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
+%speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
+NFFT = 512;
+WINDOW = 500;
+NOVERLAP = WINDOW - 10;
+
+speck = spectrogram(MIC_DATA(:,1), WINDOW, NOVERLAP, NFFT, agg_audio.fs) + eps;
+[nfreqs, ntimes] = size(speck);
+
 spectrograms = zeros([nsongs nfreqs ntimes]);
 spectrograms(1, :, :) = speck;
 disp('Computing spectrograms...');
 parfor i = 2:nsongs
-        speck = specgram(MIC_DATA(:,i), 512, [], [], 500) + eps;
+        speck = spectrogram(MIC_DATA(:,i), WINDOW, NOVERLAP, NFFT, agg_audio.fs) + eps;
         spectrograms(i, :, :) = speck;
 end
+
+% To downsample, chop off the tail of the spectrogram so that we have an
+% integer number of bins to downsample into.
+ntimes = img_ds(2) * floor(ntimes / img_ds(2));
+spectrograms = spectrograms(:, :, 1:ntimes);
 
 % Create a pretty graphic for display (which happens later)
 spectrogram_avg_img = squeeze(log(sum(abs(spectrograms(:,5:end,:)))));
 
+% Alright, may as well draw it now, just to show that something's going on
+% in that big vacant-looking cylinder with the apple logo on it.
+figure(4);
+subplot(1,1,1);
+imagesc(spectrogram_avg_img);
+axis xy;
 
 % Construct "ds" (downsampled) dataset.  This is heavily downsampled to save on computational
 % resources.  This would better be done by modifying the spectrogram's
-% parameters above, but this will do for now.
+% parameters above (which would only reduce the number of frequency bins,
+% not the number of timesteps), but this will do for now.
 
 % Number of samples: (nsongs*(ntimes-time_window))
 % Size of each sample: (ntimes-time_window)*length(freq_range)
-img_ds = [2 5];
-
 spectrograms_ds = zeros([nsongs nfreqs-1 ntimes] ./ [1 img_ds]);
 
 disp('Downsampling spectrograms...');
@@ -62,9 +97,9 @@ spectrograms_ds = spectrograms_ds / prod(img_ds);
 % Cut out a region of the spectrum (in space and time) to save on compute
 % time:
 freq_range_ds = 40:80;
-time_window_ds = 1;
+time_window_ds = 30;
 
-[foo nfreqs_ds ntimes_ds] = size(spectrograms_ds);
+[foo, nfreqs_ds, ntimes_ds] = size(spectrograms_ds);
 
 % How big will the neural network's input layer be?
 layer0sz = length(freq_range_ds) * time_window_ds;
@@ -75,8 +110,8 @@ layer0sz = length(freq_range_ds) * time_window_ds;
 nwindows_per_song = ntimes_ds - time_window_ds + 1;
 
 % Hold some data out for final testing.
-ntrainsongs = floor(nsongs*8/10);
-ntestsongs = ceil(nsongs*2/10);
+ntrainsongs = floor(nsongs*6/10);
+ntestsongs = ceil(nsongs*4/10);
 
 % On each run of this program, change the presentation order of the
 % data, so we get (a) a different subset of the data than last time for
@@ -97,7 +132,7 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % These are the timesteps (not downsampled--they correspond to the timesteps
 % shown in the full-size pretty spectrogram) that we want to try to pick
 % out.
-tstep_of_interest = [ 964 1335 1720 2000 ];
+tstep_of_interest = [ 964 1460 2125 2410 ];
 tstep_of_interest_ds = round(tstep_of_interest/img_ds(2))
 ntsteps_of_interest = length(tstep_of_interest);
 
@@ -135,7 +170,8 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 % Create the network.  The parameter is the number of units in each hidden
 % layer.  [8] means one hidden layer with 8 units.  [] means a simple
 % perceptron.
-net = feedforwardnet([8]);
+%net = feedforwardnet([2*length(tstep_of_interest)]);
+net = feedforwardnet([]);
 % Once the validation set performance stops improving, it doesn't seem to
 % get better, so keep this small.
 net.trainParam.max_fail = 3;
@@ -168,6 +204,18 @@ line(repmat(tstep_of_interest, 2, 1), repmat([1 nfreqs], ntsteps_of_interest, 1)
 ylabel('frequency');
 axis xy;
 
+
+%% Cost of false positives is relative to that of false negatives.
+FALSE_POSITIVE_COST = 10
+optimal_thresholds = optimise_network_output_unit_trigger_thresholds(...
+        testout, ...
+        tstep_of_interest_ds, ...
+        FALSE_POSITIVE_COST, ...
+        timestep_length, ...
+        time_window_ds)
+
+
+SHOW_THRESHOLDS = true;
 % For each timestep of interest, draw that output unit's response to all
 % timesteps for all songs:
 for i = 1:ntsteps_of_interest
@@ -175,8 +223,15 @@ for i = 1:ntsteps_of_interest
         subplot(ntsteps_of_interest+1,1,i+1);
         foo = reshape(testout(i,:,:), [], nsongs);
         barrr = zeros(time_window_ds, nsongs);
-        barrr(:, 1:ntrainsongs) = max(max(foo))/2;
-        barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
+
+        if SHOW_THRESHOLDS
+                foo = foo > optimal_thresholds(i);
+                barrr(:, 1:ntrainsongs) = 0.3;
+                barrr(:, ntrainsongs+1:end) = 0.6;
+        else
+                barrr(:, 1:ntrainsongs) = max(max(foo))/2;
+                barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
+        end
         foo = [barrr' foo'];
         imagesc(foo);
         xlabel('timestep');
