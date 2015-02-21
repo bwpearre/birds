@@ -5,14 +5,14 @@ rng('shuffle');
 
 if 0
         load('~/r/data/wintest25/out_MANUALCLUST/extracted_data');
-
         MIC_DATA = agg_audio.data;
-elseif 1
+elseif 0
         load('/Users/bwpearre/r/data/lg373rblk_2015_01_14/wav/out_MANUALCLUST/extracted_data.mat');
         MIC_DATA = agg_audio.data;
     
 else
         load aggregated_data;
+        agg_audio.fs = fs;
 end
 
 %%% Code snippet to create songs for audio device input
@@ -40,7 +40,8 @@ img_ds = [2 10];
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 NFFT = 512;
 WINDOW = 500;
-NOVERLAP = WINDOW - 10;
+FFT_FRAME_SHIFT = 10;
+NOVERLAP = WINDOW - FFT_FRAME_SHIFT;
 
 speck = spectrogram(MIC_DATA(:,1), WINDOW, NOVERLAP, NFFT, agg_audio.fs) + eps;
 [nfreqs, ntimes] = size(speck);
@@ -204,6 +205,7 @@ line(repmat(tstep_of_interest, 2, 1), repmat([1 nfreqs], ntsteps_of_interest, 1)
 ylabel('frequency');
 axis xy;
 
+timestep_length = img_ds(2) * FFT_FRAME_SHIFT / agg_audio.fs;
 
 %% Cost of false positives is relative to that of false negatives.
 FALSE_POSITIVE_COST = 10
