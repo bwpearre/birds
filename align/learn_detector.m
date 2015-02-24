@@ -22,13 +22,26 @@ end
 %        some_songs / max([max(max(some_songs)) abs(min(min(some_songs)))]), ...
 %        44100);
 
+song_seconds = size(MIC_DATA, 1) / agg_audio.fs;
+
+
+%% Downsample the data
+if agg_audio.fs > 40000
+        raw_time_ds = 2;
+else
+        raw_time_ds = 1;
+end
+MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
+agg_audio.fs = agg_audio.fs / raw_time_ds;
+sample_length_raw = 1 / agg_audio.fs;
+
 
 nsongs = size(MIC_DATA, 2);
 
 
 %%% Parameter: downsample the "image" (spectrogram) by this much:
 %%% [ frequency_bins  time ]
-img_ds = [2 10];
+img_ds = [1 1];
 
 
 
@@ -38,20 +51,22 @@ img_ds = [2 10];
 
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
-NFFT = 512;
-WINDOW = 500;
-FFT_FRAME_SHIFT = 10;
-NOVERLAP = WINDOW - FFT_FRAME_SHIFT;
+NFFT = 256;
+WINDOW = 256;
+FFT_TIME_SHIFT = 0.001;                        % Seconds
+NOVERLAP = WINDOW - (floor(agg_audio.fs * FFT_TIME_SHIFT));
 
-speck = spectrogram(MIC_DATA(:,1), WINDOW, NOVERLAP, NFFT, agg_audio.fs) + eps;
+
+
+[speck freqs times] = spectrogram(MIC_DATA(:,1), WINDOW, NOVERLAP, [], agg_audio.fs);
 [nfreqs, ntimes] = size(speck);
+speck = speck + eps;
 
 spectrograms = zeros([nsongs nfreqs ntimes]);
 spectrograms(1, :, :) = speck;
 disp('Computing spectrograms...');
 parfor i = 2:nsongs
-        speck = spectrogram(MIC_DATA(:,i), WINDOW, NOVERLAP, NFFT, agg_audio.fs) + eps;
-        spectrograms(i, :, :) = speck;
+        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), WINDOW, NOVERLAP, [], agg_audio.fs) + eps;
 end
 
 % To downsample, chop off the tail of the spectrogram so that we have an
@@ -65,9 +80,12 @@ spectrogram_avg_img = squeeze(log(sum(abs(spectrograms(:,5:end,:)))));
 % Alright, may as well draw it now, just to show that something's going on
 % in that big vacant-looking cylinder with the apple logo on it.
 figure(4);
-subplot(1,1,1);
-imagesc(spectrogram_avg_img);
+subplot(5,1,1);
+imagesc([times(1)*1000 freqs(1)/1000], [times(end)*1000 freqs(end)/1000], spectrogram_avg_img);
 axis xy;
+xlabel('milliseconds');
+ylabel('kHz');
+drawnow;
 
 % Construct "ds" (downsampled) dataset.  This is heavily downsampled to save on computational
 % resources.  This would better be done by modifying the spectrogram's
@@ -133,7 +151,9 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % These are the timesteps (not downsampled--they correspond to the timesteps
 % shown in the full-size pretty spectrogram) that we want to try to pick
 % out.
-tstep_of_interest = [ 964 1460 2125 2410 ];
+tstep_of_interest = round(linspace(1, size(spectrograms_ds, 3), 6));
+tstep_of_interest = tstep_of_interest(2:end-1);
+
 tstep_of_interest_ds = round(tstep_of_interest/img_ds(2))
 ntsteps_of_interest = length(tstep_of_interest);
 
@@ -198,14 +218,17 @@ end
 figure(4);
 % First, the pretty full-res spectrogram calculated long ago:
 subplot(ntsteps_of_interest+1,1,1);
-imagesc(spectrogram_avg_img);
+imagesc([times(1) freqs(1)/1000], [times(end) freqs(end)/1000], spectrogram_avg_img);
+axis xy;
+xlabel('milliseconds');
+ylabel('kHz');
 colorbar;
 % Draw the syllables of interest:
 line(repmat(tstep_of_interest, 2, 1), repmat([1 nfreqs], ntsteps_of_interest, 1)', 'Color', [1 0 0]);
 ylabel('frequency');
 axis xy;
 
-timestep_length = img_ds(2) * FFT_FRAME_SHIFT / agg_audio.fs;
+timestep_length_ds = img_ds(2) * FFT_FRAME_SHIFT / agg_audio.fs;
 
 %% Cost of false positives is relative to that of false negatives.
 FALSE_POSITIVE_COST = 10
@@ -213,7 +236,7 @@ optimal_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
         tstep_of_interest_ds, ...
         FALSE_POSITIVE_COST, ...
-        timestep_length, ...
+        timestep_length_ds, ...
         time_window_ds)
 
 

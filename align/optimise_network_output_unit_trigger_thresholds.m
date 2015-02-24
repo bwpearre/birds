@@ -5,7 +5,7 @@ function [ optimal_thresholds ] = optimise_network_output_unit_trigger_threshold
         timestep_length, ...
         time_window_ds);
 
-% Simple bisection search for optimal thresholds given false-positive vs
+% Search for optimal thresholds given false-positive vs
 % false-negagive weights (the latter := 1).
 
 % The onset has to be no more than ACTIVE_TIME_BEFORE before the baseline
