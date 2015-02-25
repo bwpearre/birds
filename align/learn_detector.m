@@ -22,7 +22,6 @@ end
 %        some_songs / max([max(max(some_songs)) abs(min(min(some_songs)))]), ...
 %        44100);
 
-song_seconds = size(MIC_DATA, 1) / agg_audio.fs;
 
 
 %% Downsample the data
@@ -74,6 +73,9 @@ end
 ntimes = img_ds(2) * floor(ntimes / img_ds(2));
 spectrograms = spectrograms(:, :, 1:ntimes);
 
+%% This should be the same as FFT_TIME_SHIFT unless there was some rounding
+timestep_length_ds = img_ds(2) * (times(end)-times(1))/(length(times)-1);
+
 % Create a pretty graphic for display (which happens later)
 spectrogram_avg_img = squeeze(log(sum(abs(spectrograms(:,5:end,:)))));
 
@@ -81,9 +83,9 @@ spectrogram_avg_img = squeeze(log(sum(abs(spectrograms(:,5:end,:)))));
 % in that big vacant-looking cylinder with the apple logo on it.
 figure(4);
 subplot(5,1,1);
-imagesc([times(1)*1000 freqs(1)/1000], [times(end)*1000 freqs(end)/1000], spectrogram_avg_img);
+imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
 axis xy;
-xlabel('milliseconds');
+xlabel('ms');
 ylabel('kHz');
 drawnow;
 
@@ -129,8 +131,8 @@ layer0sz = length(freq_range_ds) * time_window_ds;
 nwindows_per_song = ntimes_ds - time_window_ds + 1;
 
 % Hold some data out for final testing.
-ntrainsongs = floor(nsongs*6/10);
-ntestsongs = ceil(nsongs*4/10);
+ntrainsongs = floor(nsongs*5/10);
+ntestsongs = ceil(nsongs*5/10);
 
 % On each run of this program, change the presentation order of the
 % data, so we get (a) a different subset of the data than last time for
@@ -140,9 +142,6 @@ randomsongs = randperm(nsongs);
 trainsongs = randomsongs(1:ntrainsongs);
 testsongs = randomsongs(ntrainsongs+1:end);
 
-disp(sprintf('(Allocating %g MB for training set X.)', ...
-        8 * nsongs * nwindows_per_song * layer0sz / (2^20)));
-nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
 
 disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % This loop also shuffles the songs according to randomsongs, so we can use
@@ -151,12 +150,84 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % These are the timesteps (not downsampled--they correspond to the timesteps
 % shown in the full-size pretty spectrogram) that we want to try to pick
 % out.
-tstep_of_interest = round(linspace(1, size(spectrograms_ds, 3), 6));
-tstep_of_interest = tstep_of_interest(2:end-1);
+%tstep_of_interest = round(linspace(1, size(spectrograms_ds, 3), 6));
+%tstep_of_interest = tstep_of_interest(2:end-1);
+
+disp('Looking for promising syllables...');
+
+if 0  % Look for unique moments
+        dists = squareform(pdist(spectrogram_avg_img(:,time_window_ds:end)'));
+else   % Look for unique segments from the training set
+        if any(img_ds ~= 1)
+                error(learn_detector:missingFeature, 'Missing Feature');
+        end
+        
+        pdistset = zeros(layer0sz, nwindows_per_song);
+        for tstep = time_window_ds : ntimes_ds
+                pdistset(:, tstep - time_window_ds + 1) ...
+                        = reshape(spectrogram_avg_img(freq_range_ds, ...
+                        tstep - time_window_ds + 1  :  tstep), ...
+                        [], 1);
+        end
+
+        dists = squareform(pdist(pdistset'));
+end
+
+figure(6);
+imagesc(dists);
+
+%% We want to find the row such that the minimum distance to that point is
+%% maximised--not counting points close to the row.  So set the diagonal high.
+for i = 1:size(dists, 1)
+        for j = i:size(dists, 1)
+                if abs(i-j) < 40
+                        dists(i, j) = NaN;
+                        dists(j, i) = NaN;
+                end
+        end
+end
+
+
+tstep_of_interest = [];
+
+%% Pick the maximally-distal spot on the distance image, add it to the
+%% timesteps we might care about, delete it from the image, repeat.
+for i = 1:3
+        [val pos] = max(min(dists));
+        tstep_of_interest(i) = pos;
+        
+        dists(pos-40:pos+40,:) = NaN * zeros(81, nwindows_per_song);
+        dists(:, pos-40:pos+40) = NaN * zeros(nwindows_per_song, 81);
+        hold on;
+        scatter(pos, pos, 100, 'r*');
+        hold off;
+end
+tstep_of_interest = tstep_of_interest + time_window_ds - 1;
+tstep_of_interest = sort(tstep_of_interest);
+
+drawnow;
+
 
 tstep_of_interest_ds = round(tstep_of_interest/img_ds(2))
 ntsteps_of_interest = length(tstep_of_interest);
 
+% First, the pretty full-res spectrogram calculated long ago:
+figure(4);
+subplot(ntsteps_of_interest+1,1,1);
+imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
+axis xy;
+xlabel('milliseconds');
+ylabel('kHz');
+colorbar;
+% Draw the syllables of interest:
+line(repmat(tstep_of_interest, 2, 1), repmat([freqs(1) freqs(end)]/1000, ntsteps_of_interest, 1)', 'Color', [1 0 0]);
+
+
+
+
+disp(sprintf('(Allocating %g MB for training set X.)', ...
+        8 * nsongs * nwindows_per_song * layer0sz / (2^20)));
+nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
 nnsetY = zeros(length(tstep_of_interest), nsongs * nwindows_per_song);
 
 
@@ -215,23 +286,10 @@ if false
 end
 
 % Plot the results...
-figure(4);
-% First, the pretty full-res spectrogram calculated long ago:
-subplot(ntsteps_of_interest+1,1,1);
-imagesc([times(1) freqs(1)/1000], [times(end) freqs(end)/1000], spectrogram_avg_img);
-axis xy;
-xlabel('milliseconds');
-ylabel('kHz');
-colorbar;
-% Draw the syllables of interest:
-line(repmat(tstep_of_interest, 2, 1), repmat([1 nfreqs], ntsteps_of_interest, 1)', 'Color', [1 0 0]);
-ylabel('frequency');
-axis xy;
 
-timestep_length_ds = img_ds(2) * FFT_FRAME_SHIFT / agg_audio.fs;
 
 %% Cost of false positives is relative to that of false negatives.
-FALSE_POSITIVE_COST = 10
+FALSE_POSITIVE_COST = 1
 optimal_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
         tstep_of_interest_ds, ...
@@ -250,7 +308,8 @@ for i = 1:ntsteps_of_interest
         barrr = zeros(time_window_ds, nsongs);
 
         if SHOW_THRESHOLDS
-                foo = foo > optimal_thresholds(i);
+                foo = trigger(foo', optimal_thresholds(i));
+                foo = foo';
                 barrr(:, 1:ntrainsongs) = 0.3;
                 barrr(:, ntrainsongs+1:end) = 0.6;
         else
