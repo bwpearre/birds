@@ -117,8 +117,8 @@ spectrograms_ds = spectrograms_ds / prod(img_ds);
 
 % Cut out a region of the spectrum (in space and time) to save on compute
 % time:
-freq_range_ds = 40:80;
-time_window_ds = 30;
+freq_range_ds = 40:60;
+time_window_ds = 70;
 
 [foo, nfreqs_ds, ntimes_ds] = size(spectrograms_ds);
 
@@ -154,61 +154,16 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 %tstep_of_interest = tstep_of_interest(2:end-1);
 
 disp('Looking for promising syllables...');
+tstep_of_interest = suggest_moments_of_interest(3, ...
+                                             spectrogram_avg_img, ...
+                                             img_ds, ...
+                                             time_window_ds, ...
+                                             layer0sz, ...
+                                             nwindows_per_song, ...
+                                             ntimes_ds, ...
+                                             freq_range_ds);
 
-if 0  % Look for unique moments
-        dists = squareform(pdist(spectrogram_avg_img(:,time_window_ds:end)'));
-else   % Look for unique segments from the training set
-        if any(img_ds ~= 1)
-                error(learn_detector:missingFeature, 'Missing Feature');
-        end
-        
-        pdistset = zeros(layer0sz, nwindows_per_song);
-        for tstep = time_window_ds : ntimes_ds
-                pdistset(:, tstep - time_window_ds + 1) ...
-                        = reshape(spectrogram_avg_img(freq_range_ds, ...
-                        tstep - time_window_ds + 1  :  tstep), ...
-                        [], 1);
-        end
-
-        dists = squareform(pdist(pdistset'));
-end
-
-figure(6);
-imagesc(dists);
-
-%% We want to find the row such that the minimum distance to that point is
-%% maximised--not counting points close to the row.  So set the diagonal high.
-for i = 1:size(dists, 1)
-        for j = i:size(dists, 1)
-                if abs(i-j) < 40
-                        dists(i, j) = NaN;
-                        dists(j, i) = NaN;
-                end
-        end
-end
-
-
-tstep_of_interest = [];
-
-%% Pick the maximally-distal spot on the distance image, add it to the
-%% timesteps we might care about, delete it from the image, repeat.
-for i = 1:3
-        [val pos] = max(min(dists));
-        tstep_of_interest(i) = pos;
-        
-        dists(pos-40:pos+40,:) = NaN * zeros(81, nwindows_per_song);
-        dists(:, pos-40:pos+40) = NaN * zeros(nwindows_per_song, 81);
-        hold on;
-        scatter(pos, pos, 100, 'r*');
-        hold off;
-end
-tstep_of_interest = tstep_of_interest + time_window_ds - 1;
-tstep_of_interest = sort(tstep_of_interest);
-
-drawnow;
-
-
-tstep_of_interest_ds = round(tstep_of_interest/img_ds(2))
+tstep_of_interest_ds = round(tstep_of_interest/img_ds(2));
 ntsteps_of_interest = length(tstep_of_interest);
 
 % First, the pretty full-res spectrogram calculated long ago:
@@ -286,6 +241,9 @@ if false
 end
 
 % Plot the results...
+power_img = squeeze(log(sum(spectrograms_ds, 2)));
+power_img(find(isinf(power_img))) = 0;
+power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
 
 
 %% Cost of false positives is relative to that of false negatives.
@@ -305,19 +263,31 @@ for i = 1:ntsteps_of_interest
         figure(4);
         subplot(ntsteps_of_interest+1,1,i+1);
         foo = reshape(testout(i,:,:), [], nsongs);
-        barrr = zeros(time_window_ds, nsongs);
+        barrr = zeros(time_window_ds-1, nsongs);
 
         if SHOW_THRESHOLDS
+                img = power_img / 2;
                 foo = trigger(foo', optimal_thresholds(i));
-                foo = foo';
-                barrr(:, 1:ntrainsongs) = 0.3;
-                barrr(:, ntrainsongs+1:end) = 0.6;
+                foo = [barrr' foo];
+                img(:, :, 1) = img(:, :, 1) + foo;
+                img(:, :, 2) = img(:, :, 2) - foo;
+                img(:, :, 3) = img(:, :, 3) - foo;
+                
+                img(1:ntrainsongs, 1:time_window_ds, 3) = 1;
+                img(1:ntrainsongs, 1:time_window_ds, 2) = 0;
+                img(1:ntrainsongs, 1:time_window_ds, 1) = 0;
+                img(ntrainsongs+1:end, 1:time_window_ds, 2) = 0;
+                img(ntrainsongs+1:end, 1:time_window_ds, 1) = 1;
+                img(ntrainsongs+1:end, 1:time_window_ds, 3) = 0;
+
+                
+                image(img);
         else
                 barrr(:, 1:ntrainsongs) = max(max(foo))/2;
                 barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
+                foo = [barrr' foo'];
+                imagesc(foo);
         end
-        foo = [barrr' foo'];
-        imagesc(foo);
         xlabel('timestep');
         ylabel('Song (random order)');
         text(time_window_ds/2, ntrainsongs/2, 'train', ...
@@ -329,15 +299,17 @@ end
 
 % Draw the hidden units' weights.  Let the user make these square or not
 % because lazy...
-figure(5);
-for i = 1:size(net.IW{1}, 1)
-        subplot(size(net.IW{1}, 1), 1, i)
-        imagesc(-time_window_ds:0, img_ds(1)*freq_range_ds, ...
-                reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_ds));
-        axis xy;
-        if i == size(net.IW{1}, 1)
-                xlabel('time');
+if 0
+        figure(5);
+        for i = 1:size(net.IW{1}, 1)
+                subplot(size(net.IW{1}, 1), 1, i)
+                imagesc(-time_window_ds:0, img_ds(1)*freq_range_ds, ...
+                        reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_ds));
+                axis xy;
+                if i == size(net.IW{1}, 1)
+                        xlabel('time');
+                end
+                ylabel('frequency');
+                %imagesc(reshape(net.IW{1}(i,:), time_window_ds, length(freq_range_ds)));
         end
-        ylabel('frequency');
-        %imagesc(reshape(net.IW{1}(i,:), time_window_ds, length(freq_range_ds)));
 end

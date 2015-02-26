@@ -1,4 +1,4 @@
-function [cost] = trigger_threshold_cost(threshold, ...
+function [cost truepositive falsepositive ] = trigger_threshold_cost(threshold, ...
         responses, ...
         positive_interval, ...
         FALSE_POSITIVE_COST);
@@ -16,6 +16,7 @@ responses = squeeze(responses);
 % a false positive + the number of songs for which there's a false
 % negative.
 
+
 %% For purposes of the optimisation, we need to count true positives as well as false.
 
 % FALSE POSITIVES: One false positive for every song for which there is a
@@ -25,6 +26,10 @@ responses = squeeze(responses);
 % no trigger inside the target area.
 
 responses = responses > threshold;
+
+
+true_positives = sum(responses(:, positive_interval), 2);
+true_positives = sum(true_positives > 0);
 
 % First, the false negatives:
 foo = sum(responses(:, positive_interval), 2);
@@ -37,3 +42,6 @@ foo = sum(responses, 2);
 false_positives = sum(foo > 0);
 
 cost = FALSE_POSITIVE_COST * false_positives + false_negatives;
+
+truepositive = true_positives / size(responses, 1);
+falsepositive = false_positives / size(responses, 1);

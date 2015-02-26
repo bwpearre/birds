@@ -24,6 +24,9 @@ ACTIVE_TIMESTEPS_AFTER = floor(ACTIVE_TIME_AFTER / timestep_length);
 
 tstep_of_interest_shifted = tstep_of_interest_ds - time_window_ds + 1;
 
+figure(7);
+nsubfigs = size(testout, 1);
+
 for i = 1:length(tstep_of_interest_ds)
         responses = squeeze(testout(i, :, :))';
         positive_interval = tstep_of_interest_shifted(i)-ACTIVE_TIMESTEPS_BEFORE:...
@@ -40,12 +43,20 @@ for i = 1:length(tstep_of_interest_ds)
         ntestpts = 1000;
         best = Inf;
         testpts = linspace(0, 1, ntestpts);
+        truepos = zeros(1, length(tstep_of_interest_ds));
+        falsepos = zeros(1, length(tstep_of_interest_ds));
         for j = 1:ntestpts
-                outval = f(testpts(j));
+                [ outval truepos(j) falsepos(j) ] = f(testpts(j));
                 if outval < best
                         best = outval;
                         bestparam = testpts(j);
                 end
         end
         optimal_thresholds(i) = bestparam;
+        
+        subplot(nsubfigs, 1, i);
+        plot(falsepos, truepos);
+        xlabel('false positives');
+        ylabel('true positives');
+        title(sprintf('ROC at %g ms', tstep_of_interest_ds(i)));
 end
