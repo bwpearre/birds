@@ -1,7 +1,7 @@
 function [ trigger_now ] = trigger(responses, threshold);
 
 [ val pos ] = max(responses > threshold, [], 2);
-pos = pos(find(pos ~= 1));
+%pos = pos(find(pos == 1)) = ;
 
 trigger_now = zeros(size(responses));
 

@@ -1,7 +1,8 @@
 function [ optimal_thresholds ] = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
-        tstep_of_interest_ds, ...
         FALSE_POSITIVE_COST, ...
+        tstep_of_interest_ds, ...
+        MATCH_PLUSMINUS, ...
         timestep_length, ...
         time_window_ds);
 
@@ -13,10 +14,9 @@ function [ optimal_thresholds ] = optimise_network_output_unit_trigger_threshold
 
 % A positive that happens within ACTIVE_TIME of the event does not count as a
 % false positive.  This is in seconds, and allows for some jitter.
-ACTIVE_TIME_BEFORE = 0.01;
-ACTIVE_TIME_AFTER = 0.01;
-ACTIVE_TIMESTEPS_BEFORE = floor(ACTIVE_TIME_BEFORE / timestep_length);
-ACTIVE_TIMESTEPS_AFTER = floor(ACTIVE_TIME_AFTER / timestep_length);
+
+ACTIVE_TIMESTEPS_BEFORE = floor(MATCH_PLUSMINUS / timestep_length);
+ACTIVE_TIMESTEPS_AFTER = floor(MATCH_PLUSMINUS / timestep_length);
 
 % The timesteps of interest are with reference to the start of the song.
 % Responses have been trimmed to start at the start of recognition given
@@ -26,6 +26,7 @@ tstep_of_interest_shifted = tstep_of_interest_ds - time_window_ds + 1;
 
 figure(7);
 nsubfigs = size(testout, 1);
+ntestpts = 1000;
 
 for i = 1:length(tstep_of_interest_ds)
         responses = squeeze(testout(i, :, :))';
@@ -40,7 +41,6 @@ for i = 1:length(tstep_of_interest_ds)
         % Find optimal threshold on the interval [0.001 1]
         % optimal_thresholds = fminbnd(f, 0.001, 1);
         %% Actually, fminbnd is useless at jumping out of local minima, and it's quick enough to brute-force it.
-        ntestpts = 1000;
         best = Inf;
         testpts = linspace(0, 1, ntestpts);
         truepos = zeros(1, length(tstep_of_interest_ds));
@@ -54,9 +54,11 @@ for i = 1:length(tstep_of_interest_ds)
         end
         optimal_thresholds(i) = bestparam;
         
-        subplot(nsubfigs, 1, i);
+        ROCintegral = truepos(1:end-1) * (falsepos(1:end-1)-falsepos(2:end))';
+        subplot(1, nsubfigs, i);
         plot(falsepos, truepos);
         xlabel('false positives');
         ylabel('true positives');
-        title(sprintf('ROC at %g ms', tstep_of_interest_ds(i)));
+        title(sprintf('ROC at %g ms; integral = %.3g', tstep_of_interest_ds(i), ROCintegral));
+        axis square;
 end

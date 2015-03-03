@@ -37,16 +37,20 @@ for i = 1:size(dists, 1)
                 if abs(i-j) < 20
                         dists(i, j) = NaN;
                         dists(j, i) = NaN;
-                end
+                end                        
         end
 end
+dists(:,1:40) = NaN;
+dists(:,end-39:end) = NaN;
+dists(1:40,:) = NaN;
+dists(end-39:end) = NaN;
 
 
 tstep_of_interest = [];
 
 %% Pick the maximally-distal spot on the distance image, add it to the
 %% timesteps we might care about, delete it from the image, repeat.
-for i = 1:3
+for i = 1:ntsteps
         [val pos] = max(min(dists));
         tstep_of_interest(i) = pos;
         

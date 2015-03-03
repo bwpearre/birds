@@ -9,7 +9,11 @@ if 0
 elseif 0
         load('/Users/bwpearre/r/data/lg373rblk_2015_01_14/wav/out_MANUALCLUST/extracted_data.mat');
         MIC_DATA = agg_audio.data;
-    
+elseif 1
+        load('~/r/data/lw27ry_extracted_data');
+        agg_audio.data = agg_audio.data(1:24000,:);
+        clear agg_data;
+        MIC_DATA = agg_audio.data;
 else
         load aggregated_data;
         agg_audio.fs = fs;
@@ -31,9 +35,15 @@ else
         raw_time_ds = 1;
 end
 MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
+
+clear agg_audio.data;
+clear agg_data;
 agg_audio.fs = agg_audio.fs / raw_time_ds;
 sample_length_raw = 1 / agg_audio.fs;
 
+disp('Filtering the data...');
+[B A] = butter(4, [0.05 0.9]);
+MIC_DATA = filter(B, A, MIC_DATA);
 
 nsongs = size(MIC_DATA, 2);
 
@@ -79,15 +89,6 @@ timestep_length_ds = img_ds(2) * (times(end)-times(1))/(length(times)-1);
 % Create a pretty graphic for display (which happens later)
 spectrogram_avg_img = squeeze(log(sum(abs(spectrograms(:,5:end,:)))));
 
-% Alright, may as well draw it now, just to show that something's going on
-% in that big vacant-looking cylinder with the apple logo on it.
-figure(4);
-subplot(5,1,1);
-imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
-axis xy;
-xlabel('ms');
-ylabel('kHz');
-drawnow;
 
 % Construct "ds" (downsampled) dataset.  This is heavily downsampled to save on computational
 % resources.  This would better be done by modifying the spectrogram's
@@ -97,28 +98,42 @@ drawnow;
 % Number of samples: (nsongs*(ntimes-time_window))
 % Size of each sample: (ntimes-time_window)*length(freq_range)
 spectrograms_ds = zeros([nsongs nfreqs-1 ntimes] ./ [1 img_ds]);
-
 disp('Downsampling spectrograms...');
-for song = 1:nsongs
-        for i = 1:floor((nfreqs-img_ds(1))/img_ds(1))
-                irange = i*img_ds(1):(i+1)*img_ds(1)-1;
-                for j = 1:floor((ntimes-img_ds(2))/img_ds(2))
-                        jrange = j*img_ds(2):(j+1)*img_ds(2)-1;
-                        spectrograms_ds(song, i, j) = ...
-                                sum(sum(abs(spectrograms(song, ...                            
-                                                         irange, ...
-                                                         jrange))));
-                                              
+
+if any(img_ds ~= 1)
+        for song = 1:nsongs
+                for i = 1:floor((nfreqs-img_ds(1))/img_ds(1))
+                        irange = i*img_ds(1):(i+1)*img_ds(1)-1;
+                        for j = 1:floor((ntimes-img_ds(2))/img_ds(2))
+                                jrange = j*img_ds(2):(j+1)*img_ds(2)-1;
+                                spectrograms_ds(song, i, j) = ...
+                                     sum(sum(abs(spectrograms(song, ...
+                                     irange, ...
+                                     jrange))));
+                        end
                 end
         end
+        % Normalise the values
+        spectrograms_ds = spectrograms_ds / prod(img_ds);
+else
+        spectrograms_ds = abs(spectrograms);
 end
-% Normalise the values
-spectrograms_ds = spectrograms_ds / prod(img_ds);
 
-% Cut out a region of the spectrum (in space and time) to save on compute
-% time:
-freq_range_ds = 40:60;
-time_window_ds = 70;
+
+
+
+%% Cut out a region of the spectrum (in space and time) to save on compute
+%% time:
+freq_range = [2000 7000];
+time_window = 0.07;
+%%%%%%%%%%%%
+
+
+freq_range_ds = find(freqs >= freq_range(1) & freqs <= freq_range(2));
+disp(sprintf('Using frequencies in [ %g %g ] Hz: %d frequency samples.', ...
+        freq_range(1), freq_range(2), length(freq_range_ds)));
+time_window_ds = double(floor(time_window / timestep_length_ds));
+disp(sprintf('Time window is %g ms, %d samples.', time_window*1000, time_window_ds));
 
 [foo, nfreqs_ds, ntimes_ds] = size(spectrograms_ds);
 
@@ -130,57 +145,74 @@ layer0sz = length(freq_range_ds) * time_window_ds;
 % setting all time windows but the desired one to 0.
 nwindows_per_song = ntimes_ds - time_window_ds + 1;
 
+%% Define training set
 % Hold some data out for final testing.
-ntrainsongs = floor(nsongs*5/10);
-ntestsongs = ceil(nsongs*5/10);
-
+ntrainsongs = min(floor(nsongs*8/10), 100);
+ntestsongs = nsongs - ntrainsongs;
 % On each run of this program, change the presentation order of the
 % data, so we get (a) a different subset of the data than last time for
 % training vs. final testing and (b) different training data presentation
 % order.
 randomsongs = randperm(nsongs);
+
+%randomsongs = 1:nsongs
+
 trainsongs = randomsongs(1:ntrainsongs);
-testsongs = randomsongs(ntrainsongs+1:end);
 
-
-disp(sprintf('Creating training set from %d songs...', ntrainsongs));
-% This loop also shuffles the songs according to randomsongs, so we can use
-% contiguous blocks for training / testing
-
-% These are the timesteps (not downsampled--they correspond to the timesteps
-% shown in the full-size pretty spectrogram) that we want to try to pick
-% out.
-%tstep_of_interest = round(linspace(1, size(spectrograms_ds, 3), 6));
-%tstep_of_interest = tstep_of_interest(2:end-1);
-
-disp('Looking for promising syllables...');
-tstep_of_interest = suggest_moments_of_interest(3, ...
-                                             spectrogram_avg_img, ...
-                                             img_ds, ...
-                                             time_window_ds, ...
-                                             layer0sz, ...
-                                             nwindows_per_song, ...
-                                             ntimes_ds, ...
-                                             freq_range_ds);
+if 1
+        disp('Looking for promising syllables...');
+        tstep_of_interest = suggest_moments_of_interest(3, ...
+                spectrogram_avg_img, ...
+                img_ds, ...
+                time_window_ds, ...
+                layer0sz, ...
+                nwindows_per_song, ...
+                ntimes_ds, ...
+                freq_range_ds);
+else
+        %tstep_of_interest = 775;
+        tstep_of_interest = 285;
+end
 
 tstep_of_interest_ds = round(tstep_of_interest/img_ds(2));
 ntsteps_of_interest = length(tstep_of_interest);
 
-% First, the pretty full-res spectrogram calculated long ago:
+%% For each timestep of interest, get the offset of this song from the most typical one.
+disp('Computing target jitter compensation...');
+
+% For alignment: which is the most stereotypical song at each target?
+for i = 1:ntsteps_of_interest
+        range = tstep_of_interest_ds(i)-30:tstep_of_interest_ds(i)+30;
+        foo = reshape(spectrograms_ds(:, :, range), nsongs, []) * reshape(mean(spectrograms_ds(:, :, range), 1), 1, [])';
+        [val canonical_songs(i)] = max(foo);
+        canonical_songs(i) = round(500*rand);
+        target_offsets(i,:) = get_target_offsets_jeff(MIC_DATA, tstep_of_interest(i), agg_audio.fs, timestep_length_ds, canonical_songs(i));
+end
+
+hist(target_offsets', 40);
+
+%% Draw the pretty full-res spectrogram and the targets
 figure(4);
 subplot(ntsteps_of_interest+1,1,1);
 imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
 axis xy;
-xlabel('milliseconds');
-ylabel('kHz');
+xlabel('Time (ms)');
+ylabel('Frequency (kHz)');
 colorbar;
 % Draw the syllables of interest:
 line(repmat(tstep_of_interest, 2, 1), repmat([freqs(1) freqs(end)]/1000, ntsteps_of_interest, 1)', 'Color', [1 0 0]);
+drawnow;
 
 
 
 
-disp(sprintf('(Allocating %g MB for training set X.)', ...
+%% Create the training set
+disp(sprintf('Creating training set from %d songs...', ntrainsongs));
+% This loop also shuffles the songs according to randomsongs, so we can use
+% contiguous blocks for training / testing
+
+
+disp(sprintf('   ...(Allocating %g MB for training set X.)', ...
         8 * nsongs * nwindows_per_song * layer0sz / (2^20)));
 nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
 nnsetY = zeros(length(tstep_of_interest), nsongs * nwindows_per_song);
@@ -196,11 +228,20 @@ for song = 1:nsongs
                                  freq_range_ds, ...
                                  tstep - time_window_ds + 1  :  tstep), ...
                                  [], 1);
-                if any(tstep == tstep_of_interest_ds)
-                        nnsetY(:, (song-1)*nwindows_per_song + tstep - time_window_ds + 1) = (tstep == tstep_of_interest_ds);
+                         
+                         
+                for interesting = 1:ntsteps_of_interest
+                        if tstep == tstep_of_interest_ds(interesting) 
+                                %nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_ds + 1) = 1;
+                                nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_ds - 1 : ...
+                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_ds + 3) = [ 0.5 0.9 1 0.9 0.5 ];
+                        end
                 end
         end
 end
+
+%yy=reshape(nnsetY, nwindows_per_song, nsongs);
+%imagesc(yy');
 
 % original order: spectrograms, spectrograms_ds, song_montage
 %   indices into original order: trainsongs, testsongs
@@ -230,33 +271,31 @@ net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
 testout = sim(net, nnsetX);
 testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
 
-% Display (or not) the spectrograms of all the songs.
-if false
-        song_montage = spectrograms_ds;
-        song_montage = permute(spectrograms_ds, [2 3 4 1]);
-        song_montage = repmat(song_montage, [1 1 3 1]);
-        song_montage = log(song_montage+eps);
-        song_montage = song_montage / max(max(max(max(song_montage))));
-        montage(song_montage(:,:,:,testsongs));
-end
 
-% Plot the results...
-power_img = squeeze(log(sum(spectrograms_ds, 2)));
+% Create an image for plotting the results...
+power_img = squeeze((sum(spectrograms_ds, 2)));
 power_img(find(isinf(power_img))) = 0;
+power_img = power_img(randomsongs,:);
 power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
 
+disp('Computing optimal output thresholds...');
 
-%% Cost of false positives is relative to that of false negatives.
+% How many seconds on either side of the tstep_of_interest is an acceptable match?
+MATCH_PLUSMINUS = 0.02;
+% Cost of false positives is relative to that of false negatives.
 FALSE_POSITIVE_COST = 1
+
 optimal_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
-        tstep_of_interest_ds, ...
         FALSE_POSITIVE_COST, ...
+        tstep_of_interest_ds, ...
+        MATCH_PLUSMINUS, ...
         timestep_length_ds, ...
-        time_window_ds)
+        time_window_ds);
 
 
 SHOW_THRESHOLDS = true;
+SORT_BY_ALIGNMENT = true;
 % For each timestep of interest, draw that output unit's response to all
 % timesteps for all songs:
 for i = 1:ntsteps_of_interest
@@ -267,11 +306,13 @@ for i = 1:ntsteps_of_interest
 
         if SHOW_THRESHOLDS
                 img = power_img / 2;
-                foo = trigger(foo', optimal_thresholds(i));
-                foo = [barrr' foo];
-                img(:, :, 1) = img(:, :, 1) + foo;
-                img(:, :, 2) = img(:, :, 2) - foo;
-                img(:, :, 3) = img(:, :, 3) - foo;
+                fooo = trigger(foo', optimal_thresholds(i));
+                fooo = [barrr' fooo];
+                [val pos] = max(fooo,[],2);
+
+                img(:, :, 1) = img(:, :, 1) + fooo;
+                img(:, :, 2) = img(:, :, 2) - fooo;
+                img(:, :, 3) = img(:, :, 3) - fooo;
                 
                 img(1:ntrainsongs, 1:time_window_ds, 3) = 1;
                 img(1:ntrainsongs, 1:time_window_ds, 2) = 0;
@@ -280,7 +321,11 @@ for i = 1:ntsteps_of_interest
                 img(ntrainsongs+1:end, 1:time_window_ds, 1) = 1;
                 img(ntrainsongs+1:end, 1:time_window_ds, 3) = 0;
 
-                
+                if SORT_BY_ALIGNMENT
+                        %[~, new_world_order] = sort(target_offsets);
+                        [~, new_world_order] = sort(pos);
+                        img = img(new_world_order,:,:);
+                end
                 image(img);
         else
                 barrr(:, 1:ntrainsongs) = max(max(foo))/2;
@@ -288,7 +333,7 @@ for i = 1:ntsteps_of_interest
                 foo = [barrr' foo'];
                 imagesc(foo);
         end
-        xlabel('timestep');
+        xlabel('Time (ms)');
         ylabel('Song (random order)');
         text(time_window_ds/2, ntrainsongs/2, 'train', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
