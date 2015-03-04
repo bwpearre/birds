@@ -38,7 +38,7 @@ MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
 
 clear agg_audio.data;
 clear agg_data;
-agg_audio.fs = agg_audio.fs / raw_time_ds;
+samplerate = agg_audio.fs / raw_time_ds;
 
 disp('Filtering the data...');
 [B A] = butter(4, [0.05 0.9]);
@@ -53,14 +53,13 @@ nsongs = size(MIC_DATA, 2);
 
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
-NFFT = 256;
 WINDOW = 256;
-FFT_TIME_SHIFT = 0.003;                        % seconds
-NOVERLAP = WINDOW - (floor(agg_audio.fs * FFT_TIME_SHIFT));
+FFT_TIME_SHIFT = 0.005;                        % seconds
+NOVERLAP = WINDOW - (floor(samplerate * FFT_TIME_SHIFT));
+fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
 
-
-[speck freqs times] = spectrogram(MIC_DATA(:,1), WINDOW, NOVERLAP, [], agg_audio.fs);
+[speck freqs times] = spectrogram(MIC_DATA(:,1), WINDOW, NOVERLAP, [], samplerate);
 [nfreqs, ntimes] = size(speck);
 speck = speck + eps;
 
@@ -72,7 +71,7 @@ spectrograms = zeros([nsongs nfreqs ntimes]);
 spectrograms(1, :, :) = speck;
 disp('Computing spectrograms...');
 parfor i = 2:nsongs
-        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), WINDOW, NOVERLAP, [], agg_audio.fs) + eps;
+        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), WINDOW, NOVERLAP, [], samplerate) + eps;
 end
 
 
@@ -133,6 +132,7 @@ randomsongs = randperm(nsongs);
 %randomsongs = 1:nsongs
 
 trainsongs = randomsongs(1:ntrainsongs);
+testsongs = randomsongs(1:ntestsongs);
 
 if 0
         disp('Looking for promising syllables...');
@@ -147,7 +147,8 @@ if 0
         times_of_interest = tstep_of_interest * timestep
 else
         %tstep_of_interest = 0.775;
-        times_of_interest = [ 0.285 0.775];
+        times_of_interest = [ 0.28 0.775];
+        times_of_interest = [ 0.2:0.01:0.35 ];
         tstep_of_interest = round(times_of_interest / timestep);
 end
 
@@ -168,7 +169,7 @@ for i = 1:ntsteps_of_interest
         range = range(find(range>0&range<=ntimes));
         foo = reshape(spectrograms(:, :, range), nsongs, []) * reshape(mean(spectrograms(:, :, range), 1), 1, [])';
         [val canonical_songs(i)] = max(foo);
-        target_offsets(i,:) = get_target_offsets_jeff(MIC_DATA, tstep_of_interest(i), agg_audio.fs, timestep, canonical_songs(i));
+        target_offsets(i,:) = get_target_offsets_jeff(MIC_DATA, tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
 end
 
 hist(target_offsets', 40);
@@ -240,8 +241,18 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 % Create the network.  The parameter is the number of units in each hidden
 % layer.  [8] means one hidden layer with 8 units.  [] means a simple
 % perceptron.
-net = feedforwardnet(ceil([1.5 * length(tstep_of_interest)]));
+
+
+
+net = feedforwardnet(ceil([1.3 * length(tstep_of_interest)]));
+%net = feedforwardnet([2]);
 %net = feedforwardnet([]);
+
+
+net.trainFcn = 'trainbfg';
+
+fprintf('Training network with %s\n', net.trainFcn);
+
 % Once the validation set performance stops improving, it doesn't seem to
 % get better, so keep this small.
 net.trainParam.max_fail = 3;
@@ -293,12 +304,15 @@ for i = 1:ntsteps_of_interest
                 fooo = [barrr' fooo];
                 [val pos] = max(fooo,[],2);
 
-                img(:, :, 1) = img(:, :, 1) + fooo;
-                img(:, :, 2) = img(:, :, 2) - fooo;
-                img(:, :, 3) = img(:, :, 3) - fooo;
+                img(1:ntrainsongs, :, 1) = img(1:ntrainsongs, :, 1) - fooo(1:ntrainsongs,:);
+                img(1:ntrainsongs, :, 2) = img(1:ntrainsongs, :, 2) + fooo(1:ntrainsongs,:);
+                img(1:ntrainsongs, :, 3) = img(1:ntrainsongs, :, 3) + fooo(1:ntrainsongs,:);
+                img(ntrainsongs+1:end, :, 1) = img(ntrainsongs+1:end, :, 1) + fooo(ntrainsongs+1:end,:);
+                img(ntrainsongs+1:end, :, 2) = img(ntrainsongs+1:end, :, 2) - fooo(ntrainsongs+1:end,:);
+                img(ntrainsongs+1:end, :, 3) = img(ntrainsongs+1:end, :, 3) - fooo(ntrainsongs+1:end,:);
                 
                 img(1:ntrainsongs, 1:time_window_steps, 3) = 1;
-                img(1:ntrainsongs, 1:time_window_steps, 2) = 0;
+                img(1:ntrainsongs, 1:time_window_steps, 2) = 1;
                 img(1:ntrainsongs, 1:time_window_steps, 1) = 0;
                 img(ntrainsongs+1:end, 1:time_window_steps, 2) = 0;
                 img(ntrainsongs+1:end, 1:time_window_steps, 1) = 1;
@@ -329,11 +343,11 @@ end
 
 % Draw the hidden units' weights.  Let the user make these square or not
 % because lazy...
-if 0
+if net.numLayers > 1
         figure(5);
         for i = 1:size(net.IW{1}, 1)
                 subplot(size(net.IW{1}, 1), 1, i)
-                imagesc(-time_window_steps:0, img_ds(1)*freq_range_ds, ...
+                imagesc(-time_window_steps:0, freq_range_ds, ...
                         reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_steps));
                 axis xy;
                 if i == size(net.IW{1}, 1)
@@ -343,3 +357,12 @@ if 0
                 %imagesc(reshape(net.IW{1}(i,:), time_window_steps, length(freq_range_ds)));
         end
 end
+
+%% Save what we need for LabView detector
+layer0 = net.IW{1};
+layer1 = net.LW{2,1};
+bias0 = net.b{1};
+bias1 = net.b{2};
+save(sprintf('net_detector_triggertimes%s.mat', sprintf('_%g', times_of_interest)), ...
+        'layer0', 'layer1', 'bias0', 'bias1', ...
+        'samplerate', 'WINDOW', 'FFT_TIME_SHIFT', 'freq_range_ds', 'time_window_steps');
