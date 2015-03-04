@@ -1,7 +1,8 @@
 function [ optimal_thresholds ] = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
         FALSE_POSITIVE_COST, ...
-        tstep_of_interest_ds, ...
+        times_of_interest, ...
+        tstep_of_interest, ...
         MATCH_PLUSMINUS, ...
         timestep_length, ...
         time_window_ds);
@@ -22,13 +23,13 @@ ACTIVE_TIMESTEPS_AFTER = floor(MATCH_PLUSMINUS / timestep_length);
 % Responses have been trimmed to start at the start of recognition given
 % the time window.  So we need to align those:
 
-tstep_of_interest_shifted = tstep_of_interest_ds - time_window_ds + 1;
+tstep_of_interest_shifted = tstep_of_interest - time_window_ds + 1;
 
 figure(7);
 nsubfigs = size(testout, 1);
 ntestpts = 1000;
 
-for i = 1:length(tstep_of_interest_ds)
+for i = 1:length(tstep_of_interest)
         responses = squeeze(testout(i, :, :))';
         positive_interval = tstep_of_interest_shifted(i)-ACTIVE_TIMESTEPS_BEFORE:...
                 tstep_of_interest_shifted(i)+ACTIVE_TIMESTEPS_AFTER;
@@ -43,8 +44,8 @@ for i = 1:length(tstep_of_interest_ds)
         %% Actually, fminbnd is useless at jumping out of local minima, and it's quick enough to brute-force it.
         best = Inf;
         testpts = linspace(0, 1, ntestpts);
-        truepos = zeros(1, length(tstep_of_interest_ds));
-        falsepos = zeros(1, length(tstep_of_interest_ds));
+        truepos = zeros(1, length(tstep_of_interest));
+        falsepos = zeros(1, length(tstep_of_interest));
         for j = 1:ntestpts
                 [ outval truepos(j) falsepos(j) ] = f(testpts(j));
                 if outval < best
@@ -59,6 +60,6 @@ for i = 1:length(tstep_of_interest_ds)
         plot(falsepos, truepos);
         xlabel('false positives');
         ylabel('true positives');
-        title(sprintf('ROC at %g ms; integral = %.3g', tstep_of_interest_ds(i), ROCintegral));
+        title(sprintf('ROC at %g ms; integral = %.3g', times_of_interest(i)*1000, ROCintegral));
         axis square;
 end
