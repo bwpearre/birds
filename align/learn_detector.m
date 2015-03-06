@@ -53,13 +53,13 @@ nsongs = size(MIC_DATA, 2);
 
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
-WINDOW = 256;
+FFT_SIZE = 256;
 FFT_TIME_SHIFT = 0.005;                        % seconds
-NOVERLAP = WINDOW - (floor(samplerate * FFT_TIME_SHIFT));
+NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
 
-[speck freqs times] = spectrogram(MIC_DATA(:,1), WINDOW, NOVERLAP, [], samplerate);
+[speck freqs times] = spectrogram(MIC_DATA(:,1), FFT_SIZE, NOVERLAP, [], samplerate);
 [nfreqs, ntimes] = size(speck);
 speck = speck + eps;
 
@@ -71,7 +71,7 @@ spectrograms = zeros([nsongs nfreqs ntimes]);
 spectrograms(1, :, :) = speck;
 disp('Computing spectrograms...');
 parfor i = 2:nsongs
-        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), WINDOW, NOVERLAP, [], samplerate) + eps;
+        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), FFT_SIZE, NOVERLAP, [], samplerate) + eps;
 end
 
 
@@ -148,7 +148,9 @@ if 0
 else
         %tstep_of_interest = 0.775;
         times_of_interest = [ 0.28 0.775];
-        times_of_interest = [ 0.2:0.01:0.35 ];
+        %times_of_interest = [ 0.2:0.01:0.35 ];
+        
+        
         tstep_of_interest = round(times_of_interest / timestep);
 end
 
@@ -169,7 +171,7 @@ for i = 1:ntsteps_of_interest
         range = range(find(range>0&range<=ntimes));
         foo = reshape(spectrograms(:, :, range), nsongs, []) * reshape(mean(spectrograms(:, :, range), 1), 1, [])';
         [val canonical_songs(i)] = max(foo);
-        target_offsets(i,:) = get_target_offsets_jeff(MIC_DATA, tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
+        [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA, tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
 end
 
 hist(target_offsets', 40);
@@ -244,12 +246,12 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([1.3 * length(tstep_of_interest)]));
-%net = feedforwardnet([2]);
+net = feedforwardnet(ceil([1.3 * ntsteps_of_interest]));
+%net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
 
-net.trainFcn = 'trainbfg';
+%net.trainFcn = 'trainbfg';
 
 fprintf('Training network with %s\n', net.trainFcn);
 
@@ -278,7 +280,7 @@ MATCH_PLUSMINUS = 0.02;
 % Cost of false positives is relative to that of false negatives.
 FALSE_POSITIVE_COST = 1
 
-optimal_thresholds = optimise_network_output_unit_trigger_thresholds(...
+trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
         FALSE_POSITIVE_COST, ...
         times_of_interest, ...
@@ -300,7 +302,7 @@ for i = 1:ntsteps_of_interest
 
         if SHOW_THRESHOLDS
                 img = power_img / 2;
-                fooo = trigger(foo', optimal_thresholds(i));
+                fooo = trigger(foo', trigger_thresholds(i));
                 fooo = [barrr' fooo];
                 [val pos] = max(fooo,[],2);
 
@@ -358,11 +360,24 @@ if net.numLayers > 1
         end
 end
 
-%% Save what we need for LabView detector
+%% Save input file for the LabView detector
 layer0 = net.IW{1};
 layer1 = net.LW{2,1};
 bias0 = net.b{1};
 bias1 = net.b{2};
-save(sprintf('net_detector_triggertimes%s.mat', sprintf('_%g', times_of_interest)), ...
+filename_base = sprintf('net_detector%s', sprintf('_%g', times_of_interest));
+save(strcat(filename_base, '.mat'), ...
         'layer0', 'layer1', 'bias0', 'bias1', ...
-        'samplerate', 'WINDOW', 'FFT_TIME_SHIFT', 'freq_range_ds', 'time_window_steps');
+        'samplerate', 'FFT_SIZE', 'FFT_TIME_SHIFT', 'freq_range_ds', 'time_window_steps', 'trigger_thresholds');
+%% Save sample data: audio on channel0, canonical hits for first syllable on channel1
+songs = reshape(MIC_DATA, [], 1);
+%songs_scale = max([max(songs) -min(songs)]);
+%songs = songs / songs_scale;
+hits = zeros(size(MIC_DATA));
+samples_of_interest = round(times_of_interest * samplerate);
+for i = 1:nsongs
+        hits(samples_of_interest(1) + sample_offsets(1,i), i) = 1;
+end
+hits = reshape(hits, [], 1);
+songs = [songs hits];
+audiowrite(strcat(filename_base, '.wav'), songs, round(samplerate));

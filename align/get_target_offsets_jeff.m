@@ -1,4 +1,4 @@
-function [ target_offsets ] = get_target_offsets_jeff(AUDIO, time_of_interest, fs, timestep_length_ds, canonical_song);
+function [ target_offsets sample_offsets ] = get_target_offsets_jeff(AUDIO, time_of_interest, fs, timestep_length_ds, canonical_song);
 
 % Jeff Markowitz's code taken from https://github.com/jmarkow/syllable-detection/blob/master/sylldet_fir_learn.m
 
@@ -46,7 +46,7 @@ for i = 1:ntrials
         %TARGET_MATRIX(hitpoints,i)=1;
 end
 
-
-target_offsets = round( (  ( sample_offsets - sample_of_interest ) / fs ) / timestep_length_ds );
+sample_offsets = sample_offsets - sample_of_interest;
+target_offsets = round( (  ( sample_offsets ) / fs ) / timestep_length_ds );
 %target_offsets = round( (  ( sample_offsets - sample_of_interest  ) / fs ) / timestep_length_ds );
 %a(0)
