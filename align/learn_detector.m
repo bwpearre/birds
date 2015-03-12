@@ -58,8 +58,9 @@ FFT_TIME_SHIFT = 0.005;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
+window = hamming(FFT_SIZE);
 
-[speck freqs times] = spectrogram(MIC_DATA(:,1), FFT_SIZE, NOVERLAP, [], samplerate);
+[speck freqs times] = spectrogram(MIC_DATA(:,1), window, NOVERLAP, [], samplerate);
 [nfreqs, ntimes] = size(speck);
 speck = speck + eps;
 
@@ -129,7 +130,10 @@ ntestsongs = nsongs - ntrainsongs;
 % order.
 randomsongs = randperm(nsongs);
 
-%randomsongs = 1:nsongs
+if 1
+        randomsongs = 1:nsongs;
+        disp('NOT PERMUTING TRAINING SONGS');
+end
 
 trainsongs = randomsongs(1:ntrainsongs);
 testsongs = randomsongs(1:ntestsongs);
@@ -225,6 +229,9 @@ for song = 1:nsongs
         end
 end
 
+%% Shape only?  Let's try normalising the training inputs:
+nnsetX = normc(nnsetX);
+
 %yy=reshape(nnsetY, nwindows_per_song, nsongs);
 %imagesc(yy');
 
@@ -246,7 +253,7 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([1.3 * ntsteps_of_interest]));
+net = feedforwardnet(ceil([2 * ntsteps_of_interest]));
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
@@ -278,7 +285,7 @@ disp('Computing optimal output thresholds...');
 % How many seconds on either side of the tstep_of_interest is an acceptable match?
 MATCH_PLUSMINUS = 0.02;
 % Cost of false positives is relative to that of false negatives.
-FALSE_POSITIVE_COST = 1
+FALSE_POSITIVE_COST = 1 
 
 trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
@@ -291,7 +298,7 @@ trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
 
 
 SHOW_THRESHOLDS = true;
-SORT_BY_ALIGNMENT = true;
+SORT_BY_ALIGNMENT = false;
 % For each timestep of interest, draw that output unit's response to all
 % timesteps for all songs:
 for i = 1:ntsteps_of_interest
@@ -335,9 +342,9 @@ for i = 1:ntsteps_of_interest
         xlabel('Time (ms)');
         ylabel('Song (random order)');
         if ~SORT_BY_ALIGNMENT
-                text(time_window/2, ntrainsongs/2, 'train', ...
+                text(time_window/2*1000, ntrainsongs/2, 'train', ...
                         'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-                text(time_window/2, ntrainsongs+ntestsongs/2, 'test', ...
+                text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
                         'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
         end
         colorbar; % If nothing else, this makes it line up with the spectrogram.
@@ -359,6 +366,7 @@ if net.numLayers > 1
                 %imagesc(reshape(net.IW{1}(i,:), time_window_steps, length(freq_range_ds)));
         end
 end
+drawnow;
 
 %% Save input file for the LabView detector
 layer0 = net.IW{1};
@@ -366,13 +374,14 @@ layer1 = net.LW{2,1};
 bias0 = net.b{1};
 bias1 = net.b{2};
 filename_base = sprintf('net_detector%s', sprintf('_%g', times_of_interest));
+fprintf('Saving as ''%s''...\n', filename_base);
 save(strcat(filename_base, '.mat'), ...
-        'layer0', 'layer1', 'bias0', 'bias1', ...
+        'net', 'layer0', 'layer1', 'bias0', 'bias1', 'nnsetX', 'nnsetY', ...
         'samplerate', 'FFT_SIZE', 'FFT_TIME_SHIFT', 'freq_range_ds', 'time_window_steps', 'trigger_thresholds');
 %% Save sample data: audio on channel0, canonical hits for first syllable on channel1
 songs = reshape(MIC_DATA, [], 1);
-%songs_scale = max([max(songs) -min(songs)]);
-%songs = songs / songs_scale;
+songs_scale = max([max(songs) -min(songs)]);
+songs = songs / songs_scale;
 hits = zeros(size(MIC_DATA));
 samples_of_interest = round(times_of_interest * samplerate);
 for i = 1:nsongs
