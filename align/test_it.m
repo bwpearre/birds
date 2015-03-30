@@ -83,28 +83,43 @@ while counter < show_size
                 title('training input');
                 net_out_original = sim(net, origimg)
 
-                subplot(3,2,5);
-                imagesc(fftbn_img - f);
-                axis xy;
-                colorbar;
-                title('fft - train');
-                subplot(3, 2, 6);
-                imagesc(f ./ fftbn_img);
-                axis xy;
-                title('train / fftb');
-                colorbar;
+                if 0
+                        subplot(3,2,5);
+                        imagesc(fftbn_img - f);
+                        axis xy;
+                        colorbar;
+                        title('fft - train');
+                        subplot(3, 2, 6);
+                        imagesc(f ./ fftbn_img);
+                        axis xy;
+                        title('train / fftb');
+                        colorbar;
+                end
                 
                 trigger_out_original = net_out_original > trigger_thresholds';
                 triggerb_original(:, end) = trigger_out_original + [2 0]';
 
 
-                % Run the neural network
+                % Run the neural network manually:
         
-                net_out_official = sim(net, fftbn);
-                net_mid = tansig(layer0 * fftbn + bias0);
+                net_out_official = sim(net, fftbn)
+                fftbmmm = mapminmax('apply', fftbn, net.inputs{1}.processSettings{1});
+                fftbmmmm = (fftbn - net.inputs{1}.processSettings{1}.xoffset) ...
+                        .* net.inputs{1}.processSettings{1}.gain - 1;
+                if mean(fftbmmm == fftbmmmm) ~= 1
+                        disp('WARNING: input map min max ~= map min max manual');
+                end
+                net_mid = tansig(layer0 * fftbmmm + bias0);
                 net_out = layer1 * net_mid + bias1;
-        
-        
+                net_out_manual = (net_out + 1) ./ net.outputs{2}.processSettings{1}.gain ...
+                        - net.outputs{2}.processSettings{1}.xoffset;
+
+                net_out = mapminmax('reverse', net_out, net.outputs{2}.processSettings{1})
+                
+                if mean(net_out == net_out_manual) ~= 1
+                        disp('WARNING: output map min max ~= map min max manual');
+                end
+
         
                 trigger_out = net_out > trigger_thresholds';
                 trigger_out_official = net_out_official > trigger_thresholds';
