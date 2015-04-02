@@ -130,7 +130,7 @@ ntestsongs = nsongs - ntrainsongs;
 % order.
 randomsongs = randperm(nsongs);
 
-if 1
+if 0
         randomsongs = 1:nsongs;
         disp('NOT PERMUTING TRAINING SONGS');
 end
@@ -204,7 +204,7 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 disp(sprintf('   ...(Allocating %g MB for training set X.)', ...
         8 * nsongs * nwindows_per_song * layer0sz / (2^20)));
 nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
-nnsetY = zeros(ntsteps_of_interest, nsongs * nwindows_per_song);
+nnsetY = -ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 
 
 % Populate the training data.  Infinite RAM makes this so much easier!
@@ -223,7 +223,7 @@ for song = 1:nsongs
                         if tstep == tstep_of_interest(interesting) 
                                 %nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 1) = 1;
                                 nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - 1 : ...
-                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 3) = [ 0.5 0.9 1 0.9 0.5 ];
+                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 3) = [ 0 0.8 1 0.8 0 ];
                         end
                 end
         end
@@ -369,15 +369,23 @@ end
 drawnow;
 
 %% Save input file for the LabView detector
+% Extract data from net structure, because LabView is too fucking stupid to
+% permit the . operator.  Or I am.
 layer0 = net.IW{1};
 layer1 = net.LW{2,1};
 bias0 = net.b{1};
 bias1 = net.b{2};
+mmminoffset = net.inputs{1}.processSettings{1}.xoffset;
+mmmingain = net.inputs{1}.processSettings{1}.gain;
+mmmoutoffset = net.outputs{2}.processSettings{1}.xoffset;
+mmmoutgain = net.outputs{2}.processSettings{1}.gain;
 filename_base = sprintf('net_detector%s', sprintf('_%g', times_of_interest));
 fprintf('Saving as ''%s''...\n', filename_base);
 save(strcat(filename_base, '.mat'), ...
-        'net', 'layer0', 'layer1', 'bias0', 'bias1', 'nnsetX', 'nnsetY', ...
-        'samplerate', 'FFT_SIZE', 'FFT_TIME_SHIFT', 'freq_range_ds', 'time_window_steps', 'trigger_thresholds');
+        'net', 'layer0', 'layer1', 'bias0', 'bias1', ...
+        'samplerate', 'FFT_SIZE', 'FFT_TIME_SHIFT', 'freq_range_ds', ...
+        'time_window_steps', 'trigger_thresholds', ...
+        'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain');
 %% Save sample data: audio on channel0, canonical hits for first syllable on channel1
 songs = reshape(MIC_DATA, [], 1);
 songs_scale = max([max(songs) -min(songs)]);

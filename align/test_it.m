@@ -66,11 +66,13 @@ while counter < show_size
         %imagesc(fullbuf);
         %axis xy;
         %colorbar;
-        subplot(3,2,2);
-        imagesc(fftbn_img);
-        title('fft buffer');
-        axis xy;
-        colorbar;
+        if 0
+                subplot(3,2,2);
+                imagesc(fftbn_img);
+                title('fft buffer');
+                axis xy;
+                colorbar;
+        end
         
         if counter > time_window_steps
                 
@@ -105,19 +107,23 @@ while counter < show_size
                 net_out_official = sim(net, fftbn)
                 fftbmmm = mapminmax('apply', fftbn, net.inputs{1}.processSettings{1});
                 fftbmmmm = (fftbn - net.inputs{1}.processSettings{1}.xoffset) ...
-                        .* net.inputs{1}.processSettings{1}.gain - 1;
+                        .* net.inputs{1}.processSettings{1}.gain ...
+                        - 1;
                 if mean(fftbmmm == fftbmmmm) ~= 1
                         disp('WARNING: input map min max ~= map min max manual');
                 end
                 net_mid = tansig(layer0 * fftbmmm + bias0);
                 net_out = layer1 * net_mid + bias1;
                 net_out_manual = (net_out + 1) ./ net.outputs{2}.processSettings{1}.gain ...
-                        - net.outputs{2}.processSettings{1}.xoffset;
-
+                        + net.outputs{2}.processSettings{1}.xoffset;
+                net_out_orig = net_out;
                 net_out = mapminmax('reverse', net_out, net.outputs{2}.processSettings{1})
                 
                 if mean(net_out == net_out_manual) ~= 1
-                        disp('WARNING: output map min max ~= map min max manual');
+                        fprintf('WARNING: output map min max ~= map min max manual: %g', mean(net_out - net_out_manual));
+                end
+                if mean(net_out == net_out_orig) ~= 1
+                        fprintf('WARNING: output map min max ~= map min max orig: %g', mean(net_out - net_out_orig));
                 end
 
         
