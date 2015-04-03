@@ -3,6 +3,9 @@ clear;
 rng('shuffle');
 
 
+global Y_NEGATIVE;
+Y_NEGATIVE = 0;
+
 if 0
         load('~/r/data/wintest25/out_MANUALCLUST/extracted_data');
         MIC_DATA = agg_audio.data;
@@ -11,7 +14,7 @@ elseif 0
         MIC_DATA = agg_audio.data;
 elseif 1
         load('~/r/data/lw27ry_extracted_data');
-        agg_audio.data = agg_audio.data(1:20000,:);
+        agg_audio.data = agg_audio.data(1:24000,:);
         clear agg_data;
         MIC_DATA = agg_audio.data;
 else
@@ -35,12 +38,13 @@ else
         raw_time_ds = 1;
 end
 MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
+MIC_DATA = MIC_DATA*0.6036;
 
 clear agg_audio.data;
 clear agg_data;
 samplerate = agg_audio.fs / raw_time_ds;
 
-disp('Filtering the data...');
+disp('Bandpass-filtering the data...');
 [B A] = butter(4, [0.05 0.9]);
 MIC_DATA = filter(B, A, MIC_DATA);
 
@@ -54,7 +58,7 @@ nsongs = size(MIC_DATA, 2);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.005;                        % seconds
+FFT_TIME_SHIFT = 0.001;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -65,7 +69,7 @@ window = hamming(FFT_SIZE);
 speck = speck + eps;
 
 % This _should_ be the same as FFT_TIME_SHIFT, but let's use this because
-% round-off error is a possibility
+% round-off error is a possibility.  This is actually seconds/timestep.
 timestep = (times(end)-times(1))/(length(times)-1);
 
 spectrograms = zeros([nsongs nfreqs ntimes]);
@@ -102,7 +106,7 @@ colorbar;
 %% Cut out a region of the spectrum (in space and time) to save on compute
 %% time:
 freq_range = [2000 7000];
-time_window = 0.07;
+time_window = 0.08;
 %%%%%%%%%%%%
 
 
@@ -151,7 +155,7 @@ if 0
         times_of_interest = tstep_of_interest * timestep
 else
         %tstep_of_interest = 0.775;
-        times_of_interest = [ 0.28 0.775];
+        times_of_interest = [ 0.28 ];
         %times_of_interest = [ 0.2:0.01:0.35 ];
         
         
@@ -204,7 +208,7 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 disp(sprintf('   ...(Allocating %g MB for training set X.)', ...
         8 * nsongs * nwindows_per_song * layer0sz / (2^20)));
 nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
-nnsetY = -ones(ntsteps_of_interest, nsongs * nwindows_per_song);
+nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 
 
 % Populate the training data.  Infinite RAM makes this so much easier!
@@ -222,8 +226,8 @@ for song = 1:nsongs
                 for interesting = 1:ntsteps_of_interest
                         if tstep == tstep_of_interest(interesting) 
                                 %nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 1) = 1;
-                                nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - 1 : ...
-                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 3) = [ 0 0.8 1 0.8 0 ];
+                                nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - 0 : ...
+                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 2) = [ 0.2 1 0.2 ];
                         end
                 end
         end
@@ -285,7 +289,7 @@ disp('Computing optimal output thresholds...');
 % How many seconds on either side of the tstep_of_interest is an acceptable match?
 MATCH_PLUSMINUS = 0.02;
 % Cost of false positives is relative to that of false negatives.
-FALSE_POSITIVE_COST = 1 
+FALSE_POSITIVE_COST = 1
 
 trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
@@ -298,7 +302,7 @@ trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
 
 
 SHOW_THRESHOLDS = true;
-SORT_BY_ALIGNMENT = false;
+SORT_BY_ALIGNMENT = true;
 % For each timestep of interest, draw that output unit's response to all
 % timesteps for all songs:
 for i = 1:ntsteps_of_interest
@@ -308,8 +312,8 @@ for i = 1:ntsteps_of_interest
         barrr = zeros(time_window_steps-1, nsongs);
 
         if SHOW_THRESHOLDS
-                img = power_img / 2;
-                fooo = trigger(foo', trigger_thresholds(i));
+                img = power_img * 0.8;
+                fooo = trigger(foo', trigger_thresholds(i), 0.1, timestep);
                 fooo = [barrr' fooo];
                 [val pos] = max(fooo,[],2);
 
