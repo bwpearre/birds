@@ -2,7 +2,8 @@ clear;
 
 rng('shuffle');
 
-
+% What is the value of a non-hit on the training data?  0 or -1 would be
+% good choices... should make no difference at all--this is for debugging.
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
@@ -29,8 +30,6 @@ end
 %        some_songs / max([max(max(some_songs)) abs(min(min(some_songs)))]), ...
 %        44100);
 
-
-
 %% Downsample the data
 if agg_audio.fs > 40000
         raw_time_ds = 2;
@@ -38,17 +37,59 @@ else
         raw_time_ds = 1;
 end
 MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
-MIC_DATA = MIC_DATA*0.6036;
+MIC_DATA = MIC_DATA*0.6;
 
 clear agg_audio.data;
 clear agg_data;
 samplerate = agg_audio.fs / raw_time_ds;
 
+[nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
+
+%% Add some non-matching sound fragments and songs and such from another
+%% bird... try around 10% of the training corpus?
+nonmatchingbird = 'lblk121rr'
+nonmatchingloc = '/Volumes/disk2/winData';
+l = dir(sprintf('%s/%s', nonmatchingloc, nonmatchingbird));
+nonmatchingsongs = zeros(round(size(MIC_DATA) ./ [1 10]));
+need_n_songs = size(nonmatchingsongs, 2);
+
+fprintf('Borrowing some non-matching songs from ''%s/%s''...\n', nonmatchingloc, nonmatchingbird);
+
+% incorporate nonmatching data
+done = false;
+nnewsongs = 0;
+for i = 1:length(l)
+        if ~strncmp(l(i).name(end:-1:1), 'vaw.', 4)
+                continue;
+        end
+        %fprintf('reading ''%s''\n', l(i).name);
+        [foo, nonmatchingfs] = audioread(sprintf('%s/%s/%s', nonmatchingloc, nonmatchingbird, l(i).name));
+
+        % downsample
+        nonmatching_resample = round([samplerate nonmatchingfs]);
+        foo = resample(foo, round(samplerate), round(nonmatchingfs));
+        % append to the extant audio
+        songs_available = floor(length(foo) / nsamples_per_song);
+        foo = reshape(foo(1:(songs_available*nsamples_per_song)), nsamples_per_song, songs_available);
+        
+        take_n_songs = min(need_n_songs, songs_available);
+        
+        nonmatchingsongs(:, nnewsongs+1:min(size(nonmatchingsongs, 2), nnewsongs+songs_available)) = foo(:, 1:take_n_songs);
+        nnewsongs = nnewsongs + songs_available;
+        need_n_songs = need_n_songs - take_n_songs;
+        if need_n_songs <= 0
+                break;
+        end
+end
+
+MIC_DATA = [MIC_DATA nonmatchingsongs];
+
+nsongs = size(MIC_DATA, 2);
+
+
 disp('Bandpass-filtering the data...');
 [B A] = butter(4, [0.05 0.9]);
 MIC_DATA = filter(B, A, MIC_DATA);
-
-nsongs = size(MIC_DATA, 2);
 
 
 % Compute the spectrogram using original parameters (probably far from
@@ -136,7 +177,7 @@ randomsongs = randperm(nsongs);
 
 if 0
         randomsongs = 1:nsongs;
-        disp('NOT PERMUTING TRAINING SONGS');
+        fprintf('\n    NOT PERMUTING TRAINING SONGS\n\n');
 end
 
 trainsongs = randomsongs(1:ntrainsongs);
@@ -155,9 +196,9 @@ if 0
         times_of_interest = tstep_of_interest * timestep
 else
         %tstep_of_interest = 0.775;
-        times_of_interest = [ 0.28 ];
+        %times_of_interest = [ 0.28 ];
         %times_of_interest = [ 0.2:0.01:0.35 ];
-        
+        times_of_interest = 0.46;
         
         tstep_of_interest = round(times_of_interest / timestep);
 end
@@ -177,9 +218,9 @@ tstep_buffer = round(time_buffer / timestep);
 for i = 1:ntsteps_of_interest
         range = tstep_of_interest(i)-tstep_buffer:tstep_of_interest(i)+tstep_buffer;
         range = range(find(range>0&range<=ntimes));
-        foo = reshape(spectrograms(:, :, range), nsongs, []) * reshape(mean(spectrograms(:, :, range), 1), 1, [])';
+        foo = reshape(spectrograms(1:nmatchingsongs, :, range), nmatchingsongs, []) * reshape(mean(spectrograms(:, :, range), 1), 1, [])';
         [val canonical_songs(i)] = max(foo);
-        [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA, tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
+        [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
 end
 
 hist(target_offsets', 40);
@@ -221,13 +262,16 @@ for song = 1:nsongs
                                  freq_range_ds, ...
                                  tstep - time_window_steps + 1  :  tstep), ...
                                  [], 1);
-                         
-                         
+                   
+                % Fill in the positive hits, if appropriate...
+                if randomsongs(song) > nmatchingsongs
+                        continue;
+                end
                 for interesting = 1:ntsteps_of_interest
                         if tstep == tstep_of_interest(interesting) 
                                 %nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 1) = 1;
                                 nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - 0 : ...
-                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 2) = [ 0.2 1 0.2 ];
+                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 2) = [ 0.5 1 0.5 ];
                         end
                 end
         end
@@ -291,6 +335,9 @@ MATCH_PLUSMINUS = 0.02;
 % Cost of false positives is relative to that of false negatives.
 FALSE_POSITIVE_COST = 1
 
+songs_with_hits = [ones(1, nmatchingsongs) zeros(1, nsongs - nmatchingsongs)]';
+songs_with_hits = songs_with_hits(randomsongs);
+
 trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
         FALSE_POSITIVE_COST, ...
@@ -298,7 +345,8 @@ trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         tstep_of_interest, ...
         MATCH_PLUSMINUS, ...
         timestep, ...
-        time_window_steps);
+        time_window_steps, ...
+        songs_with_hits);
 
 
 SHOW_THRESHOLDS = true;
@@ -396,7 +444,7 @@ songs_scale = max([max(songs) -min(songs)]);
 songs = songs / songs_scale;
 hits = zeros(size(MIC_DATA));
 samples_of_interest = round(times_of_interest * samplerate);
-for i = 1:nsongs
+for i = 1:nmatchingsongs
         hits(samples_of_interest(1) + sample_offsets(1,i), i) = 1;
 end
 hits = reshape(hits, [], 1);
