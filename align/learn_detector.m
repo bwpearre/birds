@@ -47,10 +47,11 @@ samplerate = agg_audio.fs / raw_time_ds;
 
 %% Add some non-matching sound fragments and songs and such from another
 %% bird... try around 10% of the training corpus?
-nonmatchingbird = 'lblk121rr'
+NONSINGING_FRACTION = 0.5;
+nonmatchingbird = 'lblk121rr';
 nonmatchingloc = '/Volumes/disk2/winData';
 l = dir(sprintf('%s/%s', nonmatchingloc, nonmatchingbird));
-nonmatchingsongs = zeros(round(size(MIC_DATA) ./ [1 10]));
+nonmatchingsongs = zeros(round(size(MIC_DATA) .* [1 NONSINGING_FRACTION]));
 need_n_songs = size(nonmatchingsongs, 2);
 
 fprintf('Borrowing some non-matching songs from ''%s/%s''...\n', nonmatchingloc, nonmatchingbird);
@@ -147,7 +148,7 @@ colorbar;
 %% Cut out a region of the spectrum (in space and time) to save on compute
 %% time:
 freq_range = [2000 7000];
-time_window = 0.08;
+time_window = 0.07;
 %%%%%%%%%%%%
 
 
@@ -195,10 +196,10 @@ if 0
                 freq_range_ds);
         times_of_interest = tstep_of_interest * timestep
 else
-        %tstep_of_interest = 0.775;
-        %times_of_interest = [ 0.28 ];
+        %times_of_interest = 0.775;
+        times_of_interest = [ 0.28 ];
         %times_of_interest = [ 0.2:0.01:0.35 ];
-        times_of_interest = 0.46;
+        %times_of_interest = 0.5;
         
         tstep_of_interest = round(times_of_interest / timestep);
 end
@@ -322,7 +323,7 @@ testout = sim(net, nnsetX);
 testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
 
 
-% Create an image for plotting the results...
+% Create an image on which to superimpose the results...
 power_img = squeeze((sum(spectrograms, 2)));
 power_img(find(isinf(power_img))) = 0;
 power_img = power_img(randomsongs,:);
@@ -439,13 +440,19 @@ save(strcat(filename_base, '.mat'), ...
         'time_window_steps', 'trigger_thresholds', ...
         'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain');
 %% Save sample data: audio on channel0, canonical hits for first syllable on channel1
-songs = reshape(MIC_DATA, [], 1);
+% Re-permute with a new random order
+newrand = randperm(nsongs);
+orig_songs_with_hits =  [ones(1, nmatchingsongs) zeros(1, nsongs - nmatchingsongs)]';
+new_songs_with_hits = orig_songs_with_hits(newrand);
+songs = reshape(MIC_DATA(:, newrand), [], 1);
 songs_scale = max([max(songs) -min(songs)]);
 songs = songs / songs_scale;
 hits = zeros(size(MIC_DATA));
 samples_of_interest = round(times_of_interest * samplerate);
-for i = 1:nmatchingsongs
-        hits(samples_of_interest(1) + sample_offsets(1,i), i) = 1;
+for i = 1:nsongs
+        if new_songs_with_hits(i)
+                hits(samples_of_interest(1) + sample_offsets(1, newrand(i)), i) = 1;
+        end
 end
 hits = reshape(hits, [], 1);
 songs = [songs hits];
