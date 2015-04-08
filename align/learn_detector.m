@@ -47,7 +47,7 @@ samplerate = agg_audio.fs / raw_time_ds;
 
 %% Add some non-matching sound fragments and songs and such from another
 %% bird... try around 10% of the training corpus?
-NONSINGING_FRACTION = 0.5;
+NONSINGING_FRACTION = 0.2;
 nonmatchingbird = 'lblk121rr';
 nonmatchingloc = '/Volumes/disk2/winData';
 l = dir(sprintf('%s/%s', nonmatchingloc, nonmatchingbird));
@@ -124,7 +124,7 @@ end
 
 % Create a pretty graphic for display (which happens later)
 spectrograms = abs(spectrograms);
-spectrogram_avg_img = squeeze(log(sum(spectrograms)));
+spectrogram_avg_img = squeeze(log(sum(spectrograms(1:nmatchingsongs,:,:))));
 
 %% Draw the pretty full-res spectrogram and the targets
 figure(4);
@@ -148,7 +148,7 @@ colorbar;
 %% Cut out a region of the spectrum (in space and time) to save on compute
 %% time:
 freq_range = [2000 7000];
-time_window = 0.07;
+time_window = 0.08;
 %%%%%%%%%%%%
 
 
@@ -196,8 +196,9 @@ if 0
                 freq_range_ds);
         times_of_interest = tstep_of_interest * timestep
 else
-        %times_of_interest = 0.775;
-        times_of_interest = [ 0.28 ];
+        times_of_interest = 0.78;
+        %times_of_interest = [ 0.28 0.775 ];
+        %times_of_interest = 0.28;
         %times_of_interest = [ 0.2:0.01:0.35 ];
         %times_of_interest = 0.5;
         
@@ -252,6 +253,12 @@ disp(sprintf('   ...(Allocating %g MB for training set X.)', ...
 nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
 nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 
+% Some syllables are really hard to pinpoint to within the frame rate.  For
+% each sample of interest, define a "shotgun function" that spreads the
+% hits a little.  I decree that there shall be no more than 5 frames'
+% spread (should be defined wrt time, not frames, but whatever), to make
+% the code a little easier.
+shotgun = [0.3 0.9 1 0.9 0.3];
 
 % Populate the training data.  Infinite RAM makes this so much easier!
 for song = 1:nsongs
@@ -271,8 +278,8 @@ for song = 1:nsongs
                 for interesting = 1:ntsteps_of_interest
                         if tstep == tstep_of_interest(interesting) 
                                 %nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 1) = 1;
-                                nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - 0 : ...
-                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 2) = [ 0.5 1 0.5 ];
+                                nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - 1 : ...
+                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 3) = shotgun;
                         end
                 end
         end
@@ -302,7 +309,7 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([2 * ntsteps_of_interest]));
+net = feedforwardnet(ceil([3 * ntsteps_of_interest]));
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
@@ -451,6 +458,8 @@ hits = zeros(size(MIC_DATA));
 samples_of_interest = round(times_of_interest * samplerate);
 for i = 1:nsongs
         if new_songs_with_hits(i)
+                % The baseline signal is recorded only for the first sample
+                % of interest:
                 hits(samples_of_interest(1) + sample_offsets(1, newrand(i)), i) = 1;
         end
 end
