@@ -30,18 +30,22 @@ end
 %        some_songs / max([max(max(some_songs)) abs(min(min(some_songs)))]), ...
 %        44100);
 
+[nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
+
 %% Downsample the data
-if agg_audio.fs > 40000
-        raw_time_ds = 2;
-else
-        raw_time_ds = 1;
+samplerate = 20000;
+if agg_audio.fs ~= samplerate
+        disp(sprintf('Resampling data from %g Hz to %g Hz...', agg_audio.fs, samplerate));
+        [a b] = rat(samplerate/agg_audio.fs);
+
+        MIC_DATA = double(MIC_DATA);
+        MIC_DATA = resample(double(MIC_DATA), a, b);
 end
-MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
+%MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
 MIC_DATA = MIC_DATA*0.6;
 
 clear agg_audio.data;
 clear agg_data;
-samplerate = agg_audio.fs / raw_time_ds;
 
 [nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
@@ -100,7 +104,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.001;                        % seconds
+FFT_TIME_SHIFT = 0.002;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -247,18 +251,32 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % This loop also shuffles the songs according to randomsongs, so we can use
 % contiguous blocks for training / testing
 
+training_set_MB = 8 * nsongs * nwindows_per_song * layer0sz / (2^20);
 
-disp(sprintf('   ...(Allocating %g MB for training set X.)', ...
-        8 * nsongs * nwindows_per_song * layer0sz / (2^20)));
+disp(sprintf('   ...(Allocating %g MB for training set X.)', training_set_MB));
 nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
 nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 
-% Some syllables are really hard to pinpoint to within the frame rate.  For
-% each sample of interest, define a "shotgun function" that spreads the
-% hits a little.  I decree that there shall be no more than 5 frames'
-% spread (should be defined wrt time, not frames, but whatever), to make
-% the code a little easier.
-shotgun = [0.3 0.9 1 0.9 0.3];
+%% MANUAL PER-SYLLABLE TUNING!
+
+% Some syllables are really hard to pinpoint to within the frame rate, so
+% the network has to try to learn "image A is a hit, and this thing that
+% looks identical to image A is not a hit".  For each sample of interest,
+% define a "shotgun function" that spreads the "acceptable" timesteps in
+% the training set a little.  This could be generalised for multiple
+% syllables, but right now they all share one sigma.
+
+% This only indirectly affects final timing precision, since thresholds are
+% optimally tuned based on the window defined in MATCH_PLUSMINUS.
+shotgun_max_sec = 0.02;
+shotgun_sigma = 0.003;
+shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
+shotgun = shotgun / max(shotgun);
+shotgun = shotgun(find(shotgun>0.1));
+shothalf = length(shotgun);
+if shothalf
+        shotgun = [ shotgun(end:-1:2) shotgun ]
+end
 
 % Populate the training data.  Infinite RAM makes this so much easier!
 for song = 1:nsongs
@@ -277,9 +295,8 @@ for song = 1:nsongs
                 end
                 for interesting = 1:ntsteps_of_interest
                         if tstep == tstep_of_interest(interesting) 
-                                %nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 1) = 1;
-                                nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - 1 : ...
-                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + 3) = shotgun;
+                                nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - shothalf + 2 : ...
+                                                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + shothalf) = shotgun;
                         end
                 end
         end
@@ -296,8 +313,6 @@ nnsetX = normc(nnsetX);
 % shuffled: nnsetX, nnsetY, testout
 %   indices into shuffled arrays: nnset_train, nnset_test
 
-disp('Training...');
-
 % These are contiguous blocks, since the spectrograms have already been
 % shuffled.
 nnset_train = 1:(ntrainsongs * nwindows_per_song);
@@ -309,22 +324,28 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([3 * ntsteps_of_interest]));
+net = feedforwardnet(ceil([2 * ntsteps_of_interest]));
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
 
 %net.trainFcn = 'trainbfg';
 
-fprintf('Training network with %s\n', net.trainFcn);
+fprintf('Training network with %s...\n', net.trainFcn);
 
 % Once the validation set performance stops improving, it doesn't seem to
 % get better, so keep this small.
-net.trainParam.max_fail = 3;
+net.trainParam.max_fail = 2;
+if training_set_MB < 10000
+        small_training_set = 'no';
+else
+        small_training_set = 'no';
+end
+tic
 %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
-net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
+net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), 'UseParallel', small_training_set);
 % Oh yeah, the line above was the hard part.
-
+disp(sprintf('   ...training took %g minutes.', toc/60));
 % Test on all the data:
 testout = sim(net, nnsetX);
 testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);

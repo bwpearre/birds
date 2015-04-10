@@ -1,5 +1,5 @@
 clear;
-filebase = 'net_detector_0.28_0.775';
+filebase = 'net_detector_0.46';
 
 % This seems inefficient, and it is, but I'm trying to duplicate the steps
 % from the LabView realtime code as precisely as possible.  Trust me.
