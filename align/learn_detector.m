@@ -51,7 +51,7 @@ clear agg_data;
 
 %% Add some non-matching sound fragments and songs and such from another
 %% bird... try around 10% of the training corpus?
-NONSINGING_FRACTION = 0.2;
+NONSINGING_FRACTION = 0.1;
 nonmatchingbird = 'lblk121rr';
 nonmatchingloc = '/Volumes/disk2/winData';
 l = dir(sprintf('%s/%s', nonmatchingloc, nonmatchingbird));
@@ -87,10 +87,9 @@ for i = 1:length(l)
         end
 end
 
-MIC_DATA = [MIC_DATA nonmatchingsongs];
+MIC_DATA = single([MIC_DATA nonmatchingsongs]);
 
 nsongs = size(MIC_DATA, 2);
-
 
 disp('Bandpass-filtering the data...');
 [B A] = butter(4, [0.05 0.9]);
@@ -104,7 +103,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.002;                        % seconds
+FFT_TIME_SHIFT = 0.001;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -118,12 +117,25 @@ speck = speck + eps;
 % round-off error is a possibility.  This is actually seconds/timestep.
 timestep = (times(end)-times(1))/(length(times)-1);
 
+%% Define training set
+% Hold some data out for final testing.
+ntrainsongs = min(floor(nsongs*8/10), 100);
+ntestsongs = nsongs - ntrainsongs;
+% On each run of this program, change the presentation order of the
+% data, so we get (a) a different subset of the data than last time for
+% training vs. final testing and (b) different training data presentation
+% order.
+randomsongs = randperm(nsongs);
+
+
 spectrograms = zeros([nsongs nfreqs ntimes]);
 spectrograms(1, :, :) = speck;
 disp('Computing spectrograms...');
 parfor i = 2:nsongs
         spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), FFT_SIZE, NOVERLAP, [], samplerate) + eps;
 end
+
+spectrograms = single(spectrograms);
 
 
 % Create a pretty graphic for display (which happens later)
@@ -170,15 +182,6 @@ layer0sz = length(freq_range_ds) * time_window_steps;
 % setting all time windows but the desired one to 0.
 nwindows_per_song = ntimes - time_window_steps + 1;
 
-%% Define training set
-% Hold some data out for final testing.
-ntrainsongs = min(floor(nsongs*8/10), 100);
-ntestsongs = nsongs - ntrainsongs;
-% On each run of this program, change the presentation order of the
-% data, so we get (a) a different subset of the data than last time for
-% training vs. final testing and (b) different training data presentation
-% order.
-randomsongs = randperm(nsongs);
 
 if 0
         randomsongs = 1:nsongs;
@@ -200,9 +203,9 @@ if 0
                 freq_range_ds);
         times_of_interest = tstep_of_interest * timestep
 else
-        times_of_interest = 0.78;
+        %times_of_interest = 0.78;
         %times_of_interest = [ 0.28 0.775 ];
-        %times_of_interest = 0.28;
+        times_of_interest = 0.28;
         %times_of_interest = [ 0.2:0.01:0.35 ];
         %times_of_interest = 0.5;
         
@@ -229,7 +232,7 @@ for i = 1:ntsteps_of_interest
         [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
 end
 
-hist(target_offsets', 40);
+%hist(target_offsets', 40);
 
 %% Draw the pretty full-res spectrogram and the targets
 figure(4);
@@ -302,6 +305,10 @@ for song = 1:nsongs
         end
 end
 
+disp('Converting neural net data to singles...');
+nnsetX = single(nnsetX);
+nnsetY = single(nnsetY);
+
 %% Shape only?  Let's try normalising the training inputs:
 nnsetX = normc(nnsetX);
 
@@ -324,7 +331,7 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([2 * ntsteps_of_interest]));
+net = feedforwardnet(ceil([3 * ntsteps_of_interest]));
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
@@ -337,19 +344,20 @@ fprintf('Training network with %s...\n', net.trainFcn);
 % get better, so keep this small.
 net.trainParam.max_fail = 2;
 if training_set_MB < 10000
-        small_training_set = 'no';
+        parallelise_training = 'no'; % Actually slows down training??
 else
-        small_training_set = 'no';
+        parallelise_training = 'no';
 end
 tic
 %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
-net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), 'UseParallel', small_training_set);
+net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), 'UseParallel', parallelise_training);
 % Oh yeah, the line above was the hard part.
 disp(sprintf('   ...training took %g minutes.', toc/60));
 % Test on all the data:
 testout = sim(net, nnsetX);
 testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
 
+disp('Creating spectral power image...');
 
 % Create an image on which to superimpose the results...
 power_img = squeeze((sum(spectrograms, 2)));
@@ -462,7 +470,7 @@ mmmoutoffset = net.outputs{2}.processSettings{1}.xoffset;
 mmmoutgain = net.outputs{2}.processSettings{1}.gain;
 filename_base = sprintf('net_detector%s', sprintf('_%g', times_of_interest));
 fprintf('Saving as ''%s''...\n', filename_base);
-save(strcat(filename_base, '.mat'), ...
+save(strcat(filename_base, sprintf('_%dHz_%dhid.mat', 1/FFT_TIME_SHIFT, net.layers{1}.dimensions)), ...
         'net', 'layer0', 'layer1', 'bias0', 'bias1', ...
         'samplerate', 'FFT_SIZE', 'FFT_TIME_SHIFT', 'freq_range_ds', ...
         'time_window_steps', 'trigger_thresholds', ...
@@ -486,4 +494,4 @@ for i = 1:nsongs
 end
 hits = reshape(hits, [], 1);
 songs = [songs hits];
-audiowrite(strcat(filename_base, '.wav'), songs, round(samplerate));
+audiowrite(sprintf('%s_%d%%.wav', filename_base, round(100/(1+NONSINGING_FRACTION))), songs, round(samplerate));
