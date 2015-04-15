@@ -102,7 +102,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
-FFT_SIZE = 512;
+FFT_SIZE = 256;
 FFT_TIME_SHIFT = 0.002;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
@@ -117,9 +117,11 @@ speck = speck + eps;
 % round-off error is a possibility.  This is actually seconds/timestep.
 timestep = (times(end)-times(1))/(length(times)-1);
 
+NTRAIN = 200;
+
 %% Define training set
 % Hold some data out for final testing.
-ntrainsongs = min(floor(nsongs*8/10), 200);
+ntrainsongs = min(floor(nsongs*8/10), NTRAIN);
 ntestsongs = nsongs - ntrainsongs;
 % On each run of this program, change the presentation order of the
 % data, so we get (a) a different subset of the data than last time for
@@ -272,7 +274,7 @@ nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 % This only indirectly affects final timing precision, since thresholds are
 % optimally tuned based on the window defined in MATCH_PLUSMINUS.
 shotgun_max_sec = 0.02;
-shotgun_sigma = 0.003
+shotgun_sigma = 0.005
 shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
 shotgun = shotgun / max(shotgun);
 shotgun = shotgun(find(shotgun>0.1));
@@ -335,6 +337,7 @@ net = feedforwardnet(ceil([3 * ntsteps_of_interest]));
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
+net.trainParam.goal=1e-3;
 
 %net.trainFcn = 'trainbfg';
 
@@ -445,11 +448,14 @@ if net.numLayers > 1
         figure(5);
         for i = 1:size(net.IW{1}, 1)
                 subplot(size(net.IW{1}, 1), 1, i)
-                imagesc(-time_window_steps:0, freq_range_ds, ...
+                imagesc([-time_window_steps:0]*FFT_TIME_SHIFT*1000, freq_range_ds, ...
                         reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_steps));
                 axis xy;
+                if i == 1
+                        title('Hidden layers');
+                end
                 if i == size(net.IW{1}, 1)
-                        xlabel('time');
+                        xlabel('time (ms)');
                 end
                 ylabel('frequency');
                 %imagesc(reshape(net.IW{1}(i,:), time_window_steps, length(freq_range_ds)));
@@ -468,13 +474,15 @@ mmminoffset = net.inputs{1}.processSettings{1}.xoffset;
 mmmingain = net.inputs{1}.processSettings{1}.gain;
 mmmoutoffset = net.outputs{2}.processSettings{1}.xoffset;
 mmmoutgain = net.outputs{2}.processSettings{1}.gain;
-filename_base = sprintf('detector%s', sprintf('_%g', times_of_interest));
-fprintf('Saving as ''%s''...\n', filename_base);
-save(strcat(filename_base, sprintf('_%dHz_%dhid.mat', 1/FFT_TIME_SHIFT, net.layers{1}.dimensions)), ...
+filename = sprintf('detector%s_%dHz_%dhid_%dtrain.mat', ...
+        sprintf('_%g', times_of_interest), floor(1/FFT_TIME_SHIFT), net.layers{1}.dimensions, NTRAIN);
+fprintf('Saving as ''%s''...\n', filename);
+save(filename, ...
         'net', 'layer0', 'layer1', 'bias0', 'bias1', ...
         'samplerate', 'FFT_SIZE', 'FFT_TIME_SHIFT', 'freq_range_ds', ...
         'time_window_steps', 'trigger_thresholds', ...
-        'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain');
+        'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain', 'shotgun_sigma', ...
+        'NTRAIN');
 %% Save sample data: audio on channel0, canonical hits for first syllable on channel1
 % Re-permute with a new random order
 newrand = randperm(nsongs);
