@@ -7,16 +7,27 @@ rng('shuffle');
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 0
+if 1
+        BIRD='lg373rblk';
+        load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
+        MIC_DATA = audio.data;
+        agg_audio.fs = audio.fs;
+elseif 0
         load('~/r/data/wintest25/out_MANUALCLUST/extracted_data');
         MIC_DATA = agg_audio.data;
 elseif 0
+        BIRD='lg373rblk';
         load('/Users/bwpearre/r/data/lg373rblk_2015_01_14/wav/out_MANUALCLUST/extracted_data.mat');
         MIC_DATA = agg_audio.data;
-elseif 1
+elseif 0
+        BIRD='lw27ry';
         load('~/r/data/lw27ry_extracted_data');
         agg_audio.data = agg_audio.data(1:24000,:);
         clear agg_data;
+        MIC_DATA = agg_audio.data;
+elseif 0
+        BIRD='lg373rblk';
+        load('/Users/Shared/lg373rblk/2cntnerve/2015-03-23/mat/lg373_MANUALCLUST/extracted_data.mat');
         MIC_DATA = agg_audio.data;
 else
         load aggregated_data;
@@ -42,17 +53,23 @@ if agg_audio.fs ~= samplerate
         MIC_DATA = resample(double(MIC_DATA), a, b);
 end
 %MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
-MIC_DATA = MIC_DATA*0.6;
+MIC_DATA = MIC_DATA / max(max(max(MIC_DATA)), -min(min(MIC_DATA)));
 
 clear agg_audio.data;
 clear agg_data;
 
 [nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
+NTRAIN = 1000;
+
 %% Add some non-matching sound fragments and songs and such from another
 %% bird... try around 10% of the training corpus?
-NONSINGING_FRACTION = 0.2;
+NONSINGING_FRACTION = 1;
 nonmatchingbird = 'lblk121rr';
+if strcmp(BIRD, nonmatchingbird)
+        fprintf('ERROR: using the same bird--%s--for training and for nonmatching data!\n', BIRD);
+        a(0);
+end
 nonmatchingloc = '/Volumes/disk2/winData';
 l = dir(sprintf('%s/%s', nonmatchingloc, nonmatchingbird));
 nonmatchingsongs = zeros(round(size(MIC_DATA) .* [1 NONSINGING_FRACTION]));
@@ -73,6 +90,9 @@ for i = 1:length(l)
         % downsample
         nonmatching_resample = round([samplerate nonmatchingfs]);
         foo = resample(foo, round(samplerate), round(nonmatchingfs));
+        % normalise
+        foo = foo / max(max(foo), -min(foo));
+
         % append to the extant audio
         songs_available = floor(length(foo) / nsamples_per_song);
         foo = reshape(foo(1:(songs_available*nsamples_per_song)), nsamples_per_song, songs_available);
@@ -117,7 +137,6 @@ speck = speck + eps;
 % round-off error is a possibility.  This is actually seconds/timestep.
 timestep = (times(end)-times(1))/(length(times)-1);
 
-NTRAIN = 200;
 
 %% Define training set
 % Hold some data out for final testing.
@@ -165,8 +184,8 @@ colorbar;
 
 %% Cut out a region of the spectrum (in space and time) to save on compute
 %% time:
-freq_range = [2000 7000];
-time_window = 0.08;
+freq_range = [1600 7000];
+time_window = 0.03;
 %%%%%%%%%%%%
 
 
@@ -207,7 +226,8 @@ if 0
 else
         %times_of_interest = 0.78;
         %times_of_interest = [ 0.28 0.775 ];
-        times_of_interest = 0.28;
+        times_of_interest = 0.325;
+        %times_of_interest = 0.45:0.01:0.48;
         %times_of_interest = [ 0.2:0.01:0.35 ];
         %times_of_interest = 0.5;
         
@@ -246,8 +266,14 @@ ylabel('Frequency (kHz)');
 colorbar;
 % Draw the syllables of interest:
 line(repmat(times_of_interest, 2, 1)*1000, repmat([freqs(1) freqs(end)]/1000, ntsteps_of_interest, 1)', 'Color', [1 0 0]);
-drawnow;
 
+windowrect = rectangle('Position', [(times_of_interest(1) - time_window)*1000 ...
+                                    freq_range(1)/1000 ...
+                                    time_window(1)*1000 ...
+                                    (freq_range(2)-freq_range(1))/1000], ...
+                       'EdgeColor', [1 0 0]);
+
+drawnow;
 
 
 
@@ -274,7 +300,7 @@ nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 % This only indirectly affects final timing precision, since thresholds are
 % optimally tuned based on the window defined in MATCH_PLUSMINUS.
 shotgun_max_sec = 0.02;
-shotgun_sigma = 0.005
+shotgun_sigma = 0.002;
 shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
 shotgun = shotgun / max(shotgun);
 shotgun = shotgun(find(shotgun>0.1));
@@ -333,11 +359,11 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([3 * ntsteps_of_interest]));
+net = feedforwardnet(ceil([2 * ntsteps_of_interest]));
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
-net.trainParam.goal=1e-3;
+%net.trainParam.goal=1e-3;
 
 %net.trainFcn = 'trainbfg';
 
@@ -353,7 +379,7 @@ else
 end
 tic
 %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
-net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), 'UseParallel', parallelise_training);
+[net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), 'UseParallel', parallelise_training);
 % Oh yeah, the line above was the hard part.
 disp(sprintf('   ...training took %g minutes.', toc/60));
 % Test on all the data:
@@ -474,11 +500,11 @@ mmminoffset = net.inputs{1}.processSettings{1}.xoffset;
 mmmingain = net.inputs{1}.processSettings{1}.gain;
 mmmoutoffset = net.outputs{2}.processSettings{1}.xoffset;
 mmmoutgain = net.outputs{2}.processSettings{1}.gain;
-filename = sprintf('detector%s_%dHz_%dhid_%dtrain.mat', ...
-        sprintf('_%g', times_of_interest), floor(1/FFT_TIME_SHIFT), net.layers{1}.dimensions, NTRAIN);
+filename = sprintf('detector_%s%s_%dHz_%dhid_%dtrain.mat', ...
+        BIRD, sprintf('_%g', times_of_interest), floor(1/FFT_TIME_SHIFT), net.layers{1}.dimensions, NTRAIN);
 fprintf('Saving as ''%s''...\n', filename);
 save(filename, ...
-        'net', 'layer0', 'layer1', 'bias0', 'bias1', ...
+        'net', 'train_record', 'layer0', 'layer1', 'bias0', 'bias1', ...
         'samplerate', 'FFT_SIZE', 'FFT_TIME_SHIFT', 'freq_range_ds', ...
         'time_window_steps', 'trigger_thresholds', ...
         'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain', 'shotgun_sigma', ...
@@ -502,4 +528,4 @@ for i = 1:nsongs
 end
 hits = reshape(hits, [], 1);
 songs = [songs hits];
-audiowrite(sprintf('songs%ss_%d%%.wav', sprintf('_%g', times_of_interest), round(100/(1+NONSINGING_FRACTION))), songs, round(samplerate));
+audiowrite(sprintf('songs_%s%ss_%d%%.wav', BIRD, sprintf('_%g', times_of_interest), round(100/(1+NONSINGING_FRACTION))), songs, round(samplerate));
