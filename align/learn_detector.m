@@ -112,7 +112,7 @@ MIC_DATA = single([MIC_DATA nonmatchingsongs]);
 nsongs = size(MIC_DATA, 2);
 
 disp('Bandpass-filtering the data...');
-[B A] = butter(4, [0.05 0.9]);
+[B A] = butter(4, [0.03 0.9]);
 MIC_DATA = filter(B, A, MIC_DATA);
 
 
@@ -123,7 +123,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.002;                        % seconds
+FFT_TIME_SHIFT = 0.003;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -184,8 +184,8 @@ colorbar;
 
 %% Cut out a region of the spectrum (in space and time) to save on compute
 %% time:
-freq_range = [1600 7000];
-time_window = 0.03;
+freq_range = [500 5000];
+time_window = 0.06;
 %%%%%%%%%%%%
 
 
@@ -226,12 +226,19 @@ if 0
 else
         %times_of_interest = 0.78;
         %times_of_interest = [ 0.28 0.775 ];
-        times_of_interest = 0.325;
+        %times_of_interest = 0.325;
+        times_of_interest = 0.06;
         %times_of_interest = 0.45:0.01:0.48;
         %times_of_interest = [ 0.2:0.01:0.35 ];
         %times_of_interest = 0.5;
         
         tstep_of_interest = round(times_of_interest / timestep);
+end
+
+if any(times_of_interest < time_window)
+        error('learn_detector:invalid_time', ...
+                'All times_of_interest [ %s] must be >= time_window (%g)', ...
+                sprintf('%g ', times_of_interest), time_window);
 end
 
 
@@ -300,7 +307,7 @@ nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 % This only indirectly affects final timing precision, since thresholds are
 % optimally tuned based on the window defined in MATCH_PLUSMINUS.
 shotgun_max_sec = 0.02;
-shotgun_sigma = 0.002;
+shotgun_sigma = 0.005;
 shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
 shotgun = shotgun / max(shotgun);
 shotgun = shotgun(find(shotgun>0.1));
@@ -359,7 +366,7 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([2 * ntsteps_of_interest]));
+net = feedforwardnet(ceil([4 * ntsteps_of_interest]));
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
@@ -406,6 +413,7 @@ songs_with_hits = songs_with_hits(randomsongs);
 
 trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
+        nwindows_per_song, ...
         FALSE_POSITIVE_COST, ...
         times_of_interest, ...
         tstep_of_interest, ...
