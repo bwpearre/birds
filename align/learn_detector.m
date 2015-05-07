@@ -184,8 +184,8 @@ colorbar;
 
 %% Cut out a region of the spectrum (in space and time) to save on compute
 %% time:
-freq_range = [500 5000];
-time_window = 0.06;
+freq_range = [3000 6000];
+time_window = 0.04;
 %%%%%%%%%%%%
 
 
@@ -227,7 +227,7 @@ else
         %times_of_interest = 0.78;
         %times_of_interest = [ 0.28 0.775 ];
         %times_of_interest = 0.325;
-        times_of_interest = 0.06;
+        times_of_interest = 0.2;
         %times_of_interest = 0.45:0.01:0.48;
         %times_of_interest = [ 0.2:0.01:0.35 ];
         %times_of_interest = 0.5;
@@ -307,7 +307,7 @@ nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 % This only indirectly affects final timing precision, since thresholds are
 % optimally tuned based on the window defined in MATCH_PLUSMINUS.
 shotgun_max_sec = 0.02;
-shotgun_sigma = 0.005;
+shotgun_sigma = 0.003;
 shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
 shotgun = shotgun / max(shotgun);
 shotgun = shotgun(find(shotgun>0.1));
@@ -366,7 +366,7 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([4 * ntsteps_of_interest]));
+net = feedforwardnet(ceil([3 * ntsteps_of_interest]));
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
@@ -482,16 +482,17 @@ if net.numLayers > 1
         figure(5);
         for i = 1:size(net.IW{1}, 1)
                 subplot(size(net.IW{1}, 1), 1, i)
-                imagesc([-time_window_steps:0]*FFT_TIME_SHIFT*1000, freq_range_ds, ...
+                imagesc([-time_window_steps:0]*FFT_TIME_SHIFT*1000, linspace(freq_range(1), freq_range(2), length(freq_range_ds))/1000, ...
                         reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_steps));
                 axis xy;
+                ylabel('frequency');
+
                 if i == 1
                         title('Hidden layers');
                 end
                 if i == size(net.IW{1}, 1)
                         xlabel('time (ms)');
                 end
-                ylabel('frequency');
                 %imagesc(reshape(net.IW{1}(i,:), time_window_steps, length(freq_range_ds)));
         end
 end

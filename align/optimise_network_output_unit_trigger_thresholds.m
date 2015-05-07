@@ -68,3 +68,5 @@ for i = 1:length(tstep_of_interest)
         title(sprintf('ROC at %g ms; integral = %.3g', times_of_interest(i)*1000, ROCintegral));
         axis square;
 end
+
+a(0)
