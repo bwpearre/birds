@@ -31,10 +31,10 @@ try
 
     % Is this the easiest way to define this?  Use GUI soon.  Meanwhile, A is
     % amplitude, W is width, Delay is interphase delay.
-    StimParam.A1 = 100;
-    StimParam.A2 = -100;
-    StimParam.W1 = 200;
-    StimParam.W2 = 200;
+    StimParam.A1 = 10;
+    StimParam.A2 = -10;
+    StimParam.W1 = 100;
+    StimParam.W2 = 100;
     StimParam.Delay = 0;
 
     for channel = 1:nchan
