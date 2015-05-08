@@ -70,13 +70,16 @@ handles.output = hObject;
 handles.START_uAMPS = 10;
 handles.MAX_uAMPS = 200;
 handles.INCREASE_STEP = 1.1;
+handles.change = handles.INCREASE_STEP;
 handles.HALF_TIME_uS = 400;
 handles.INTERSPIKE_S = 1;
 handles.NEGFIRST = false;
-handles.CURRENT_uAMPS = handles.START_uAMPS;
 handles.VALID_ELECTRODES = zeros(1, 16);
-handles.ELECTRODE = -1;
+handles.ELECTRODE = ' ';
+handles.timer = [];
 
+global CURRENT_uAMPS;
+CURRENT_uAMPS = handles.START_uAMPS;
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
 % pins on the Intan.
@@ -85,12 +88,15 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
 
 
 set(handles.startcurrent, 'String', sprintf('%d', round(handles.START_uAMPS)));
-set(handles.currentcurrent, 'String', sprintf('%d', round(handles.CURRENT_uAMPS)));
+set(handles.currentcurrent, 'String', sprintf('%.3g', CURRENT_uAMPS));
 set(handles.maxcurrent, 'String', sprintf('%d', round(handles.MAX_uAMPS)));
 set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(handles.HALF_TIME_uS)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.negativefirst, 'Value', handles.NEGFIRST);
+
+handles.disable_on_run = { handles.currentcurrent, handles.electrode, handles.startcurrent, ...
+        handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime};
               
 % Update handles structure
 
@@ -415,23 +421,56 @@ guidata(hObject, handles);
 
 % --- Executes on button press in increase.
 function increase_Callback(hObject, eventdata, handles)
-% hObject    handle to increase (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+disable_controls(hObject, handles);
+if ~isempty(handles.timer)
+        stop(handles.timer);
+        delete(handles.timer);
+end
+global CURRENT_uAMPS;
+handles.change = handles.INCREASE_STEP;
+handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedRate');
+handles.timer.TimerFcn = {@plexon_control_timer_callback, hObject, handles};
+handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
+handles.timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
+handles.timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
+start(handles.timer);
+guidata(hObject, handles);
 
 
 % --- Executes on button press in decrease.
 function decrease_Callback(hObject, eventdata, handles)
-% hObject    handle to decrease (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+disable_controls(hObject, handles);
+if ~isempty(handles.timer)
+        stop(handles.timer);
+        delete(handles.timer);
+end
+global CURRENT_uAMPS;
+handles.change = 1/handles.INCREASE_STEP;
+handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedRate');
+handles.timer.TimerFcn = {@plexon_control_timer_callback, hObject, handles};
+handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
+handles.timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
+handles.timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
+start(handles.timer);
+guidata(hObject, handles);
 
 
 % --- Executes on button press in hold.
 function hold_Callback(hObject, eventdata, handles)
-% hObject    handle to hold (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+disable_controls(hObject, handles);
+if ~isempty(handles.timer)
+        stop(handles.timer);
+        delete(handles.timer);
+end
+global CURRENT_uAMPS;
+handles.change = 1;
+handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedRate');
+handles.timer.TimerFcn = {@plexon_control_timer_callback, hObject, handles};
+handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
+handles.timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
+handles.timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
+start(handles.timer);
+guidata(hObject, handles);
 
 
 % --- Executes on button press in stop.
@@ -439,6 +478,13 @@ function stop_Callback(hObject, eventdata, handles)
 % hObject    handle to stop (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+enable_controls(hObject, handles);
+if ~isempty(handles.timer)
+        stop(handles.timer);
+        delete(handles.timer);
+end
+handles.timer = [];
+guidata(hObject, handles);
 
 
 % --- Executes on selection change in electrode.
@@ -456,16 +502,17 @@ end
 
 function currentcurrent_Callback(hObject, eventdata, handles)
 newcurrent = str2double(get(hObject, 'String'));
+global CURRENT_uAMPS;
 if isnan(newcurrent)
-        set(hObject, 'String', sprintf('%d', round(handles.CURRENT_uAMPS)));
+        set(hObject, 'String', sprintf('%3g', CURRENT_uAMPS));
 elseif newcurrent < handles.START_uAMPS
-        handles.CURRENT_uAMPS = handles.START_uAMPS;
+        CURRENT_uAMPS = handles.START_uAMPS;
 elseif newcurrent > handles.MAX_uAMPS
-        handles.CURRENT_uAMPS = handles.MAX_uAMPS;
+        CURRENT_uAMPS = handles.MAX_uAMPS;
 else
-        handles.CURRENT_uAMPS = newcurrent;
+        CURRENT_uAMPS = newcurrent;
 end
-set(hObject, 'String', sprintf('%d', round(handles.CURRENT_uAMPS)));
+set(hObject, 'String', sprintf('%.3g', CURRENT_uAMPS));
 guidata(hObject, handles);
 
 
@@ -474,3 +521,51 @@ function currentcurrent_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+function disable_controls(hObject, handles)
+for i = 1:length(handles.disable_on_run)
+        set(handles.disable_on_run{i}, 'Enable', 'off');
+end
+
+
+
+function enable_controls(hObject, handles)
+for i = 1:length(handles.disable_on_run)
+        set(handles.disable_on_run{i}, 'Enable', 'on');
+end
+
+
+
+function plexon_start_timer_callback(obj, event, hObject, handles)
+err = PS_InitAllStim;
+switch err
+    case 1
+        error('plexon:init', 'Plexon initialisation error: %s', PS_GetExtendedErrorInfo(err));
+    case 2
+        error('plexon:init', 'Plexon: no devices found.  Is this thing on?');
+    otherwise
+        disp('Initialised the Plexon box.');
+end
+
+try
+    box = 1;
+    [nchan, err] = PS_GetNChannels(box);
+    if err
+        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', box);
+    else
+        disp(sprintf('Plexon device %d has %d channels.', box, nchan));
+    end
+catch ME
+    disp(sprintf('Caught error %s (%s).  Shutting down...', ME.identifier, ME.message));
+    err = PS_CloseAllStim;
+    rethrow(ME);
+end
+
+
+function plexon_stop_timer_callback(obj, event, hObject, handles)
+err = PS_CloseAllStim;
+
+
+function plexon_error_timer_callback(obj, event, hObject, handles)
+err = PS_CloseAllStim;
+
