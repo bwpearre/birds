@@ -9,39 +9,27 @@ CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * handles.change);
 
 try
 
-    box = 1;
-
-    [nchan, err] = PS_GetNChannels(box);
-    if err
-        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', box);
-    else
-        disp(sprintf('Plexon device %d has %d channels.', box, nchan));
-    end
-
-
-    err = PS_SetTriggerMode(box, 0);
-    if err
-        ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', box);
-    end
 
 
     % Is this the easiest way to define this?  Use GUI soon.  Meanwhile, A is
     % amplitude, W is width, Delay is interphase delay.
     if handles.NEGFIRST
-            StimParam.A1 = -handles.CURRENT_uAMPS;
-            StimParam.A2 = handles.CURRENT_uAMPS;
+            StimParam.A1 = -CURRENT_uAMPS;
+            StimParam.A2 = CURRENT_uAMPS;
     else
-            StimParam.A1 = handles.CURRENT_uAMPS;
-            StimParam.A2 = -handles.CURRENT_uAMPS;
+            StimParam.A1 = CURRENT_uAMPS;
+            StimParam.A2 = -CURRENT_uAMPS;
     end
     StimParam.W1 = handles.HALF_TIME_uS;
     StimParam.W2 = handles.HALF_TIME_uS;
     StimParam.Delay = 0;
 
-    channel = str2num(get(handles.String));
+    which_valid_electrode = get(handles.electrode, 'Value');
+    valid_electrode_strings = get(handles.electrode, 'String');
+    channel = str2num(valid_electrode_strings{which_valid_electrode});
     % If no channel is selected, just fail silently and let the user figure
     % out what's going on :)
-    if channel > 0 & channel <= nchan
+    if channel > 0 & channel <= 16
         err = PS_SetMonitorChannel(box, channel);
         if err
             ME = MException('plexon:monitor', 'Could not set monitor channel to %d', channel);

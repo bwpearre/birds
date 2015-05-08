@@ -555,6 +555,21 @@ try
     else
         disp(sprintf('Plexon device %d has %d channels.', box, nchan));
     end
+        box = 1;
+
+    [nchan, err] = PS_GetNChannels(box);
+    if err
+        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', box);
+    else
+        disp(sprintf('Plexon device %d has %d channels.', box, nchan));
+    end
+
+
+    err = PS_SetTriggerMode(box, 0);
+    if err
+        ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', box);
+    end
+
 catch ME
     disp(sprintf('Caught error %s (%s).  Shutting down...', ME.identifier, ME.message));
     err = PS_CloseAllStim;
