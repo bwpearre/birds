@@ -72,7 +72,6 @@ handles.MAX_uAMPS = 130;
 handles.INCREASE_STEP = 1.1;
 handles.HALF_TIME_uS = 400;
 handles.INTERSPIKE_S = 1;
-handles.NEGFIRST = false;
 handles.valid = zeros(1, 16);
 handles.monitor_electrode = 1;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
@@ -85,6 +84,9 @@ global CURRENT_uAMPS;
 CURRENT_uAMPS = handles.START_uAMPS;
 global change;
 change = handles.INCREASE_STEP;
+global NEGFIRST;
+NEGFIRST = false;
+
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
 % pins on the Intan.
@@ -98,7 +100,7 @@ set(handles.maxcurrent, 'String', sprintf('%d', round(handles.MAX_uAMPS)));
 set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(handles.HALF_TIME_uS)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
-set(handles.negativefirst, 'Value', handles.NEGFIRST);
+set(handles.negativefirst, 'Value', NEGFIRST);
 set(handles.stim_all, 'Value', handles.stimAll);
 newvals = {};
 for i = 1:16
@@ -152,7 +154,8 @@ varargout{1} = handles.output;
 
 % --- Executes on button press in negativefirst.
 function negativefirst_Callback(hObject, eventdata, handles)
-handles.NEGFIRST = get(hObject, 'Value');
+global NEGFIRST;
+NEGFIRST = get(hObject, 'Value');
 guidata(hObject, handles);
 
 
@@ -333,15 +336,15 @@ electrode_universal_callback(hObject, eventdata, handles);
 function monitor_electrode_control_Callback(hObject, eventdata, handles)
 handles.monitor_electrode = get(hObject, 'Value'); % Only works because all 16 are present! v(5)=5
 if handles.stim(handles.monitor_electrode)
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.7 0.1]);
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
 else
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.1 0.1]);
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.8 0.1]);
 end
 guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function monitor_electrode_control_CreateFcn(hObject, eventdata, handles)
-set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.1 0.1]);
+set(hObject, 'BackgroundColor', [0.8 0.8 0.1]);
 
 
 
@@ -522,9 +525,9 @@ guidata(hObject, handles);
 
 function update_monitor_electrodes(hObject, eventdata, handles)
 if handles.stim(handles.monitor_electrode)  
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.7 0.1]);
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
 else
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.1 0.1]);
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.8 0.1]);
 end
 guidata(hObject, handles);
 

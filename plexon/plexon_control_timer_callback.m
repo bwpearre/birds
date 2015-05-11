@@ -3,6 +3,8 @@ function plexon_control_timer_callback(obj, event, hObject, handles)
 
 global CURRENT_uAMPS;
 global change;
+global NEGFIRST;
+
 set(handles.currentcurrent, 'String', sprintf('%.2f', CURRENT_uAMPS));
 CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * change);
 
@@ -10,7 +12,7 @@ try
 
     % Is this the easiest way to define this?  Use GUI soon.  Meanwhile, A is
     % amplitude, W is width, Delay is interphase delay.
-    if handles.NEGFIRST
+    if NEGFIRST
             StimParam.A1 = -CURRENT_uAMPS;
             StimParam.A2 = CURRENT_uAMPS;
     else
