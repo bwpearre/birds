@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 07-May-2015 18:47:27
+% Last Modified by GUIDE v2.5 11-May-2015 12:36:59
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -571,7 +571,9 @@ try
     end
 
 catch ME
-    disp(sprintf('Caught error %s (%s).  Shutting down...', ME.identifier, ME.message));
+    disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
+    report = getReport(ME)
+    stop_Callback(hObject, event, handles);
     err = PS_CloseAllStim;
     rethrow(ME);
 end
@@ -584,3 +586,147 @@ err = PS_CloseAllStim;
 function plexon_error_timer_callback(obj, event, hObject, handles)
 err = PS_CloseAllStim;
 
+
+
+% --- Executes on button press in stim1.
+function stim1_Callback(hObject, eventdata, handles)
+% hObject    handle to stim1 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim1
+
+
+% --- Executes on button press in stim2.
+function stim2_Callback(hObject, eventdata, handles)
+% hObject    handle to stim2 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim2
+
+
+% --- Executes on button press in stim3.
+function stim3_Callback(hObject, eventdata, handles)
+% hObject    handle to stim3 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim3
+
+
+% --- Executes on button press in stim4.
+function stim4_Callback(hObject, eventdata, handles)
+% hObject    handle to stim4 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim4
+
+
+% --- Executes on button press in stim5.
+function stim5_Callback(hObject, eventdata, handles)
+% hObject    handle to stim5 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim5
+
+
+% --- Executes on button press in stim6.
+function stim6_Callback(hObject, eventdata, handles)
+% hObject    handle to stim6 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim6
+
+
+% --- Executes on button press in stim7.
+function stim7_Callback(hObject, eventdata, handles)
+% hObject    handle to stim7 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim7
+
+
+% --- Executes on button press in stim8.
+function stim8_Callback(hObject, eventdata, handles)
+% hObject    handle to stim8 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim8
+
+
+% --- Executes on button press in stim9.
+function stim9_Callback(hObject, eventdata, handles)
+% hObject    handle to stim9 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim9
+
+
+% --- Executes on button press in stim10.
+function stim10_Callback(hObject, eventdata, handles)
+% hObject    handle to stim10 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim10
+
+
+% --- Executes on button press in stim11.
+function stim11_Callback(hObject, eventdata, handles)
+% hObject    handle to stim11 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim11
+
+
+% --- Executes on button press in stim15.
+function stim15_Callback(hObject, eventdata, handles)
+% hObject    handle to stim15 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim15
+
+
+% --- Executes on button press in stim16.
+function stim16_Callback(hObject, eventdata, handles)
+% hObject    handle to stim16 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim16
+
+
+% --- Executes on button press in stim14.
+function stim14_Callback(hObject, eventdata, handles)
+% hObject    handle to stim14 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim14
+
+
+% --- Executes on button press in stim12.
+function stim12_Callback(hObject, eventdata, handles)
+% hObject    handle to stim12 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim12
+
+
+% --- Executes on button press in stim13.
+function stim13_Callback(hObject, eventdata, handles)
+% hObject    handle to stim13 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of stim13

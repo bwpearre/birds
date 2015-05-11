@@ -5,11 +5,9 @@ global CURRENT_uAMPS;
 set(handles.currentcurrent, 'String', sprintf('%.2f', CURRENT_uAMPS));
 CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * handles.change);
 
-
+box = 1;      % Handcode the Plexon box we're using because we only have 1, right?
 
 try
-
-
 
     % Is this the easiest way to define this?  Use GUI soon.  Meanwhile, A is
     % amplitude, W is width, Delay is interphase delay.
@@ -82,7 +80,8 @@ try
     end
 
 catch ME
-    disp(sprintf('Caught error %s (%s).  Shutting down...', ME.identifier, ME.message));
+    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
+    report = getReport(ME)
     err = PS_CloseAllStim;
     rethrow(ME);
 end
