@@ -68,20 +68,23 @@ function plexme_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
 
 handles.START_uAMPS = 10;
-handles.MAX_uAMPS = 200;
+handles.MAX_uAMPS = 130;
 handles.INCREASE_STEP = 1.1;
-handles.change = handles.INCREASE_STEP;
 handles.HALF_TIME_uS = 400;
 handles.INTERSPIKE_S = 1;
 handles.NEGFIRST = false;
 handles.valid = zeros(1, 16);
-handles.monitor_electrode = ' ';
+handles.monitor_electrode = 1;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
 handles.timer = [];
 handles.stimAll = false;
+handles.box = 1;   % Assume (hardcode) 1 Plexon box
+handles.running = false;
 
 global CURRENT_uAMPS;
 CURRENT_uAMPS = handles.START_uAMPS;
+global change;
+change = handles.INCREASE_STEP;
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
 % pins on the Intan.
@@ -97,23 +100,29 @@ set(handles.halftime, 'String', sprintf('%d', round(handles.HALF_TIME_uS)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.negativefirst, 'Value', handles.NEGFIRST);
 set(handles.stim_all, 'Value', handles.stimAll);
-set(handles.monitor_electrode_control, 'String', {' '}, 'Value', 1);
+newvals = {};
+for i = 1:16
+    newvals{end+1} = sprintf('%d', i);
+end
+set(handles.monitor_electrode_control, 'String', newvals);
+% Also make sure that the monitor spinbox is the right colour
+
 
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime};
 for i = 1:16
-        cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d', i);
+        cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i);
         eval(cmd);
-        cmd = sprintf('handles.disable_on_run{end+1} = handles.stim%d', i);
+        cmd = sprintf('handles.disable_on_run{end+1} = handles.stim%d;', i);
         eval(cmd);
 end
 
 for i = 1:16
-        cmd = sprintf('set(handles.electrode%d, ''Value'', 0)', i);
+        cmd = sprintf('set(handles.electrode%d, ''Value'', 0);', i);
         eval(cmd);
-        cmd = sprintf('set(handles.stim%d, ''Enable'', ''off'')', i);
+        cmd = sprintf('set(handles.stim%d, ''Enable'', ''off'');', i);
         eval(cmd);
-        cmd = sprintf('set(handles.stim%d, ''Value'', false)', i);
+        cmd = sprintf('set(handles.stim%d, ''Value'', false);', i);
         eval(cmd);
 end
               
@@ -216,7 +225,7 @@ end
 function electrode_universal_callback(hObject, eventdata, handles)
 whichone = str2num(hObject.String);
 value = get(hObject, 'Value');
-handles.valid(whichone) = value
+handles.valid(whichone) = value;
 if handles.valid(whichone)
         newstate = 'on';
 else
@@ -320,88 +329,79 @@ electrode_universal_callback(hObject, eventdata, handles);
 
 
 
-
-
 % --- Executes on selection change in electrode.
 function monitor_electrode_control_Callback(hObject, eventdata, handles)
-handles.monitor_electrode = get(hObject, 'Value');
+handles.monitor_electrode = get(hObject, 'Value'); % Only works because all 16 are present! v(5)=5
+if handles.stim(handles.monitor_electrode)
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.7 0.1]);
+else
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.1 0.1]);
+end
 guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function monitor_electrode_control_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
+set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.1 0.1]);
+
+
+
+function start_timer(hObject, handles)
+disable_controls(hObject, handles);
+if ~isempty(handles.timer)
+    if handles.running
+        error('timer:running:already', 'Timer running already?');
+    end
+    stop(handles.timer);
+    delete(handles.timer);
 end
-
-
+handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedSpacing');
+handles.timer.TimerFcn = {@plexon_control_timer_callback, hObject, handles};
+handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
+handles.timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
+handles.timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
+start(handles.timer);
+guidata(hObject, handles);
 
 
 
 % --- Executes on button press in increase.
 function increase_Callback(hObject, eventdata, handles)
-disable_controls(hObject, handles);
-if ~isempty(handles.timer)
-        stop(handles.timer);
-        delete(handles.timer);
+global change;
+change = handles.INCREASE_STEP;
+if isempty(handles.timer)
+    start_timer(hObject, handles);
 end
-global CURRENT_uAMPS;
-handles.change = handles.INCREASE_STEP;
-handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedRate');
-handles.timer.TimerFcn = {@plexon_control_timer_callback, hObject, handles};
-handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
-handles.timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
-handles.timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
-start(handles.timer);
 guidata(hObject, handles);
 
 
 % --- Executes on button press in decrease.
 function decrease_Callback(hObject, eventdata, handles)
-disable_controls(hObject, handles);
-if ~isempty(handles.timer)
-        stop(handles.timer);
-        delete(handles.timer);
+global change;
+change = 1/handles.INCREASE_STEP;
+if isempty(handles.timer)
+    start_timer(hObject, handles);
 end
-global CURRENT_uAMPS;
-handles.change = 1/handles.INCREASE_STEP;
-handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedRate');
-handles.timer.TimerFcn = {@plexon_control_timer_callback, hObject, handles};
-handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
-handles.timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
-handles.timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
-start(handles.timer);
 guidata(hObject, handles);
 
 
 % --- Executes on button press in hold.
 function hold_Callback(hObject, eventdata, handles)
-disable_controls(hObject, handles);
-if ~isempty(handles.timer)
-        stop(handles.timer);
-        delete(handles.timer);
+global change;
+change = 1;
+if isempty(handles.timer)
+    start_timer(hObject, handles);
 end
-global CURRENT_uAMPS;
-handles.change = 1;
-handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedRate');
-handles.timer.TimerFcn = {@plexon_control_timer_callback, hObject, handles};
-handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
-handles.timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
-handles.timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
-start(handles.timer);
 guidata(hObject, handles);
 
 
 % --- Executes on button press in stop.
 function stop_Callback(hObject, eventdata, handles)
-% hObject    handle to stop (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-enable_controls(hObject, handles);
 if ~isempty(handles.timer)
-        stop(handles.timer);
+        stop(handles.timer); % this also stops and closes the Plexon box
         delete(handles.timer);
+        handles.timer = [];
 end
-handles.timer = [];
+enable_controls(hObject, handles);
 guidata(hObject, handles);
 
 
@@ -457,6 +457,7 @@ end
 % When any of the "start sequence" buttons is pressed, open the Plexon box
 % and do some basic error checking.
 function plexon_start_timer_callback(obj, event, hObject, handles)
+disp(sprintf('Starting timer with period %g', handles.INTERSPIKE_S));
 err = PS_InitAllStim;
 switch err
     case 1
@@ -464,33 +465,25 @@ switch err
     case 2
         error('plexon:init', 'Plexon: no devices available.  Is the blue box on?  Is other software accessing it?');
     otherwise
-        disp('Initialised the Plexon box.');
+        disp('Initialised Plexon box 1.');
+        handles.running = true;
 end
 
 try
-    box = 1;
-    [nchan, err] = PS_GetNChannels(box);
+    [nchan, err] = PS_GetNChannels(handles.box);
     if err
-        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', box);
+        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', handles.box);
     else
-        disp(sprintf('Plexon device %d has %d channels.', box, nchan));
-    end
-        box = 1;
-
-    [nchan, err] = PS_GetNChannels(box);
-    if err
-        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', box);
-    else
-        disp(sprintf('Plexon device %d has %d channels.', box, nchan));
+        disp(sprintf('Plexon device %d has %d channels.', handles.box, nchan));
     end
     if nchan ~= 16
             ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
     end
 
 
-    err = PS_SetTriggerMode(box, 0);
+    err = PS_SetTriggerMode(handles.box, 0);
     if err
-        ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', box);
+        ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', handles.box);
     end
 
 catch ME
@@ -498,18 +491,26 @@ catch ME
     report = getReport(ME)
     stop_Callback(hObject, event, handles);
     err = PS_CloseAllStim;
+    handles.running = false;
     rethrow(ME);
 end
+guidata(hObject, handles);
 
 
 function plexon_stop_timer_callback(obj, event, hObject, handles)
 err = PS_StopStimAllChannels(handles.box);
 err = PS_CloseAllStim;
+if ~err
+    handles.running = false;
+end
 
 
 function plexon_error_timer_callback(obj, event, hObject, handles)
 err = PS_StopStimAllChannels(handles.box);
 err = PS_CloseAllStim;
+if ~err
+    handles.running = false;
+end
 
 
 function stim_universal_callback(hObject, eventdata, handles)
@@ -520,14 +521,10 @@ guidata(hObject, handles);
 
 
 function update_monitor_electrodes(hObject, eventdata, handles)
-handles.stim
-newvals = {' '};
-for i = find(handles.stim)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.monitor_electrode_control, 'String', newvals);
-if get(handles.monitor_electrode_control, 'Value') > length(newvals)
-        set(handles.monitor_electrode_control, 'Value', 1);
+if handles.stim(handles.monitor_electrode)  
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.7 0.1]);
+else
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.1 0.1]);
 end
 guidata(hObject, handles);
 

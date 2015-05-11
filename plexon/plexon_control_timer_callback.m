@@ -1,12 +1,10 @@
 function plexon_control_timer_callback(obj, event, hObject, handles)
 
-handles.stim
 
 global CURRENT_uAMPS;
+global change;
 set(handles.currentcurrent, 'String', sprintf('%.2f', CURRENT_uAMPS));
-CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * handles.change);
-
-box = 1;      % Handcode the Plexon box we're using because we only have 1, right?
+CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * change);
 
 try
 
@@ -29,13 +27,13 @@ try
     NullPattern.A2 = 0;
     NullPattern.Delay = 0;
 
-    which_valid_electrode = get(handles.electrode, 'Value');
-    valid_electrode_strings = get(handles.electrode, 'String');
+    which_valid_electrode = get(handles.monitor_electrode_control, 'Value');
+    valid_electrode_strings = get(handles.monitor_electrode_control, 'String');
     channel = str2num(valid_electrode_strings{which_valid_electrode});
     % If no channel is selected, just fail silently and let the user figure
     % out what's going on :)
     if channel > 0 & channel <= 16
-        err = PS_SetMonitorChannel(box, channel);
+        err = PS_SetMonitorChannel(handles.box, channel);
         if err
             ME = MException('plexon:monitor', 'Could not set monitor channel to %d', channel);
             throw(ME);
@@ -43,23 +41,24 @@ try
     end
     
     for channel = 1:16
-        err = PS_SetPatternType(box, channel, 0);
+        err = PS_SetPatternType(handles.box, channel, 0);
         if err
             ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
             throw(ME);
         end
 
         if handles.stim(channel)
-                err = PS_SetRectParam2(box, channel, StimParam);
+                %disp(sprintf('Pattern on channel %02d will be [ %d uA for %d usec, delay %d usec, %d uA for %d usec ].', ...
+                %        channel, StimParam.A1, StimParam.W1, StimParam.Delay, StimParam.A2, StimParam.W2));
+                err = PS_SetRectParam2(handles.box, channel, StimParam);
         else
-                err = PS_SetRectParam2(box, channel, NullPattern);
+                %disp(sprintf('Pattern on channel %02d will be [ %d uA for %d usec, delay %d usec, %d uA for %d usec ].', ...
+                %        channel, NullPattern.A1, NullPattern.W1, NullPattern.Delay, NullPattern.A2, NullPattern.W2));
+                err = PS_SetRectParam2(handles.box, channel, NullPattern);
         end
         if err
                 ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d', channel);
                 throw(ME);
-        else
-                disp(sprintf('Pattern on channel %02d will be [ %d uA for %d usec, delay %d usec, %d uA for %d usec ].', ...
-                        channel, StimParam.A1, StimParam.W1, StimParam.Delay, StimParam.A2, StimParam.W2));
         end
                 
 
@@ -69,37 +68,39 @@ try
             throw(ME);
         end
 
-        [v, err] = PS_IsWaveformBalanced(box, channel);
+        [v, err] = PS_IsWaveformBalanced(handles.box, channel);
         if err
-            ME = MException('plexon:stimulate', 'Bad parameter for stimbox %d channel %d', box, channel);
+            ME = MException('plexon:stimulate', 'Bad parameter for stimbox %d channel %d', handles.box, channel);
             throw(ME);
         end
         if ~v
-            ME = MException('plexon:stimulate:unbalanced', 'Waveform is not balanced for stimbox %d channel %d', box, channel);
-            throw(ME);
-        end
-
-        err = PS_LoadChannel(box, channel);
-        if err
-            ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', box, channel, PS_GetExtendedErrorInfo(err));    
+            ME = MException('plexon:stimulate:unbalanced', 'Waveform is not balanced for stimbox %d channel %d', handles.box, channel);
             throw(ME);
         end
 
     end
     
-    % Start it!
-    err = PS_StartStimAllChannels(box);
+    err = PS_LoadAllChannels(handles.box);
     if err
-            ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', box, PS_GetExtendedErrorInfo(err));
+        ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', handles.box, channel, PS_GetExtendedErrorInfo(err));    
+        throw(ME);
+    end
+    
+    % Start it!
+    err = PS_StartStimAllChannels(handles.box);
+    if err
+            ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', handles.box, PS_GetExtendedErrorInfo(err));
             throw(ME);
     end
 
 catch ME
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
+    PS_StopStimAllChannels(handles.box);
     err = PS_CloseAllStim;
     rethrow(ME);
 end
 
 
 guidata(hObject, handles);
+
