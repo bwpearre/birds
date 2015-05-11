@@ -1,5 +1,6 @@
 function plexon_control_timer_callback(obj, event, hObject, handles)
 
+handles.stim
 
 global CURRENT_uAMPS;
 set(handles.currentcurrent, 'String', sprintf('%.2f', CURRENT_uAMPS));
@@ -21,6 +22,12 @@ try
     StimParam.W1 = handles.HALF_TIME_uS;
     StimParam.W2 = handles.HALF_TIME_uS;
     StimParam.Delay = 0;
+    
+    NullPattern.W1 = 0;
+    NullPattern.W2 = 0;
+    NullPattern.A1 = 0;
+    NullPattern.A2 = 0;
+    NullPattern.Delay = 0;
 
     which_valid_electrode = get(handles.electrode, 'Value');
     valid_electrode_strings = get(handles.electrode, 'String');
@@ -33,21 +40,28 @@ try
             ME = MException('plexon:monitor', 'Could not set monitor channel to %d', channel);
             throw(ME);
         end
+    end
+    
+    for channel = 1:16
         err = PS_SetPatternType(box, channel, 0);
         if err
             ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
             throw(ME);
         end
 
-
-        err = PS_SetRectParam2(box, channel, StimParam);
-        if err
-            ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d', channel);
-            throw(ME);
+        if handles.stim(channel)
+                err = PS_SetRectParam2(box, channel, StimParam);
         else
-            disp(sprintf('Pattern on channel %02d will be [ %d uA for %d usec, delay %d usec, %d uA for %d usec ].', ...
-                channel, StimParam.A1, StimParam.W1, StimParam.Delay, StimParam.A2, StimParam.W2));
+                err = PS_SetRectParam2(box, channel, NullPattern);
         end
+        if err
+                ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d', channel);
+                throw(ME);
+        else
+                disp(sprintf('Pattern on channel %02d will be [ %d uA for %d usec, delay %d usec, %d uA for %d usec ].', ...
+                        channel, StimParam.A1, StimParam.W1, StimParam.Delay, StimParam.A2, StimParam.W2));
+        end
+                
 
         err = PS_SetRepetitions(1, channel, 1);
         if err
@@ -71,12 +85,13 @@ try
             throw(ME);
         end
 
-        err = PS_StartStimChannel(box, channel);
-        if err
-            ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', box, channel, PS_GetExtendedErrorInfo(err));    
+    end
+    
+    % Start it!
+    err = PS_StartStimAllChannels(box);
+    if err
+            ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', box, PS_GetExtendedErrorInfo(err));
             throw(ME);
-        end
-
     end
 
 catch ME

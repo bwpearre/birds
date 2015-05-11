@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 11-May-2015 12:36:59
+% Last Modified by GUIDE v2.5 11-May-2015 13:19:27
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -74,9 +74,11 @@ handles.change = handles.INCREASE_STEP;
 handles.HALF_TIME_uS = 400;
 handles.INTERSPIKE_S = 1;
 handles.NEGFIRST = false;
-handles.VALID_ELECTRODES = zeros(1, 16);
-handles.ELECTRODE = ' ';
+handles.valid = zeros(1, 16);
+handles.monitor_electrode = ' ';
+handles.stim = zeros(1, 16);  % Stimulate these electrodes
 handles.timer = [];
+handles.stimAll = false;
 
 global CURRENT_uAMPS;
 CURRENT_uAMPS = handles.START_uAMPS;
@@ -94,9 +96,26 @@ set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(handles.HALF_TIME_uS)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.negativefirst, 'Value', handles.NEGFIRST);
+set(handles.stim_all, 'Value', handles.stimAll);
+set(handles.monitor_electrode_control, 'String', {' '}, 'Value', 1);
 
-handles.disable_on_run = { handles.currentcurrent, handles.electrode, handles.startcurrent, ...
+handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime};
+for i = 1:16
+        cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d', i);
+        eval(cmd);
+        cmd = sprintf('handles.disable_on_run{end+1} = handles.stim%d', i);
+        eval(cmd);
+end
+
+for i = 1:16
+        cmd = sprintf('set(handles.electrode%d, ''Value'', 0)', i);
+        eval(cmd);
+        cmd = sprintf('set(handles.stim%d, ''Enable'', ''off'')', i);
+        eval(cmd);
+        cmd = sprintf('set(handles.stim%d, ''Value'', false)', i);
+        eval(cmd);
+end
               
 % Update handles structure
 
@@ -194,229 +213,128 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
+function electrode_universal_callback(hObject, eventdata, handles)
+whichone = str2num(hObject.String);
+value = get(hObject, 'Value');
+handles.valid(whichone) = value
+if handles.valid(whichone)
+        newstate = 'on';
+else
+        newstate = 'off';
+end
+% "stimulate this electrode" should be enabled or disabled according to the
+% state of this button
+cmd = sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate);
+eval(cmd);
+% "stimulate this electrode" should default to 0...
+cmd = sprintf('set(handles.stim%d, ''Value'', 0);', whichone);
+eval(cmd);
+handles.stim(whichone) = 0;
+% ...unless...
+if handles.stimAll
+        % Set the "stimulate this electrode" value to match
+        cmd = sprintf('set(handles.stim%d, ''Value'', %d);', whichone, value);
+        eval(cmd);
+        % Set the bookkeeping structure
+        handles.stim(whichone) = value;
+end
+update_monitor_electrodes(hObject, eventdata, handles);
+guidata(hObject, handles);
+
+
+
 % --- Executes on button press in electrode1.
 function electrode1_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
-
+electrode_universal_callback(hObject, eventdata, handles);
 
 function electrode2_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode3.
 function electrode3_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode4.
 function electrode4_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode5.
 function electrode5_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode6.
 function electrode6_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode7.
 function electrode7_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode8.
 function electrode8_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode9.
 function electrode9_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode10.
 function electrode10_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode11.
 function electrode11_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
-
-
-% --- Executes on button press in electrode15.
-function electrode15_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
-
-
-% --- Executes on button press in electrode16.
-function electrode16_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
-
-
-% --- Executes on button press in electrode14.
-function electrode14_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode12.
 function electrode12_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
-guidata(hObject, handles);
+electrode_universal_callback(hObject, eventdata, handles);
 
 
 % --- Executes on button press in electrode13.
 function electrode13_Callback(hObject, eventdata, handles)
-handles.valid_electrodes(str2num(hObject.String)) = get(hObject, 'Value');
-newvals = {' '};
-for i = find(handles.valid_electrodes)
-        newvals = [newvals sprintf('%d', i)];
-end
-set(handles.electrode, 'String', newvals);
-if get(handles.electrode, 'Value') > length(newvals)
-        set(handles.electrode, 'Value', 1);
-end
+electrode_universal_callback(hObject, eventdata, handles);
+
+% --- Executes on button press in electrode14.
+function electrode14_Callback(hObject, eventdata, handles)
+electrode_universal_callback(hObject, eventdata, handles);
+
+% --- Executes on button press in electrode15.
+function electrode15_Callback(hObject, eventdata, handles)
+electrode_universal_callback(hObject, eventdata, handles);
+
+
+% --- Executes on button press in electrode16.
+function electrode16_Callback(hObject, eventdata, handles)
+electrode_universal_callback(hObject, eventdata, handles);
+
+
+
+
+
+% --- Executes on selection change in electrode.
+function monitor_electrode_control_Callback(hObject, eventdata, handles)
+handles.monitor_electrode = get(hObject, 'Value');
 guidata(hObject, handles);
+
+% --- Executes during object creation, after setting all properties.
+function monitor_electrode_control_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
 
 
 % --- Executes on button press in increase.
@@ -487,18 +405,6 @@ handles.timer = [];
 guidata(hObject, handles);
 
 
-% --- Executes on selection change in electrode.
-function electrode_Callback(hObject, eventdata, handles)
-handles.ELECTRODE = get(hObject, 'Value');
-guidata(hObject, handles);
-
-% --- Executes during object creation, after setting all properties.
-function electrode_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
 
 function currentcurrent_Callback(hObject, eventdata, handles)
 newcurrent = str2double(get(hObject, 'String'));
@@ -533,16 +439,30 @@ function enable_controls(hObject, handles)
 for i = 1:length(handles.disable_on_run)
         set(handles.disable_on_run{i}, 'Enable', 'on');
 end
+% Yeah, but we don't want to enable all the "stim" checkboxes, but rather
+% only the valid ones.  *sigh*.  They get disabled with the rest of the
+% interface on start-stim, and re-enabled on stop-stim, so now let's update
+% them as a special case.
+for i = 1:16
+        if handles.valid(i)
+                status = 'on';
+        else
+                status = 'off';
+        end
+        cmd = sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, status);
+        eval(cmd);
+end
 
 
-
+% When any of the "start sequence" buttons is pressed, open the Plexon box
+% and do some basic error checking.
 function plexon_start_timer_callback(obj, event, hObject, handles)
 err = PS_InitAllStim;
 switch err
     case 1
         error('plexon:init', 'Plexon initialisation error: %s', PS_GetExtendedErrorInfo(err));
     case 2
-        error('plexon:init', 'Plexon: no devices found.  Is this thing on?');
+        error('plexon:init', 'Plexon: no devices available.  Is the blue box on?  Is other software accessing it?');
     otherwise
         disp('Initialised the Plexon box.');
 end
@@ -563,6 +483,9 @@ try
     else
         disp(sprintf('Plexon device %d has %d channels.', box, nchan));
     end
+    if nchan ~= 16
+            ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
+    end
 
 
     err = PS_SetTriggerMode(box, 0);
@@ -580,153 +503,106 @@ end
 
 
 function plexon_stop_timer_callback(obj, event, hObject, handles)
+err = PS_StopStimAllChannels(handles.box);
 err = PS_CloseAllStim;
 
 
 function plexon_error_timer_callback(obj, event, hObject, handles)
+err = PS_StopStimAllChannels(handles.box);
 err = PS_CloseAllStim;
 
 
+function stim_universal_callback(hObject, eventdata, handles)
+whichone = str2num(hObject.String);
+handles.stim(whichone) = get(hObject, 'Value');
+update_monitor_electrodes(hObject, eventdata, handles);
+guidata(hObject, handles);
+
+
+function update_monitor_electrodes(hObject, eventdata, handles)
+handles.stim
+newvals = {' '};
+for i = find(handles.stim)
+        newvals = [newvals sprintf('%d', i)];
+end
+set(handles.monitor_electrode_control, 'String', newvals);
+if get(handles.monitor_electrode_control, 'Value') > length(newvals)
+        set(handles.monitor_electrode_control, 'Value', 1);
+end
+guidata(hObject, handles);
 
 % --- Executes on button press in stim1.
 function stim1_Callback(hObject, eventdata, handles)
-% hObject    handle to stim1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim1
-
+stim_universal_callback(hObject, eventdata, handles);
 
 % --- Executes on button press in stim2.
 function stim2_Callback(hObject, eventdata, handles)
-% hObject    handle to stim2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim2
-
+stim_universal_callback(hObject, eventdata, handles);
 
 % --- Executes on button press in stim3.
 function stim3_Callback(hObject, eventdata, handles)
-% hObject    handle to stim3 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+stim_universal_callback(hObject, eventdata, handles);
 
-% Hint: get(hObject,'Value') returns toggle state of stim3
-
-
-% --- Executes on button press in stim4.
 function stim4_Callback(hObject, eventdata, handles)
-% hObject    handle to stim4 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim4
-
+stim_universal_callback(hObject, eventdata, handles);
 
 % --- Executes on button press in stim5.
 function stim5_Callback(hObject, eventdata, handles)
-% hObject    handle to stim5 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim5
-
+stim_universal_callback(hObject, eventdata, handles);
 
 % --- Executes on button press in stim6.
 function stim6_Callback(hObject, eventdata, handles)
-% hObject    handle to stim6 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim6
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim7.
 function stim7_Callback(hObject, eventdata, handles)
-% hObject    handle to stim7 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim7
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim8.
 function stim8_Callback(hObject, eventdata, handles)
-% hObject    handle to stim8 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim8
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim9.
 function stim9_Callback(hObject, eventdata, handles)
-% hObject    handle to stim9 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim9
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim10.
 function stim10_Callback(hObject, eventdata, handles)
-% hObject    handle to stim10 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim10
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim11.
 function stim11_Callback(hObject, eventdata, handles)
-% hObject    handle to stim11 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim11
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim15.
 function stim15_Callback(hObject, eventdata, handles)
-% hObject    handle to stim15 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim15
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim16.
 function stim16_Callback(hObject, eventdata, handles)
-% hObject    handle to stim16 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim16
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim14.
 function stim14_Callback(hObject, eventdata, handles)
-% hObject    handle to stim14 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim14
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim12.
 function stim12_Callback(hObject, eventdata, handles)
-% hObject    handle to stim12 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of stim12
-
+stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim13.
 function stim13_Callback(hObject, eventdata, handles)
-% hObject    handle to stim13 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+stim_universal_callback(hObject, eventdata, handles)
 
-% Hint: get(hObject,'Value') returns toggle state of stim13
+% --- Executes on button press in stim_all.
+function stim_all_Callback(hObject, eventdata, handles)
+handles.stimAll = get(hObject, 'Value');
+if handles.stimAll
+        for i = find(handles.valid)
+                cmd = sprintf('set(handles.stim%d, ''Value'', 1);', i);
+                eval(cmd);
+                handles.stim(i) = 1;
+        end
+end
+update_monitor_electrodes(hObject, eventdata, handles);
+guidata(hObject, handles);
