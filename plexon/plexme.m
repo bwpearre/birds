@@ -67,11 +67,11 @@ function plexme_OpeningFcn(hObject, eventdata, handles, varargin)
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 10;
+handles.START_uAMPS = 1;
 handles.MAX_uAMPS = 130;
-handles.INCREASE_STEP = 1.1;
+handles.INCREASE_STEP = 1.05;
 handles.HALF_TIME_uS = 400;
-handles.INTERSPIKE_S = 1;
+handles.INTERSPIKE_S = 0.1;
 handles.valid = zeros(1, 16);
 handles.monitor_electrode = 1;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
@@ -95,7 +95,7 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
 
 
 set(handles.startcurrent, 'String', sprintf('%d', round(handles.START_uAMPS)));
-set(handles.currentcurrent, 'String', sprintf('%.3g', CURRENT_uAMPS));
+set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
 set(handles.maxcurrent, 'String', sprintf('%d', round(handles.MAX_uAMPS)));
 set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(handles.HALF_TIME_uS)));
@@ -156,6 +156,9 @@ varargout{1} = handles.output;
 function negativefirst_Callback(hObject, eventdata, handles)
 global NEGFIRST;
 NEGFIRST = get(hObject, 'Value');
+global CURRENT_uAMPS;
+CURRENT_uAMPS = handles.START_uAMPS;
+set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
 guidata(hObject, handles);
 
 
@@ -244,11 +247,18 @@ eval(cmd);
 handles.stim(whichone) = 0;
 % ...unless...
 if handles.stimAll
-        % Set the "stimulate this electrode" value to match
-        cmd = sprintf('set(handles.stim%d, ''Value'', %d);', whichone, value);
-        eval(cmd);
-        % Set the bookkeeping structure
-        handles.stim(whichone) = value;
+    % Set the "stimulate this electrode" value to match
+    cmd = sprintf('prev = get(handles.stim%d, ''Value'');', whichone);
+    eval(cmd);
+    cmd = sprintf('set(handles.stim%d, ''Value'', %d);', whichone, value);
+    eval(cmd);
+    % Set the bookkeeping structure
+    handles.stim(whichone) = value;
+    if prev ~= value
+        global CURRENT_uAMPS;
+        CURRENT_uAMPS = handles.START_uAMPS;
+        set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+    end
 end
 update_monitor_electrodes(hObject, eventdata, handles);
 guidata(hObject, handles);
@@ -335,11 +345,7 @@ electrode_universal_callback(hObject, eventdata, handles);
 % --- Executes on selection change in electrode.
 function monitor_electrode_control_Callback(hObject, eventdata, handles)
 handles.monitor_electrode = get(hObject, 'Value'); % Only works because all 16 are present! v(5)=5
-if handles.stim(handles.monitor_electrode)
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
-else
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.8 0.1]);
-end
+update_monitor_electrodes(hObject, eventdata, handles);
 guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
@@ -413,7 +419,7 @@ function currentcurrent_Callback(hObject, eventdata, handles)
 newcurrent = str2double(get(hObject, 'String'));
 global CURRENT_uAMPS;
 if isnan(newcurrent)
-        set(hObject, 'String', sprintf('%3g', CURRENT_uAMPS));
+        set(hObject, 'String', sprintf('%.2g', CURRENT_uAMPS));
 elseif newcurrent < handles.START_uAMPS
         CURRENT_uAMPS = handles.START_uAMPS;
 elseif newcurrent > handles.MAX_uAMPS
@@ -421,7 +427,7 @@ elseif newcurrent > handles.MAX_uAMPS
 else
         CURRENT_uAMPS = newcurrent;
 end
-set(hObject, 'String', sprintf('%.3g', CURRENT_uAMPS));
+set(hObject, 'String', sprintf('%.2g', CURRENT_uAMPS));
 guidata(hObject, handles);
 
 
@@ -464,8 +470,13 @@ disp(sprintf('Starting timer with period %g', handles.INTERSPIKE_S));
 err = PS_InitAllStim;
 switch err
     case 1
+        msgbox({'Error: Could not open the Plexon box.', ' ', 'POSSIBLE CAUSES:', '* Device is not attached', '* Device is not turned on', '* Another program is using the device', ...
+            '* Device needs rebooting', '', 'TO REBOOT:', '1. DISCONNECT THE BIRD!!!', '2. Power cycle', '3. Reconnect bird.'});
         error('plexon:init', 'Plexon initialisation error: %s', PS_GetExtendedErrorInfo(err));
     case 2
+        msgbox({'Error: Could not open the Plexon box.', ' ', 'POSSIBLE CAUSES:', '* Device is not attached', '* Device is not turned on', '* Another program is using the device', ...
+            '* Device needs rebooting', '', 'TO REBOOT:', '1. DISCONNECT THE BIRD!!!', '2. Power cycle', '3. Reconnect bird.'});
+
         error('plexon:init', 'Plexon: no devices available.  Is the blue box on?  Is other software accessing it?');
     otherwise
         disp('Initialised Plexon box 1.');
@@ -476,17 +487,20 @@ try
     [nchan, err] = PS_GetNChannels(handles.box);
     if err
         ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', handles.box);
+        throw(ME);
     else
         disp(sprintf('Plexon device %d has %d channels.', handles.box, nchan));
     end
     if nchan ~= 16
-            ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
+        ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
+        throw(ME);
     end
 
 
     err = PS_SetTriggerMode(handles.box, 0);
     if err
         ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', handles.box);
+        throw(ME);
     end
 
 catch ME
@@ -520,10 +534,18 @@ function stim_universal_callback(hObject, eventdata, handles)
 whichone = str2num(hObject.String);
 handles.stim(whichone) = get(hObject, 'Value');
 update_monitor_electrodes(hObject, eventdata, handles);
+global CURRENT_uAMPS;
+CURRENT_uAMPS = handles.START_uAMPS;
+set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+if handles.stim(whichone)
+    handles.monitor_electrode = whichone;
+end
+update_monitor_electrodes(hObject, eventdata, handles);
 guidata(hObject, handles);
 
 
 function update_monitor_electrodes(hObject, eventdata, handles)
+set(handles.monitor_electrode_control, 'Value', handles.monitor_electrode);
 if handles.stim(handles.monitor_electrode)  
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
 else
