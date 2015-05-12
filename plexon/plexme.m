@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 11-May-2015 13:19:27
+% Last Modified by GUIDE v2.5 12-May-2015 17:29:04
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -76,7 +76,6 @@ handles.valid = zeros(1, 16);
 handles.monitor_electrode = 1;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
 handles.timer = [];
-handles.stimAll = false;
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.running = false;
 
@@ -101,7 +100,6 @@ set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(handles.HALF_TIME_uS)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.negativefirst, 'Value', NEGFIRST);
-set(handles.stim_all, 'Value', handles.stimAll);
 newvals = {};
 for i = 1:16
     newvals{end+1} = sprintf('%d', i);
@@ -245,19 +243,21 @@ eval(cmd);
 cmd = sprintf('set(handles.stim%d, ''Value'', 0);', whichone);
 eval(cmd);
 handles.stim(whichone) = 0;
-% ...unless...
-if handles.stimAll
-    % Set the "stimulate this electrode" value to match
-    cmd = sprintf('prev = get(handles.stim%d, ''Value'');', whichone);
-    eval(cmd);
-    cmd = sprintf('set(handles.stim%d, ''Value'', %d);', whichone, value);
-    eval(cmd);
-    % Set the bookkeeping structure
-    handles.stim(whichone) = value;
-    if prev ~= value
-        global CURRENT_uAMPS;
-        CURRENT_uAMPS = handles.START_uAMPS;
-        set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+if 0 % This was for when stimAll was a persistent variable.
+    % ...unless...
+    if handles.stimAll
+        % Set the "stimulate this electrode" value to match
+        cmd = sprintf('prev = get(handles.stim%d, ''Value'');', whichone);
+        eval(cmd);
+        cmd = sprintf('set(handles.stim%d, ''Value'', %d);', whichone, value);
+        eval(cmd);
+        % Set the bookkeeping structure
+        handles.stim(whichone) = value;
+        if prev ~= value
+            global CURRENT_uAMPS;
+            CURRENT_uAMPS = handles.START_uAMPS;
+            set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+        end
     end
 end
 update_monitor_electrodes(hObject, eventdata, handles);
@@ -617,14 +617,11 @@ function stim13_Callback(hObject, eventdata, handles)
 stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim_all.
-function stim_all_Callback(hObject, eventdata, handles)
-handles.stimAll = get(hObject, 'Value');
-if handles.stimAll
-        for i = find(handles.valid)
-                cmd = sprintf('set(handles.stim%d, ''Value'', 1);', i);
-                eval(cmd);
-                handles.stim(i) = 1;
-        end
+function select_all_valid_Callback(hObject, eventdata, handles)
+for i = find(handles.valid)
+    cmd = sprintf('set(handles.stim%d, ''Value'', 1);', i);
+    eval(cmd);
+    handles.stim(i) = 1;
 end
 update_monitor_electrodes(hObject, eventdata, handles);
 guidata(hObject, handles);
