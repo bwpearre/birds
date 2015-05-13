@@ -71,12 +71,13 @@ handles.START_uAMPS = 1;
 handles.MAX_uAMPS = 130;
 handles.INCREASE_STEP = 1.05;
 handles.HALF_TIME_uS = 400;
-handles.INTERSPIKE_S = 0.1;
+handles.INTERSPIKE_S = 0.5;
 handles.valid = zeros(1, 16);
 handles.monitor_electrode = 1;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
 handles.timer = [];
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
+handles.open = false;
 handles.running = false;
 
 global CURRENT_uAMPS;
@@ -125,12 +126,77 @@ for i = 1:16
         cmd = sprintf('set(handles.stim%d, ''Value'', false);', i);
         eval(cmd);
 end
+
+% Open the stimulator
+
+err = PS_InitAllStim;
+switch err
+    case 1
+        msgbox({'Error: Could not open the Plexon box.', ' ', 'POSSIBLE CAUSES:', '* Device is not attached', '* Device is not turned on', '* Another program is using the device', ...
+            '* Device needs rebooting', '', 'TO REBOOT:', '1. DISCONNECT THE BIRD!!!', '2. Power cycle', '3. Reconnect bird.'});
+db        error('plexon:init', 'Plexon initialisation error: %s', PS_GetExtendedErrorInfo(err));
+    case 2
+        msgbox({'Error: Could not open the Plexon box.', ' ', 'POSSIBLE CAUSES:', '* Device is not attached', '* Device is not turned on', '* Another program is using the device', ...
+            '* Device needs rebooting', '', 'TO REBOOT:', '1. DISCONNECT THE BIRD!!!', '2. Power cycle', '3. Reconnect bird.'});
+
+        error('plexon:init', 'Plexon: no devices available.  Is the blue box on?  Is other software accessing it?');
+    otherwise
+        handles.open = true;
+end
+
+try
+    [nchan, err] = PS_GetNChannels(handles.box);
+    if err
+        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', handles.box);
+        throw(ME);
+    else
+        disp(sprintf('Plexon device %d has %d channels.', handles.box, nchan));
+    end
+    if nchan ~= 16
+        ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
+        throw(ME);
+    end
+
+
+    err = PS_SetTriggerMode(handles.box, 0);
+    if err
+        ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', handles.box);
+        throw(ME);
+    end
+
+catch ME
+    disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
+    report = getReport(ME)
+    stop_Callback(hObject, event, handles);
+    err = PS_CloseAllStim;
+    handles.open = false;
+    rethrow(ME);
+end
+
+set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
               
 % Update handles structure
 
 guidata(hObject, handles);
 
 
+
+function gui_close_callback(hObject, callbackdata, handles)
+disp('Shutting down...');
+if handles.running
+    stop(handles.timer); % This stops stimulation as well
+    delete(handles.timer);
+end
+if handles.open
+    err = PS_CloseAllStim;
+    if err
+        error('plexon:closing:fail', 'Could not close stim...');
+    end
+else
+    err('plexon:closing:fail', 'Device was not open');
+end
+guidata(hObject, handles);
+delete(hObject);
 
 
 % UIWAIT makes plexme wait for user response (see UIRESUME)
@@ -139,12 +205,6 @@ guidata(hObject, handles);
 
 % --- Outputs from this function are returned to the command line.
 function varargout = plexme_OutputFcn(hObject, eventdata, handles) 
-% varargout  cell array for returning output args (see VARARGOUT);
-% hObject    handle to figure
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Get default command line output from handles structure
 varargout{1} = handles.output;
 
 
@@ -362,6 +422,7 @@ if ~isempty(handles.timer)
     end
     stop(handles.timer);
     delete(handles.timer);
+    handles.running = false;
 end
 handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedSpacing');
 handles.timer.TimerFcn = {@plexon_control_timer_callback, hObject, handles};
@@ -409,6 +470,7 @@ if ~isempty(handles.timer)
         stop(handles.timer); % this also stops and closes the Plexon box
         delete(handles.timer);
         handles.timer = [];
+        handles.running = false;
 end
 enable_controls(hObject, handles);
 guidata(hObject, handles);
@@ -464,70 +526,78 @@ end
 
 
 % When any of the "start sequence" buttons is pressed, open the Plexon box
-% and do some basic error checking.
+% and do some basic error checking.  Set all channels to nil.
 function plexon_start_timer_callback(obj, event, hObject, handles)
-disp(sprintf('Starting timer with period %g', handles.INTERSPIKE_S));
-err = PS_InitAllStim;
-switch err
-    case 1
-        msgbox({'Error: Could not open the Plexon box.', ' ', 'POSSIBLE CAUSES:', '* Device is not attached', '* Device is not turned on', '* Another program is using the device', ...
-            '* Device needs rebooting', '', 'TO REBOOT:', '1. DISCONNECT THE BIRD!!!', '2. Power cycle', '3. Reconnect bird.'});
-        error('plexon:init', 'Plexon initialisation error: %s', PS_GetExtendedErrorInfo(err));
-    case 2
-        msgbox({'Error: Could not open the Plexon box.', ' ', 'POSSIBLE CAUSES:', '* Device is not attached', '* Device is not turned on', '* Another program is using the device', ...
-            '* Device needs rebooting', '', 'TO REBOOT:', '1. DISCONNECT THE BIRD!!!', '2. Power cycle', '3. Reconnect bird.'});
 
-        error('plexon:init', 'Plexon: no devices available.  Is the blue box on?  Is other software accessing it?');
-    otherwise
-        disp('Initialised Plexon box 1.');
-        handles.running = true;
-end
+
+global CURRENT_uAMPS;
+global change;
+global NEGFIRST;
 
 try
-    [nchan, err] = PS_GetNChannels(handles.box);
-    if err
-        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', handles.box);
-        throw(ME);
-    else
-        disp(sprintf('Plexon device %d has %d channels.', handles.box, nchan));
-    end
-    if nchan ~= 16
-        ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
-        throw(ME);
-    end
+    NullPattern.W1 = 0;
+    NullPattern.W2 = 0;
+    NullPattern.A1 = 0;
+    NullPattern.A2 = 0;
+    NullPattern.Delay = 0;
 
+    for channel = find(~handles.stim)
+        err = PS_SetPatternType(handles.box, channel, 0);
+        if err
+            ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
+            throw(ME);
+        end
 
-    err = PS_SetTriggerMode(handles.box, 0);
-    if err
-        ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', handles.box);
-        throw(ME);
+        err = PS_SetRectParam2(handles.box, channel, NullPattern);
+        if err
+                ME = MException('plexon:pattern', 'Could not set NULL pattern parameters on channel %d', channel);
+                throw(ME);
+        end
+
+        err = PS_SetRepetitions(1, channel, 1);
+        if err
+            ME = MException('plexon:pattern', 'Could not set repetition on channel %d', channel);
+            throw(ME);
+        end
+
+        err = PS_LoadChannel(handles.box, channel);
+        if err
+            ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', handles.box, channel, PS_GetExtendedErrorInfo(err));    
+            throw(ME);
+        end
     end
-
 catch ME
-    disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
+    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
-    stop_Callback(hObject, event, handles);
-    err = PS_CloseAllStim;
+    PS_StopStimAllChannels(handles.box);
     handles.running = false;
+    guidata(hObject, handles);
     rethrow(ME);
 end
+
 guidata(hObject, handles);
 
 
 function plexon_stop_timer_callback(obj, event, hObject, handles)
 err = PS_StopStimAllChannels(handles.box);
-err = PS_CloseAllStim;
-if ~err
+if err
+    msgbox('ERROR stopping stimulation!!!!');
+else
     handles.running = false;
 end
+guidata(hObject, handles);
 
 
 function plexon_error_timer_callback(obj, event, hObject, handles)
-err = PS_StopStimAllChannels(handles.box);
-err = PS_CloseAllStim;
-if ~err
-    handles.running = false;
+if handles.running
+    err = PS_StopStimAllChannels(handles.box);
+    if err
+        msgbox('ERROR stopping stimulation!!!!');
+    else
+        handles.running = false;
+    end
 end
+guidata(hObject, handles);
 
 
 function stim_universal_callback(hObject, eventdata, handles)

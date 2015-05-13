@@ -42,22 +42,14 @@ try
         end
     end
     
-    for channel = 1:16
+    for channel = find(handles.stim)
         err = PS_SetPatternType(handles.box, channel, 0);
         if err
             ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
             throw(ME);
         end
 
-        if handles.stim(channel)
-                %disp(sprintf('Pattern on channel %02d will be [ %d uA for %d usec, delay %d usec, %d uA for %d usec ].', ...
-                %        channel, StimParam.A1, StimParam.W1, StimParam.Delay, StimParam.A2, StimParam.W2));
-                err = PS_SetRectParam2(handles.box, channel, StimParam);
-        else
-                %disp(sprintf('Pattern on channel %02d will be [ %d uA for %d usec, delay %d usec, %d uA for %d usec ].', ...
-                %        channel, NullPattern.A1, NullPattern.W1, NullPattern.Delay, NullPattern.A2, NullPattern.W2));
-                err = PS_SetRectParam2(handles.box, channel, NullPattern);
-        end
+        err = PS_SetRectParam2(handles.box, channel, StimParam);
         if err
                 ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d', channel);
                 throw(ME);
@@ -80,12 +72,11 @@ try
             throw(ME);
         end
 
-    end
-    
-    err = PS_LoadAllChannels(handles.box);
-    if err
-        ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', handles.box, channel, PS_GetExtendedErrorInfo(err));    
-        throw(ME);
+        err = PS_LoadChannel(handles.box, channel);
+        if err
+            ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', handles.box, channel, PS_GetExtendedErrorInfo(err));    
+            throw(ME);
+        end
     end
     
     % Start it!
@@ -99,7 +90,8 @@ catch ME
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
     PS_StopStimAllChannels(handles.box);
-    err = PS_CloseAllStim;
+    handles.running = false;
+    guidata(hObject, handles);
     rethrow(ME);
 end
 
