@@ -1,12 +1,38 @@
 function plexon_control_timer_callback(obj, event, hObject, handles)
 
+disp('%%%%%%%%%%%%%%%%%%%%% DISABLED %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%');
+
+return;
+
+
 
 global CURRENT_uAMPS;
 global change;
 global NEGFIRST;
+global VOLTAGE_RANGE_LAST_STIM;
 
 set(handles.currentcurrent, 'String', sprintf('%.2f', CURRENT_uAMPS));
 CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * change);
+
+if 0
+    %% Emergency shutdown: move mouse out of window!
+    oldUnits = get(0,'units');
+    set(0,'units','pixels');
+    % Get the figure beneath the mouse pointer & mouse pointer pos
+    try
+       fig = matlab.ui.internal.getPointerWindow;  % HG2: R2014b or newer
+    catch
+       fig = get(0,'PointerWindow');  % HG1: R2014a or older
+    end
+    p = get(0,'PointerLocation');
+    set(0,'units',oldUnits);
+
+    % Look for quick exit (if mouse pointer is not over any figure)
+    if fig==0
+        disp('Pausing stimulation until mouse returns to window...');
+        return;
+    end
+end
 
 try
 
@@ -80,16 +106,26 @@ try
     end
     
     % Start it!
+    handles.NIsession.startBackground;
     err = PS_StartStimAllChannels(handles.box);
     if err
-            ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', handles.box, PS_GetExtendedErrorInfo(err));
-            throw(ME);
+        handles.NIsession.stop;
+        ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', handles.box, PS_GetExtendedErrorInfo(err));
+        throw(ME);
     end
+    handles.NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
+    if max(abs(VOLTAGE_RANGE_LAST_STIM)) > handles.VoltageLimit
+        ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d may be broken!!', channel);    
+        throw(ME);
+    end
+    
 
 catch ME
+    errordlg(ME.message, 'Error', 'modal');
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
     PS_StopStimAllChannels(handles.box);
+    handles.NIsession.stop;
     handles.running = false;
     guidata(hObject, handles);
     rethrow(ME);
