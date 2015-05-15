@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 12-May-2015 17:29:04
+% Last Modified by GUIDE v2.5 15-May-2015 16:35:39
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -67,19 +67,18 @@ function plexme_OpeningFcn(hObject, eventdata, handles, varargin)
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 4;
+handles.START_uAMPS = 1; % Stimulating at this current will not yield enough voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 50;
 handles.INCREASE_STEP = 1.05;
 handles.HALF_TIME_uS = 400;
 handles.INTERSPIKE_S = 0.5;
-handles.VoltageLimit = 3;
+handles.VoltageLimit = 6;
 handles.valid = zeros(1, 16);
 handles.monitor_electrode = 1;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
 handles.timer = [];
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
-handles.running = false;
 
 % NI control rubbish
 handles.NIsession = [];
@@ -90,6 +89,8 @@ global change;
 change = handles.INCREASE_STEP;
 global NEGFIRST;
 NEGFIRST = false;
+global axes_top;
+global axes_bottom;
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
@@ -105,6 +106,8 @@ set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(handles.HALF_TIME_uS)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.negativefirst, 'Value', NEGFIRST);
+set(handles.select_all_valid, 'Enable', 'off');
+
 newvals = {};
 for i = 1:16
     newvals{end+1} = sprintf('%d', i);
@@ -138,15 +141,22 @@ switch err
     case 1
         msgbox({'Error: Could not open the Plexon box.', ' ', 'POSSIBLE CAUSES:', '* Device is not attached', '* Device is not turned on', '* Another program is using the device', ...
             '* Device needs rebooting', '', 'TO REBOOT:', '1. DISCONNECT THE BIRD!!!', '2. Power cycle', '3. Reconnect bird.'});
-db        error('plexon:init', 'Plexon initialisation error: %s', PS_GetExtendedErrorInfo(err));
+        error('plexon:init', 'Plexon initialisation error: %s', PS_GetExtendedErrorInfo(err));
     case 2
         msgbox({'Error: Could not open the Plexon box.', ' ', 'POSSIBLE CAUSES:', '* Device is not attached', '* Device is not turned on', '* Another program is using the device', ...
             '* Device needs rebooting', '', 'TO REBOOT:', '1. DISCONNECT THE BIRD!!!', '2. Power cycle', '3. Reconnect bird.'});
-
         error('plexon:init', 'Plexon: no devices available.  Is the blue box on?  Is other software accessing it?');
     otherwise
         handles.open = true;
 end
+
+nstim = PS_GetNStim;
+if nstim > 1
+    PS_CloseAllStim;
+    error('plexon:init', 'Plexon: %d devices available, but Ben assumed only 1!', nstim);
+    return;
+end
+
 
 try
     [nchan, err] = PS_GetNChannels(handles.box);
@@ -171,7 +181,6 @@ try
 catch ME
     disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME);
-    stop_Callback(hObject, event, handles);
     err = PS_CloseAllStim;
     handles.open = false;
     rethrow(ME);
@@ -189,7 +198,7 @@ daq.reset;
 handles.NIsession = daq.createSession('ni');
 handles.NIsession.Rate = 100000;
 handles.NIsession.IsContinuous = 0;
-handles.NIsession.DurationInSeconds = 0.007;
+handles.NIsession.DurationInSeconds = 0.006;
 
 for i = 1:length(channels)
     addAnalogInputChannel(handles.NIsession, dev, sprintf('ai%d', channels(i)), 'voltage');
@@ -205,36 +214,49 @@ for i = 1:length(channels)
     end
 end
 handles.NI.listeners{1}=addlistener(handles.NIsession, 'DataAvailable',...
-	@(obj,event) NIsession_callback(obj,event));
+	@(obj,event) NIsession_callback(obj, event));
 handles.NIsession.NotifyWhenDataAvailableExceeds=round(handles.NIsession.Rate*handles.NIsession.DurationInSeconds);
 prepare(handles.NIsession);
 
-
-
-
+axes_top = handles.axes_top;
+axes_bottom = handles.axes_bottom;
 
 guidata(hObject, handles);
 
 
 
 
+
+%% Called by NI data acquisition background process at end of acquisition
 function NIsession_callback(obj, event)
 global VOLTAGE_RANGE_LAST_STIM;
-figure(2);
-plot(event.Data);
-legend(obj.Channels.Name);
-VOLTAGE_RANGE_LAST_STIM = [ max(event.Data(:,1)) min(event.Data(:,1))];
+global axes_bottom;
+
+% Just to be confusing, the Plexon's voltage monitor channel scales its
+% output because, um, TEXAS!
+scalefactor_V = 1/PS_GetVmonScaling(1); % V/V
+scalefactor_i = 400; % uA/mV, always
+steps = [1:size(event.Data, 1)] * 1000 / obj.Rate;
+yy = plotyy(axes_bottom, steps, event.Data(:,1) * scalefactor_V, ...
+    steps, event.Data(:,2) * scalefactor_i);
+legend(axes_bottom, obj.Channels.Name);
+xlabel(axes_bottom, 'ms');
+set(get(yy(1),'Ylabel'),'String','V')
+set(get(yy(2),'Ylabel'),'String','\mu A') 
+VOLTAGE_RANGE_LAST_STIM = [ max(event.Data(:,1)) min(event.Data(:,1))] * scalefactor_V;
+
+
 
 
 
 function gui_close_callback(hObject, callbackdata, handles)
 disp('Shutting down...');
-if handles.running
+if ~isempty(handles.timer)
     stop(handles.timer); % This stops stimulation as well
     delete(handles.timer);
+    handles.timer = [];
 end
 if ~isempty(handles.NIsession)
-    % Stop NI session?!!?
     stop(handles.NIsession);
     release(handles.NIsession);
     handles.NIsession = [];
@@ -461,19 +483,17 @@ guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function monitor_electrode_control_CreateFcn(hObject, eventdata, handles)
-set(hObject, 'BackgroundColor', [0.8 0.8 0.1]);
+set(hObject, 'BackgroundColor', [0.8 0.2 0.1]);
 
 
 
 function start_timer(hObject, handles)
 disable_controls(hObject, handles);
+handles.timer
 if ~isempty(handles.timer)
-    if handles.running
-        error('timer:running:already', 'Timer running already?');
-    end
     stop(handles.timer);
     delete(handles.timer);
-    handles.running = false;
+    handles.timer = [];
 end
 handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedSpacing');
 handles.timer.TimerFcn = {@plexon_control_timer_callback_2, hObject, handles};
@@ -517,13 +537,15 @@ guidata(hObject, handles);
 
 % --- Executes on button press in stop.
 function stop_Callback(hObject, eventdata, handles)
+disp('Stopping everything!');
+
+PS_StopStimAllChannels(handles.box);
 if ~isempty(handles.timer)
-    disp('Deleting timer');
     stop(handles.timer); % this also stops and closes the Plexon box
     delete(handles.timer);
     handles.timer = [];
-    handles.running = false;
 end
+
 enable_controls(hObject, handles);
 guidata(hObject, handles);
 
@@ -622,7 +644,6 @@ catch ME
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
     PS_StopStimAllChannels(handles.box);
-    handles.running = false;
     guidata(hObject, handles);
     rethrow(ME);
 end
@@ -631,30 +652,43 @@ guidata(hObject, handles);
 
 
 function plexon_stop_timer_callback(obj, event, hObject, handles)
+if ~isempty(handles.timer)
+    stop(handles.timer);
+    delete(handles.timer);
+    handles.timer = [];
+end
 err = PS_StopStimAllChannels(handles.box);
 if err
     msgbox('ERROR stopping stimulation!!!!');
-else
-    handles.running = false;
 end
 guidata(hObject, handles);
 
 
 function plexon_error_timer_callback(obj, event, hObject, handles)
-if handles.running
-    err = PS_StopStimAllChannels(handles.box);
-    if err
-        msgbox('ERROR stopping stimulation!!!!');
-    else
-        handles.running = false;
-    end
+if ~isempty(handles.timer)
+    stop(handles.timer);
+    delete(handles.timer);
+    handles.timer = [];
 end
+err = PS_StopStimAllChannels(handles.box);
+if err
+    msgbox('ERROR stopping stimulation!!!!');
+end
+
 guidata(hObject, handles);
 
 
 function stim_universal_callback(hObject, eventdata, handles)
 whichone = str2num(hObject.String);
-handles.stim(whichone) = get(hObject, 'Value');
+newval = get(hObject, 'Value');
+if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(handles.stim) > 0
+    for i = find(handles.stim)
+        cmd = sprintf('set(handles.stim%d, ''Value'', 0);', i);
+        eval(cmd);
+        handles.stim(i) = 0;
+    end
+end
+handles.stim(whichone) = newval;
 update_monitor_electrodes(hObject, eventdata, handles);
 global CURRENT_uAMPS;
 CURRENT_uAMPS = handles.START_uAMPS;
@@ -671,7 +705,7 @@ set(handles.monitor_electrode_control, 'Value', handles.monitor_electrode);
 if handles.stim(handles.monitor_electrode)  
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
 else
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.8 0.1]);
+    set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.2 0.1]);
 end
 guidata(hObject, handles);
 
@@ -873,14 +907,13 @@ try
     
 
 catch ME
+    
+    stop_Callback(handles.stop, event, handles);
+
+
     errordlg(ME.message, 'Error', 'modal');
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
-    PS_StopStimAllChannels(handles.box);
-    handles.NIsession.stop;
-    handles.running = false;
-    guidata(hObject, handles);
-    stop_Callback(hObject, eventdata, handles);
     rethrow(ME);
 end
 
@@ -888,3 +921,23 @@ end
 guidata(hObject, handles);
 
 
+
+
+% --- Executes on button press in stimMultiple.
+function stimMultiple_Callback(hObject, eventdata, handles)
+val = get(hObject, 'Value');
+if val
+    set(handles.select_all_valid, 'Enable', 'on');
+else
+    set(handles.select_all_valid, 'Enable', 'off');
+end
+if ~val & sum(handles.stim) > 1
+    % Turn off stimulation to all electrodes
+    for i = 1:16
+        cmd = sprintf('set(handles.stim%d, ''Value'', false);', i);
+        eval(cmd);
+    end
+    handles.stim = zeros(1, 16);
+    update_monitor_electrodes(hObject, eventdata, handles)
+end
+guidata(hObject, handles);
