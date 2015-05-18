@@ -46,11 +46,11 @@ end
 
 
 
-function [ intan_pin] = map_plexon_pin_to_intan(plexon_pin)
+function [ intan_pin] = map_plexon_pin_to_intan(plexon_pin, handles)
 intan_pin = handles.PIN_NAMES(2, find(handles.PIN_NAMES(1,:) == plexon_pin));
 
 
-function [ plexon_pin] = map_intan_pin_to_plexon(intan_pin)
+function [ plexon_pin] = map_intan_pin_to_plexon(intan_pin, handles)
 plexon_pin = handles.PIN_NAMES(1, find(handles.PIN_NAMES(2,:) == intan_pin));
 
 
@@ -71,8 +71,8 @@ handles.START_uAMPS = 1; % Stimulating at this current will not yield enough vol
 handles.MAX_uAMPS = 50;
 handles.INCREASE_STEP = 1.05;
 handles.HALF_TIME_uS = 400;
-handles.INTERSPIKE_S = 0.5;
-handles.VoltageLimit = 6;
+handles.INTERSPIKE_S = 0.1;
+handles.VoltageLimit = 1;
 handles.valid = zeros(1, 16);
 handles.monitor_electrode = 1;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
@@ -91,12 +91,17 @@ global NEGFIRST;
 NEGFIRST = false;
 global axes_top;
 global axes_bottom;
+global vvsi;
+
+
+
+vvsi = [];
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
 % pins on the Intan.
 handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ...
-                      0  0  0  0  0  0  0  0  0   0   0   0   0   0   0   0 ];
+                     19 18 17 16 15 14 13 12 20  21  22  23   8   9  10  11 ];
 
 
 set(handles.startcurrent, 'String', sprintf('%d', round(handles.START_uAMPS)));
@@ -192,13 +197,13 @@ set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
 
 %% Open NI acquisition board
 dev='Dev1'; % location of input device
-channels = 0:1;
-channel_labels = {'Voltage', 'Current', 'error23842'}; % labels for INCHANNELS
+channels = [0 1 7];
+channel_labels = {'Voltage', 'Current', 'Response', 'error23842'}; % labels for INCHANNELS
 daq.reset;
 handles.NIsession = daq.createSession('ni');
 handles.NIsession.Rate = 100000;
 handles.NIsession.IsContinuous = 0;
-handles.NIsession.DurationInSeconds = 0.006;
+handles.NIsession.DurationInSeconds = 0.014;
 
 for i = 1:length(channels)
     addAnalogInputChannel(handles.NIsession, dev, sprintf('ai%d', channels(i)), 'voltage');
@@ -230,26 +235,67 @@ guidata(hObject, handles);
 %% Called by NI data acquisition background process at end of acquisition
 function NIsession_callback(obj, event)
 global VOLTAGE_RANGE_LAST_STIM;
+global CURRENT_uAMPS;
+global stim_electrodes;
+global monitor_electrode;
 global axes_bottom;
+global axes_top;
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
 % output because, um, TEXAS!
-scalefactor_V = 1/PS_GetVmonScaling(1); % V/V
-scalefactor_i = 400; % uA/mV, always
-steps = [1:size(event.Data, 1)] * 1000 / obj.Rate;
-yy = plotyy(axes_bottom, steps, event.Data(:,1) * scalefactor_V, ...
-    steps, event.Data(:,2) * scalefactor_i);
-legend(axes_bottom, obj.Channels.Name);
+scalefactor_V = 1/PS_GetVmonScaling(1); % V/V !!!!!!!!!!!!!!!!!!!!!!!
+scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+times = event.TimeStamps * 1000; % milliseconds
+yy = plotyy(axes_bottom, times, event.Data(:,1) * scalefactor_V, ...
+    times, event.Data(:,2) * scalefactor_i);
+legend(axes_bottom, {obj.Channels(1).Name obj.Channels(2).Name});
 xlabel(axes_bottom, 'ms');
 set(get(yy(1),'Ylabel'),'String','V')
 set(get(yy(2),'Ylabel'),'String','\mu A') 
 VOLTAGE_RANGE_LAST_STIM = [ max(event.Data(:,1)) min(event.Data(:,1))] * scalefactor_V;
+
+plot(axes_top, times, event.Data(:,3));
+legend(axes_top, obj.Channels(3).Name);
+ylabel(axes_top, obj.Channels(3).Name);
+
+
+%%% Save for posterity!
+file_basename = 'stim';
+file_format = 'yyyymmdd_HHMMSS.FFF';
+save_dir = 'data';
+nchannels = length(obj.Channels);
+
+data.current = CURRENT_uAMPS;
+data.data = event.Data;
+data.time = event.TimeStamps;
+data.stim_electrodes = stim_electrodes;
+data.monitor_electrode = monitor_electrode;
+data.fs = obj.Rate;
+data.labels = {};
+data.names = {};
+data.parameters.sensor_range = {};
+
+for i=1:nchannels
+	data.labels{i} = obj.Channels(i).ID;
+	data.names{i} = obj.Channels(i).Name;
+	%data.parameters.sensor_range{i} = obj.Channels(i).Range;
+end
+
+datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
+if ~exist(save_dir, 'dir')
+	mkdir(save_dir);
+end
+
+save(fullfile(save_dir, datafile_name), 'data');
 
 
 
 
 
 function gui_close_callback(hObject, callbackdata, handles)
+
+global vvsi;
+
 disp('Shutting down...');
 if ~isempty(handles.timer)
     stop(handles.timer); % This stops stimulation as well
@@ -269,6 +315,15 @@ if handles.open
 else
      msgbox({'ERROR CLOSING STIMULATOR', 'Could not contact Plexon stimulator for shutdown!'});
 end
+
+file_format = 'yyyymmdd_HHMMSS.FFF';
+save_dir = 'data';
+file_basename = 'vvsi';
+datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
+if ~exist(save_dir, 'dir')
+	mkdir(save_dir);
+end
+save(fullfile(save_dir, datafile_name), 'vvsi');
 delete(hObject);
 
 
@@ -488,13 +543,8 @@ set(hObject, 'BackgroundColor', [0.8 0.2 0.1]);
 
 
 function start_timer(hObject, handles)
+
 disable_controls(hObject, handles);
-handles.timer
-if ~isempty(handles.timer)
-    stop(handles.timer);
-    delete(handles.timer);
-    handles.timer = [];
-end
 handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedSpacing');
 handles.timer.TimerFcn = {@plexon_control_timer_callback_2, hObject, handles};
 handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
@@ -508,6 +558,7 @@ guidata(hObject, handles);
 % --- Executes on button press in increase.
 function increase_Callback(hObject, eventdata, handles)
 global change;
+
 change = handles.INCREASE_STEP;
 if isempty(handles.timer)
     start_timer(hObject, handles);
@@ -518,6 +569,7 @@ guidata(hObject, handles);
 % --- Executes on button press in decrease.
 function decrease_Callback(hObject, eventdata, handles)
 global change;
+
 change = 1/handles.INCREASE_STEP;
 if isempty(handles.timer)
     start_timer(hObject, handles);
@@ -528,6 +580,7 @@ guidata(hObject, handles);
 % --- Executes on button press in hold.
 function hold_Callback(hObject, eventdata, handles)
 global change;
+
 change = 1;
 if isempty(handles.timer)
     start_timer(hObject, handles);
@@ -537,9 +590,14 @@ guidata(hObject, handles);
 
 % --- Executes on button press in stop.
 function stop_Callback(hObject, eventdata, handles)
-disp('Stopping everything!');
+global vvsi;
+global monitor_electrode;
+global axes_top;
+
+disp('Stopping everything...');
 
 PS_StopStimAllChannels(handles.box);
+
 if ~isempty(handles.timer)
     stop(handles.timer); % this also stops and closes the Plexon box
     delete(handles.timer);
@@ -547,6 +605,16 @@ if ~isempty(handles.timer)
 end
 
 enable_controls(hObject, handles);
+
+this_electrode = find(vvsi(:,1) == monitor_electrode);
+
+cla(axes_top);
+hold(axes_top, 'on');
+scatter(axes_top, vvsi(this_electrode,2), vvsi(this_electrode,4), 'b');
+scatter(axes_top, vvsi(this_electrode,2), vvsi(this_electrode,5), 'r');
+hold(axes_top, 'off');
+%set(axes_top, 'YLim', [min(vvsi(this_electrode,5)) max(vvsi(this_electrode,4))]);
+
 guidata(hObject, handles);
 
 
@@ -603,7 +671,6 @@ end
 % and do some basic error checking.  Set all channels to nil.
 function plexon_start_timer_callback(obj, event, hObject, handles)
 
-
 global CURRENT_uAMPS;
 global change;
 global NEGFIRST;
@@ -652,29 +719,19 @@ guidata(hObject, handles);
 
 
 function plexon_stop_timer_callback(obj, event, hObject, handles)
-if ~isempty(handles.timer)
-    stop(handles.timer);
-    delete(handles.timer);
-    handles.timer = [];
-end
 err = PS_StopStimAllChannels(handles.box);
 if err
-    msgbox('ERROR stopping stimulation!!!!');
+    msgbox('ERROR stopping stimulation (@stop)!!!!');
 end
 guidata(hObject, handles);
 
 
 function plexon_error_timer_callback(obj, event, hObject, handles)
-if ~isempty(handles.timer)
-    stop(handles.timer);
-    delete(handles.timer);
-    handles.timer = [];
-end
+disp('Caught an error in the timer callback... Stopping...');
 err = PS_StopStimAllChannels(handles.box);
 if err
-    msgbox('ERROR stopping stimulation!!!!');
+    msgbox('ERROR stopping stimulation (@error)!!!!');
 end
-
 guidata(hObject, handles);
 
 
@@ -791,11 +848,15 @@ guidata(hObject, handles);
 
 function plexon_control_timer_callback_2(obj, event, hObject, handles)
 
-
 global CURRENT_uAMPS;
 global change;
 global NEGFIRST;
 global VOLTAGE_RANGE_LAST_STIM;
+global stim_electrodes;
+global monitor_electrode;
+
+global vvsi;  % Voltages vs current for each stimulation
+
 
 set(handles.currentcurrent, 'String', sprintf('%.2f', CURRENT_uAMPS));
 CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * change);
@@ -891,6 +952,11 @@ try
         end
     end
     
+    % The NI data acquisition callback can't see handles, so this is where
+    % we put stuff that it needs!
+    stim_electrodes = handles.stim;
+    monitor_electrode = handles.monitor_electrode;
+    
     % Start it!
     handles.NIsession.startBackground;
     err = PS_StartStimAllChannels(handles.box);
@@ -900,17 +966,19 @@ try
         throw(ME);
     end
     handles.NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
+    
+    vvsi(end+1, :) = [ monitor_electrode CURRENT_uAMPS NEGFIRST VOLTAGE_RANGE_LAST_STIM ];
+    
     if max(abs(VOLTAGE_RANGE_LAST_STIM)) > handles.VoltageLimit
-        ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d may be broken!!', channel);    
+        ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d (Intan %d) is pulling [ %.2g %.2g ] volts.  Stopping.', ...
+        channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), VOLTAGE_RANGE_LAST_STIM(2));    
         throw(ME);
     end
-    
 
 catch ME
+
+    guidata(hObject, handles);
     
-    stop_Callback(handles.stop, event, handles);
-
-
     errordlg(ME.message, 'Error', 'modal');
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
