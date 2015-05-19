@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 15-May-2015 16:35:39
+% Last Modified by GUIDE v2.5 18-May-2015 19:35:04
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -74,7 +74,6 @@ handles.HALF_TIME_uS = 400;
 handles.INTERSPIKE_S = 0.1;
 handles.VoltageLimit = 1;
 handles.valid = zeros(1, 16);
-handles.monitor_electrode = 1;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
 handles.timer = [];
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
@@ -92,8 +91,14 @@ NEGFIRST = false;
 global axes_top;
 global axes_bottom;
 global vvsi;
+global timer_sequence_running;
+global monitor_electrode;
+global electrode_last_stim;
+global max_current;
 
-
+monitor_electrode = 1;
+electrode_last_stim = 0;
+max_current = NaN * ones(1, 16);
 
 vvsi = [];
 
@@ -122,7 +127,8 @@ set(handles.monitor_electrode_control, 'String', newvals);
 
 
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
-        handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime};
+        handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
+        handles.vvsi_auto};
 for i = 1:16
         cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i);
         eval(cmd);
@@ -226,6 +232,9 @@ prepare(handles.NIsession);
 axes_top = handles.axes_top;
 axes_bottom = handles.axes_bottom;
 
+
+timer_sequence_running = false;
+
 guidata(hObject, handles);
 
 
@@ -235,6 +244,7 @@ guidata(hObject, handles);
 %% Called by NI data acquisition background process at end of acquisition
 function NIsession_callback(obj, event)
 global VOLTAGE_RANGE_LAST_STIM;
+global electrode_last_stim;
 global CURRENT_uAMPS;
 global stim_electrodes;
 global monitor_electrode;
@@ -253,6 +263,7 @@ xlabel(axes_bottom, 'ms');
 set(get(yy(1),'Ylabel'),'String','V')
 set(get(yy(2),'Ylabel'),'String','\mu A') 
 VOLTAGE_RANGE_LAST_STIM = [ max(event.Data(:,1)) min(event.Data(:,1))] * scalefactor_V;
+electrode_last_stim = monitor_electrode;
 
 plot(axes_top, times, event.Data(:,3));
 legend(axes_top, obj.Channels(3).Name);
@@ -532,7 +543,12 @@ electrode_universal_callback(hObject, eventdata, handles);
 
 % --- Executes on selection change in electrode.
 function monitor_electrode_control_Callback(hObject, eventdata, handles)
-handles.monitor_electrode = get(hObject, 'Value'); % Only works because all 16 are present! v(5)=5
+global monitor_electrode;
+which_valid_electrode = get(handles.monitor_electrode_control, 'Value');
+valid_electrode_strings = get(handles.monitor_electrode_control, 'String');
+monitor_electrode = str2num(valid_electrode_strings{which_valid_electrode});
+
+%handles.monitor_electrode = get(hObject, 'Value'); % Only works because all 16 are present! v(5)=5
 update_monitor_electrodes(hObject, eventdata, handles);
 guidata(hObject, handles);
 
@@ -543,6 +559,11 @@ set(hObject, 'BackgroundColor', [0.8 0.2 0.1]);
 
 
 function start_timer(hObject, handles)
+
+% Clean up any stopped timers
+if ~isempty(handles.timer)
+    a(0)
+end
 
 disable_controls(hObject, handles);
 handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedSpacing');
@@ -599,21 +620,22 @@ disp('Stopping everything...');
 PS_StopStimAllChannels(handles.box);
 
 if ~isempty(handles.timer)
-    stop(handles.timer); % this also stops and closes the Plexon box
+    if isvalid(handles.timer)
+        stop(handles.timer); % this also stops and closes the Plexon box
+    end
     delete(handles.timer);
     handles.timer = [];
 end
 
-enable_controls(hObject, handles);
-
-this_electrode = find(vvsi(:,1) == monitor_electrode);
-
-cla(axes_top);
-hold(axes_top, 'on');
-scatter(axes_top, vvsi(this_electrode,2), vvsi(this_electrode,4), 'b');
-scatter(axes_top, vvsi(this_electrode,2), vvsi(this_electrode,5), 'r');
-hold(axes_top, 'off');
-%set(axes_top, 'YLim', [min(vvsi(this_electrode,5)) max(vvsi(this_electrode,4))]);
+if ~isempty(vvsi)
+    this_electrode = find(vvsi(:,1) == monitor_electrode);
+    cla(axes_top);
+    hold(axes_top, 'on');
+    scatter(axes_top, vvsi(this_electrode,2), vvsi(this_electrode,4), 'b');
+    scatter(axes_top, vvsi(this_electrode,2), vvsi(this_electrode,5), 'r');
+    hold(axes_top, 'off');
+    %set(axes_top, 'YLim', [min(vvsi(this_electrode,5)) max(vvsi(this_electrode,4))]);
+end
 
 guidata(hObject, handles);
 
@@ -723,6 +745,7 @@ err = PS_StopStimAllChannels(handles.box);
 if err
     msgbox('ERROR stopping stimulation (@stop)!!!!');
 end
+enable_controls(hObject, handles);
 guidata(hObject, handles);
 
 
@@ -736,6 +759,7 @@ guidata(hObject, handles);
 
 
 function stim_universal_callback(hObject, eventdata, handles)
+global monitor_electrode;
 whichone = str2num(hObject.String);
 newval = get(hObject, 'Value');
 if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(handles.stim) > 0
@@ -746,20 +770,20 @@ if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(handles.stim)
     end
 end
 handles.stim(whichone) = newval;
-update_monitor_electrodes(hObject, eventdata, handles);
 global CURRENT_uAMPS;
 CURRENT_uAMPS = handles.START_uAMPS;
 set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
 if handles.stim(whichone)
-    handles.monitor_electrode = whichone;
+    monitor_electrode = whichone;
 end
 update_monitor_electrodes(hObject, eventdata, handles);
 guidata(hObject, handles);
 
 
 function update_monitor_electrodes(hObject, eventdata, handles)
-set(handles.monitor_electrode_control, 'Value', handles.monitor_electrode);
-if handles.stim(handles.monitor_electrode)  
+global monitor_electrode;
+set(handles.monitor_electrode_control, 'Value', monitor_electrode);
+if handles.stim(monitor_electrode)  
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
 else
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.2 0.1]);
@@ -852,8 +876,11 @@ global CURRENT_uAMPS;
 global change;
 global NEGFIRST;
 global VOLTAGE_RANGE_LAST_STIM;
+global max_current;
+global electrode_last_stim;
 global stim_electrodes;
 global monitor_electrode;
+global timer_sequence_running;
 
 global vvsi;  % Voltages vs current for each stimulation
 
@@ -902,15 +929,12 @@ try
     NullPattern.A2 = 0;
     NullPattern.Delay = 0;
 
-    which_valid_electrode = get(handles.monitor_electrode_control, 'Value');
-    valid_electrode_strings = get(handles.monitor_electrode_control, 'String');
-    channel = str2num(valid_electrode_strings{which_valid_electrode});
-    % If no channel is selected, just fail silently and let the user figure
+    % If no monitor_electrode is selected, just fail silently and let the user figure
     % out what's going on :)
-    if channel > 0 & channel <= 16
-        err = PS_SetMonitorChannel(handles.box, channel);
+    if monitor_electrode > 0 & monitor_electrode <= 16
+        err = PS_SetMonitorChannel(handles.box, monitor_electrode);
         if err
-            ME = MException('plexon:monitor', 'Could not set monitor channel to %d', channel);
+            ME = MException('plexon:monitor', 'Could not set monitor channel to %d', monitor_electrode);
             throw(ME);
         end
     end
@@ -955,7 +979,6 @@ try
     % The NI data acquisition callback can't see handles, so this is where
     % we put stuff that it needs!
     stim_electrodes = handles.stim;
-    monitor_electrode = handles.monitor_electrode;
     
     % Start it!
     handles.NIsession.startBackground;
@@ -966,18 +989,33 @@ try
         throw(ME);
     end
     handles.NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
-    
+     
     vvsi(end+1, :) = [ monitor_electrode CURRENT_uAMPS NEGFIRST VOLTAGE_RANGE_LAST_STIM ];
-    
-    if max(abs(VOLTAGE_RANGE_LAST_STIM)) > handles.VoltageLimit
-        ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d (Intan %d) is pulling [ %.2g %.2g ] volts.  Stopping.', ...
-        channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), VOLTAGE_RANGE_LAST_STIM(2));    
-        throw(ME);
+    if max(abs(VOLTAGE_RANGE_LAST_STIM)) <= handles.VoltageLimit
+        if monitor_electrode == electrode_last_stim
+            max_current(monitor_electrode) = CURRENT_uAMPS;
+        end
+    else
+        %ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d (Intan %d) is pulling [ %.2g %.2g ] volts.  Stopping.', ...
+            %channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), VOLTAGE_RANGE_LAST_STIM(2));    
+        %throw(ME);
+        disp(sprintf('Channel %d (Intan %d) is pulling [ %.2g %.2g ] V @ %.2g uA.', ...
+            channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), ...
+            VOLTAGE_RANGE_LAST_STIM(2), CURRENT_uAMPS));
+        stop(handles.timer);
+        
+        % Find the maximum current at which voltage was < handles.VoltageLimit
+        %handles.voltage_at_max_current(1:2, monitor_electrode) = VOLTAGE_RANGE_LAST_STIM;
+        if isnan(max_current(monitor_electrode))
+            maxistring = '***';
+        else
+            maxistring = sprintf('%.2g uA', max_current(monitor_electrode));
+        end
+        eval(sprintf('set(handles.maxi%d, ''String'', ''%s'');', monitor_electrode, maxistring));
+        timer_sequence_running = false;
     end
 
 catch ME
-
-    guidata(hObject, handles);
     
     errordlg(ME.message, 'Error', 'modal');
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
@@ -985,10 +1023,8 @@ catch ME
     rethrow(ME);
 end
 
-
-guidata(hObject, handles);
-
-
+% guidata(hObject, handles) does no good here!!!
+  guidata(hObject, handles);
 
 
 % --- Executes on button press in stimMultiple.
@@ -1009,3 +1045,42 @@ if ~val & sum(handles.stim) > 1
     update_monitor_electrodes(hObject, eventdata, handles)
 end
 guidata(hObject, handles);
+
+
+% --- Executes on button press in vvsi_auto.
+function vvsi_auto_Callback(hObject, eventdata, handles)
+% Set us up as if we'd reset to 1 and hit "increase"
+disp('Entering vvsi_auto_Callback');
+global CURRENT_uAMPS;
+global change;
+global monitor_electrode;
+change = 1.05;
+global timer_sequence_running;
+
+handles.INTERSPIKE_S = 0.01;
+
+for i = find(handles.valid)
+    CURRENT_uAMPS = 1;
+    handles.stim = zeros(1, 16);
+    handles.stim(i) = 1;
+    monitor_electrode = i;
+    set(handles.monitor_electrode_control, 'Value', i);
+    
+    if ~isempty(handles.timer)
+        stop(handles.timer);
+        delete(handles.timer);
+        handles.timer = [];
+    end
+    timer_sequence_running = true;
+    start_timer(hObject, handles);
+    while timer_sequence_running
+        pause(0.1);
+    end
+end
+if ~isempty(handles.timer)
+    stop(handles.timer); % this also stops the Plexon box
+    delete(handles.timer);
+    handles.timer = [];
+end
+
+    
