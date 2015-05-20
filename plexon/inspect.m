@@ -110,12 +110,16 @@ beforetrigger = max(0, triggertime - 0.001);
 [B A] = butter(4, 0.6, 'low');
 data.data = filter(B, A, data.data);
 
-scalefactor_V = 1/0.25; % V/V !!!!!!!!!!!!!!!!!!!!!!!
-scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+if ~isfield(data, 'halftime') % old format does not scale saved data
+        scalefactor_V = 1/0.25;
+        scalefactor_i = 400;
+        data.data(:,1) = data.data(:,1) * scalefactor_V;
+        data.data(:,2) = data.data(:,2) * scalefactor_i;
+end
 times = (data.time - triggertime) * 1000; % milliseconds
 u = find(data.time > beforetrigger & data.time < triggertime + aftertrigger);
-yy = plotyy(handles.axes2, times(u), data.data(u,1) * scalefactor_V, ...
-    times(u), data.data(u,2) * scalefactor_i);
+yy = plotyy(handles.axes2, times(u), data.data(u,1), ...
+    times(u), data.data(u,2));
 legend(handles.axes2, data.names{1:2});
 xlabel(handles.axes2, 'ms');
 set(get(yy(1),'Ylabel'),'String','V')

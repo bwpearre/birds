@@ -266,14 +266,17 @@ global axes_top;
 % output because, um, TEXAS!
 scalefactor_V = 1/PS_GetVmonScaling(1); % V/V !!!!!!!!!!!!!!!!!!!!!!!
 scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+event.Data(:,1) = event.Data(:,1) * scalefactor_V;
+event.Data(:,2) = event.Data(:,2) * scalefactor_i;
+
 times = event.TimeStamps * 1000; % milliseconds
-yy = plotyy(axes_bottom, times, event.Data(:,1) * scalefactor_V, ...
-    times, event.Data(:,2) * scalefactor_i);
+yy = plotyy(axes_bottom, times, event.Data(:,1), ...
+    times, event.Data(:,2));
 legend(axes_bottom, {obj.Channels(1).Name obj.Channels(2).Name});
 xlabel(axes_bottom, 'ms');
 set(get(yy(1),'Ylabel'),'String','V')
 set(get(yy(2),'Ylabel'),'String','\mu A') 
-VOLTAGE_RANGE_LAST_STIM = [ max(event.Data(:,1)) min(event.Data(:,1))] * scalefactor_V;
+VOLTAGE_RANGE_LAST_STIM = [ max(event.Data(:,1)) min(event.Data(:,1))];
 electrode_last_stim = monitor_electrode;
 
 plot(axes_top, times, event.Data(:,3));
