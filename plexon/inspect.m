@@ -138,7 +138,7 @@ roi = round([ triggertime + 0.002  triggertime + 0.006 ] * data.fs);
 
 len = roi(2)-roi(1)+1;
 if isempty(responses)
-        responses = zeros(len, handles.files);
+        responses = zeros(len, length(handles.files));
 end
 responses(1:len,file) = data.data(roi(1):roi(2), 3);
 if file > 1 & file < length(handles.files)
