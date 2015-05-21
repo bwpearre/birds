@@ -31,16 +31,18 @@ for i = 1:length(files)
        [B A] = butter(4, 0.6, 'low');
        d = filter(B, A, data.data);
        
-       scalefactor_V = 1/0.25; % V/V !!!!!!!!!!!!!!!!!!!!!!!
-       scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
        times = (data.time - triggertime) * 1000; % milliseconds
        u = find(data.time > beforetrigger & data.time < triggertime + aftertrigger);
 
        
-       roi = round([ triggertime + 0.001  triggertime + 0.005 ] * data.fs);
+       roi = round([ triggertime + 0.002  triggertime + 0.005 ] * data.fs);
        
        da(:,i) = d(roi(1):roi(2), 3);
 end
 
 
 times = [0:(size(da, 1)-1)] * 1000/data.fs;
+
+x = xcorr(da);
+image((da.*(da>0))*2000);
+%imagesc(log(abs(x)));
