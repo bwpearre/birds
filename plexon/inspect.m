@@ -76,6 +76,10 @@ guidata(hObject, handles);
 
 function do_file(hObject, eventdata, handles, file);
 global responses;
+persistent max_corr;
+if isempty(max_corr)
+        max_corr = 0;
+end
 
 load(handles.files{file});
 
@@ -145,7 +149,9 @@ if file > 1 & file < length(handles.files)
         lastxc = [xcorr2(responses(:, file-1), responses(:, file))'
                   xcorr2(responses(:, file+1), responses(:, file))']';
         %lastxc = xcorr(responses(:, file-1:file+1));
+        max_corr = max(max_corr, max(max(lastxc)));
         plot(handles.axes3, lastxc);
+        set(handles.axes3, 'XLim', [0 2*len], 'YLim', [-0.001 max_corr*1.1]);
 end
 
 guidata(hObject, handles);
