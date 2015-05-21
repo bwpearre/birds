@@ -48,6 +48,8 @@ end
 function inspect_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
 
+global responses;
+
 files = dir('stim*');
 
 [sorted_names, sorted_index] = sortrows({files.name}');
@@ -67,13 +69,15 @@ varargout{1} = handles.output;
 
 % --- Executes on selection change in listbox1.
 function listbox1_Callback(hObject, eventdata, handles)
-file = handles.files{handles.sorted_index(get(hObject,'Value'))};
+file = handles.sorted_index(get(hObject,'Value'));
 do_file(hObject, eventdata, handles, file);
 guidata(hObject, handles);
 
 
 function do_file(hObject, eventdata, handles, file);
-load(file);
+global responses;
+
+load(handles.files{file});
 
 tabledata{1,1} = sprintf('%d ', data.stim_electrodes);
 tabledata{2,1} = sprintf('%.3g uA', data.current);
@@ -96,7 +100,7 @@ set(handles.table1, 'Data', tabledata);
 
 triggerchannel = 3;
 triggerthreshold = 0.1;
-aftertrigger = 0.006;
+aftertrigger = 0.009;
 
 triggertime = find(abs(data.data(:,triggerchannel)) > triggerthreshold);
 if isempty(triggertime)
@@ -129,6 +133,17 @@ plot(handles.axes1, times(u), data.data(u,3));
 set(handles.axes1, 'YLim', [-0.1 0.1]);
 legend(handles.axes1, data.names{3});
 ylabel(handles.axes1, data.names{3});
+
+roi = round([ triggertime + 0.002  triggertime + 0.006 ] * data.fs);
+
+len = roi(2)-roi(1)+1;
+responses(1:len,file) = data.data(roi(1):roi(2), 3);
+if file > 1
+        lastxc = [xcorr2(responses(:, file-1), responses(:, file))'
+                  xcorr2(responses(:, file+1), responses(:, file))']';
+        %lastxc = xcorr(responses(:, file-1:file+1));
+        plot(handles.axes3, lastxc);
+end
 
 guidata(hObject, handles);
 
