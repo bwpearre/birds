@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 19-May-2015 15:03:43
+% Last Modified by GUIDE v2.5 28-May-2015 19:01:24
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -99,6 +99,7 @@ global halftime_us;
 global increase_type;
 global max_halftime;
 global known_invalid;
+global current_amplification;
 
 increase_type = 'current'; % or 'time'
 default_halftime_us = 400;
@@ -108,6 +109,7 @@ electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
 known_invalid = zeros(1, 16);
+current_amplification = 1;
 
 vvsi = [];
 
@@ -126,6 +128,7 @@ set(handles.halftime, 'String', sprintf('%d', round(halftime_us)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.negativefirst, 'Value', NEGFIRST);
 set(handles.select_all_valid, 'Enable', 'off');
+set(handles.i_amplification, 'String', sprintf('%g', current_amplification));
 
 newvals = {};
 for i = 1:16
@@ -264,25 +267,27 @@ global stim_electrodes;
 global monitor_electrode;
 global axes_bottom;
 global axes_top;
+global current_amplification;
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
 % output because, um, TEXAS!
 scalefactor_V = 1/PS_GetVmonScaling(1); % V/V !!!!!!!!!!!!!!!!!!!!!!!
 scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-event.Data(:,1) = event.Data(:,1) * scalefactor_V;
-event.Data(:,2) = event.Data(:,2) * scalefactor_i;
+edata = event.Data;
+edata(:,1) = event.Data(:,1) * scalefactor_V;
+edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
 
 times = event.TimeStamps * 1000; % milliseconds
-yy = plotyy(axes_bottom, times, event.Data(:,1), ...
-    times, event.Data(:,2));
+yy = plotyy(axes_bottom, times, edata(:,1), ...
+    times, edata(:,2));
 legend(axes_bottom, {obj.Channels(1).Name obj.Channels(2).Name});
 xlabel(axes_bottom, 'ms');
 set(get(yy(1),'Ylabel'),'String','V')
 set(get(yy(2),'Ylabel'),'String','\mu A') 
-VOLTAGE_RANGE_LAST_STIM = [ max(event.Data(:,1)) min(event.Data(:,1))];
+VOLTAGE_RANGE_LAST_STIM = [ max(edata(:,1)) min(edata(:,1))];
 electrode_last_stim = monitor_electrode;
 
-plot(axes_top, times, event.Data(:,3));
+plot(axes_top, times, edata(:,3));
 legend(axes_top, obj.Channels(3).Name);
 ylabel(axes_top, obj.Channels(3).Name);
 
@@ -294,7 +299,7 @@ save_dir = 'data';
 nchannels = length(obj.Channels);
 
 data.current = CURRENT_uAMPS;
-data.data = event.Data;
+data.data = edata;
 data.time = event.TimeStamps;
 data.stim_electrodes = stim_electrodes;
 data.monitor_electrode = monitor_electrode;
@@ -956,7 +961,7 @@ try
     end
     StimParam.W1 = halftime_us;
     StimParam.W2 = halftime_us;
-    StimParam.Delay = 0;
+    StimParam.Delay = 100;
     
     NullPattern.W1 = 0;
     NullPattern.W2 = 0;
@@ -1241,4 +1246,24 @@ end
 handles.timer = clear_timer(handles.timer);
 
 halftime_us = default_halftime_us;
+
+
+
+
+function i_amplification_Callback(hObject, eventdata, handles)
+global current_amplification;
+current_amplification = str2double(get(hObject,'String'));
+
+
+% --- Executes during object creation, after setting all properties.
+function i_amplification_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to i_amplification (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
 
