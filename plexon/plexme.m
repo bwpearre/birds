@@ -101,7 +101,7 @@ global max_halftime;
 global known_invalid;
 
 increase_type = 'current'; % or 'time'
-default_halftime_us = 150;
+default_halftime_us = 400;
 halftime_us = default_halftime_us;
 monitor_electrode = 1;
 electrode_last_stim = 0;
@@ -220,7 +220,10 @@ daq.reset;
 handles.NIsession = daq.createSession('ni');
 handles.NIsession.Rate = 100000;
 handles.NIsession.IsContinuous = 0;
-handles.NIsession.DurationInSeconds = 0.01;
+handles.NIsession.DurationInSeconds = 0.012;
+% FIXME Add TTL-triggered acquisition?
+%addTriggerConnection(handles.NIsession,'External','Dev1/PFI0','StartTrigger');
+% FIXME Slew rate
 
 for i = 1:length(channels)
     addAnalogInputChannel(handles.NIsession, dev, sprintf('ai%d', channels(i)), 'voltage');

@@ -162,6 +162,7 @@ if doplot
        
 end
 
+
 % Exponential curve-fit: use a slightly longer time period for better
 % results:
 roifit = round([ triggertime + 0.0015  triggertime + 0.008 ] * data.fs);
