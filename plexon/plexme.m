@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 28-May-2015 19:01:24
+% Last Modified by GUIDE v2.5 12-Jun-2015 14:15:34
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -56,7 +56,7 @@ plexon_pin = handles.PIN_NAMES(1, find(handles.PIN_NAMES(2,:) == intan_pin));
 
 
 % --- Executes just before plexme is made visible.
-function plexme_OpeningFcn(hObject, eventdata, handles, varargin)
+function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % This function has no output args, see OutputFcn.
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -100,6 +100,8 @@ global increase_type;
 global max_halftime;
 global known_invalid;
 global current_amplification;
+global saving_stimulations;
+global channel_ranges;
 
 increase_type = 'current'; % or 'time'
 default_halftime_us = 400;
@@ -110,8 +112,12 @@ max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
 known_invalid = zeros(1, 16);
 current_amplification = 1;
+saving_stimulations = false;
 
 vvsi = [];
+
+
+channel_ranges = [ 1 1 1 ];
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
@@ -216,7 +222,7 @@ set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
 
 
 %% Open NI acquisition board
-dev='Dev1'; % location of input device
+dev='Dev2'; % location of input device
 channels = [0 1 7];
 channel_labels = {'Voltage', 'Current', 'Response', 'error23842'}; % labels for INCHANNELS
 daq.reset;
@@ -224,6 +230,7 @@ handles.NIsession = daq.createSession('ni');
 handles.NIsession.Rate = 100000;
 handles.NIsession.IsContinuous = 0;
 handles.NIsession.DurationInSeconds = 0.012;
+global channel_ranges;
 % FIXME Add TTL-triggered acquisition?
 %addTriggerConnection(handles.NIsession,'External','Dev1/PFI0','StartTrigger');
 % FIXME Slew rate
@@ -232,7 +239,8 @@ for i = 1:length(channels)
     addAnalogInputChannel(handles.NIsession, dev, sprintf('ai%d', channels(i)), 'voltage');
     param_names = fieldnames(handles.NIsession.Channels(i));
 	handles.NIsession.Channels(i).Name = channel_labels{i};
-	handles.NIsession.Channels(i).Coupling = 'DC';
+	%handles.NIsession.Channels(i).Coupling = 'AC';
+    handles.NIsession.Channels(i).Range = [-1 1] * channel_ranges(i);
  	if any(strcmp(param_names,'TerminalConfig'))
  		handles.NIsession.Channels(i).TerminalConfig='SingleEnded';
  	elseif any(strcmp(param_names,'InputType'))
@@ -268,28 +276,90 @@ global monitor_electrode;
 global axes_bottom;
 global axes_top;
 global current_amplification;
+global channel_ranges;
+global saving_stimulations;
+global halftime_us;
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
 % output because, um, TEXAS!
 scalefactor_V = 1/PS_GetVmonScaling(1); % V/V !!!!!!!!!!!!!!!!!!!!!!!
 scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 edata = event.Data;
+for i = 1:size(edata, 2)
+    if any(abs(edata(i,:)) > channel_ranges(i))
+        disp(sprintf('WARNING: Channel %d (%g V) exceeds expected max voltage %g', ...
+                i, max(abs(edata(i,:))), channel_ranges(i)));
+    end
+end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
 
-times = event.TimeStamps * 1000; % milliseconds
-yy = plotyy(axes_bottom, times, edata(:,1), ...
-    times, edata(:,2));
+% FIXME change data.data to edata
+
+data.data = edata;
+data.time = event.TimeStamps;
+data.fs = obj.Rate;
+
+
+triggerchannel = 3;
+triggerthreshold = 0.1;
+
+triggertime = find(abs(data.data(:,triggerchannel)) > triggerthreshold);
+if isempty(triggertime)
+    triggertime = find(abs(data.data(:,1)) > 0.1);
+end
+triggertime = (triggertime(1) / data.fs);
+beforetrigger = max(0, triggertime - 0.001);
+aftertrigger = 0.009;
+
+% times is data.time aligned so spike=0
+times = (data.time - triggertime) * 1000; % milliseconds
+% u: indices into data.time that we want to show, aligned and shit.
+u = find(data.time > beforetrigger & data.time < triggertime + aftertrigger);
+% v is the times to show for the pulse
+v = find(data.time > beforetrigger & data.time < triggertime + 0.001 + 2 * halftime_us/1e6 + 100e-6);
+
+
+% Fit the ROI for de-trending
+roifit = round([ triggertime + 0.0015  triggertime + 0.008 ] * data.fs);
+roiifit = roifit(1):roifit(2);
+roitimesfit = times(roiifit);
+lenfit = length(roitimesfit);
+weightsfit = linspace(1, 0, lenfit);
+weightsfit = ones(1, lenfit);
+f = fit(roitimesfit, data.data(roifit(1):roifit(2), 3), 'exp1', ...
+        'Weight', weightsfit, 'StartPoint', [0 0]);
+ff = f.a .* exp(f.b * roitimesfit); % + f.c .* exp(f.d * roitimesfit);
+
+roi = round([ triggertime + 0.002  triggertime + 0.007 ] * data.fs);
+roii = roi(1):roi(2);
+roitimes = times(roii);
+len = length(roitimes);
+roitrend = f.a .* exp(f.b * roitimes);% + f.c .* exp(f.d * roitimes);
+
+responses_detrended = data.data(roi(1):roi(2), 3) - roitrend;
+
+
+
+%[B A] = butter(4, 0.1, 'low');
+
+%times = event.TimeStamps * 1000; % milliseconds
+yy = plotyy(axes_bottom, times(v), edata(v,1), ...
+    times(v), edata(v,2));
 legend(axes_bottom, {obj.Channels(1).Name obj.Channels(2).Name});
 xlabel(axes_bottom, 'ms');
-set(get(yy(1),'Ylabel'),'String','V')
-set(get(yy(2),'Ylabel'),'String','\mu A') 
+set(get(yy(1),'Ylabel'),'String','V');
+set(get(yy(2),'Ylabel'),'String','\mu A');
 VOLTAGE_RANGE_LAST_STIM = [ max(edata(:,1)) min(edata(:,1))];
 electrode_last_stim = monitor_electrode;
 
-plot(axes_top, times, edata(:,3));
-legend(axes_top, obj.Channels(3).Name);
+plot(axes_top, times(u), edata(u,3));
+hold(axes_top, 'on');
+plot(axes_top, roitimes, responses_detrended, 'g');
+hold(axes_top, 'off');
+legend(axes_top, obj.Channels(3).Name, 'Detrended');
 ylabel(axes_top, obj.Channels(3).Name);
+set(axes_top, 'YLim', [-0.07 0.07]);
 
 
 %%% Save for posterity!
@@ -314,12 +384,14 @@ for i=1:nchannels
 	%data.parameters.sensor_range{i} = obj.Channels(i).Range;
 end
 
-datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
-if ~exist(save_dir, 'dir')
-	mkdir(save_dir);
-end
+if saving_stimulations
+    datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
+    if ~exist(save_dir, 'dir')
+        mkdir(save_dir);
+    end
 
-save(fullfile(save_dir, datafile_name), 'data');
+    save(fullfile(save_dir, datafile_name), 'data');
+end
 
 
 
@@ -1267,3 +1339,10 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
+
+
+
+% --- Executes on button press in saving.
+function saving_Callback(hObject, eventdata, handles)
+global saving_stimulations;
+saving_stimulations = get(hObject, 'Value');
