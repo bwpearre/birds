@@ -166,7 +166,9 @@ end
 % Exponential curve-fit: use a slightly longer time period for better
 % results:
 roifit = round([ triggertime + 0.0015  triggertime + 0.008 ] * data.fs);
+roifit = [max(1, roifit(1)) min(length(times), roifit(2))];
 roiifit = roifit(1):roifit(2);
+
 roitimesfit = times(roiifit);
 lenfit = length(roitimesfit);
 weightsfit = linspace(1, 0, lenfit);
@@ -183,7 +185,9 @@ end
 % Store de-trended data in the ROI (smaller than the detrending fit
 % region):
 roi = round([ triggertime + 0.002  triggertime + 0.005 ] * data.fs);
+roi = [max(1, roi(1)) min(length(times), roi(2))];
 roii = roi(1):roi(2);
+
 roitimes = times(roii);
 len = length(roitimes);
 roitrend = f.a .* exp(f.b * roitimes);% + f.c .* exp(f.d * roitimes);
