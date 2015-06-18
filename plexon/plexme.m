@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 12-Jun-2015 14:15:34
+% Last Modified by GUIDE v2.5 17-Jun-2015 12:53:15
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -101,8 +101,11 @@ global max_halftime;
 global known_invalid;
 global current_amplification;
 global saving_stimulations;
+global intan_voltage_amplification;
 global channel_ranges;
+global datadir;
 
+datadir = 'noname';
 increase_type = 'current'; % or 'time'
 default_halftime_us = 400;
 halftime_us = default_halftime_us;
@@ -111,9 +114,11 @@ electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
 known_invalid = zeros(1, 16);
+intan_voltage_amplification = 515;
 current_amplification = 1;
 saving_stimulations = false;
-
+handles.TerminalConfig = 'SingleEndedNonReferenced';
+%handles.TerminalConfig = 'SingleEnded';
 vvsi = [];
 
 
@@ -135,6 +140,7 @@ set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.negativefirst, 'Value', NEGFIRST);
 set(handles.select_all_valid, 'Enable', 'off');
 set(handles.i_amplification, 'String', sprintf('%g', current_amplification));
+set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 
 newvals = {};
 for i = 1:16
@@ -162,6 +168,8 @@ for i = 1:16
     cmd = sprintf('set(handles.stim%d, ''Value'', false);', i);
     eval(cmd);
 end
+
+
 
 % Open the stimulator
 
@@ -229,7 +237,7 @@ daq.reset;
 handles.NIsession = daq.createSession('ni');
 handles.NIsession.Rate = 100000;
 handles.NIsession.IsContinuous = 0;
-handles.NIsession.DurationInSeconds = 0.012;
+handles.NIsession.DurationInSeconds = 0.025;
 global channel_ranges;
 % FIXME Add TTL-triggered acquisition?
 %addTriggerConnection(handles.NIsession,'External','Dev1/PFI0','StartTrigger');
@@ -242,9 +250,9 @@ for i = 1:length(channels)
 	%handles.NIsession.Channels(i).Coupling = 'AC';
     handles.NIsession.Channels(i).Range = [-1 1] * channel_ranges(i);
  	if any(strcmp(param_names,'TerminalConfig'))
- 		handles.NIsession.Channels(i).TerminalConfig='SingleEnded';
+ 		handles.NIsession.Channels(i).TerminalConfig = handles.TerminalConfig;
  	elseif any(strcmp(param_names,'InputType'))
- 		handles.NIsession.Channels(i).InputType='SingleEnded';
+ 		handles.NIsession.Channels(i).InputType = handles.TerminalConfig;
  	else
  		error('Could not set NiDaq input type');
     end
@@ -277,8 +285,14 @@ global axes_bottom;
 global axes_top;
 global current_amplification;
 global channel_ranges;
+global intan_voltage_amplification;
 global saving_stimulations;
 global halftime_us;
+global datadir;
+
+if isempty(datadir)
+    datadir = 'null';
+end
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
 % output because, um, TEXAS!
@@ -286,6 +300,8 @@ scalefactor_V = 1/PS_GetVmonScaling(1); % V/V !!!!!!!!!!!!!!!!!!!!!!!
 scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 edata = event.Data;
 for i = 1:size(edata, 2)
+    disp(sprintf('Channel %d (%g V)', ...
+                i, max(abs(edata(i,:)))));
     if any(abs(edata(i,:)) > channel_ranges(i))
         disp(sprintf('WARNING: Channel %d (%g V) exceeds expected max voltage %g', ...
                 i, max(abs(edata(i,:))), channel_ranges(i)));
@@ -293,6 +309,7 @@ for i = 1:size(edata, 2)
 end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
+edata(:,3) = event.Data(:,3) / intan_voltage_amplification;
 
 % FIXME change data.data to edata
 
@@ -306,11 +323,14 @@ triggerthreshold = 0.1;
 
 triggertime = find(abs(data.data(:,triggerchannel)) > triggerthreshold);
 if isempty(triggertime)
-    triggertime = find(abs(data.data(:,1)) > 0.1);
+    triggertime = find(abs(data.data(:,1)) > 0.01);
+    if isempty(triggertime)
+        triggertime = 0.003 * data.fs;
+    end
 end
 triggertime = (triggertime(1) / data.fs);
-beforetrigger = max(0, triggertime - 0.001);
-aftertrigger = 0.009;
+beforetrigger = max(0, triggertime - 0.002);
+aftertrigger = 0.020;
 
 % times is data.time aligned so spike=0
 times = (data.time - triggertime) * 1000; % milliseconds
@@ -321,7 +341,7 @@ v = find(data.time > beforetrigger & data.time < triggertime + 0.001 + 2 * halft
 
 
 % Fit the ROI for de-trending
-roifit = round([ triggertime + 0.0015  triggertime + 0.008 ] * data.fs);
+roifit = round([ triggertime + 0.0015  triggertime + 0.015 ] * data.fs);
 roiifit = roifit(1):roifit(2);
 roitimesfit = times(roiifit);
 lenfit = length(roitimesfit);
@@ -331,7 +351,7 @@ f = fit(roitimesfit, data.data(roifit(1):roifit(2), 3), 'exp1', ...
         'Weight', weightsfit, 'StartPoint', [0 0]);
 ff = f.a .* exp(f.b * roitimesfit); % + f.c .* exp(f.d * roitimesfit);
 
-roi = round([ triggertime + 0.002  triggertime + 0.007 ] * data.fs);
+roi = round([ triggertime + 0.002  triggertime + 0.01 ] * data.fs);
 roii = roi(1):roi(2);
 roitimes = times(roii);
 len = length(roitimes);
@@ -353,19 +373,19 @@ set(get(yy(2),'Ylabel'),'String','\mu A');
 VOLTAGE_RANGE_LAST_STIM = [ max(edata(:,1)) min(edata(:,1))];
 electrode_last_stim = monitor_electrode;
 
-plot(axes_top, times(u), edata(u,3));
+plot(axes_top, times(u), edata(u,3)*1000);
 hold(axes_top, 'on');
-plot(axes_top, roitimes, responses_detrended, 'g');
+plot(axes_top, roitimes, responses_detrended*1000, 'r');
 hold(axes_top, 'off');
 legend(axes_top, obj.Channels(3).Name, 'Detrended');
-ylabel(axes_top, obj.Channels(3).Name);
-set(axes_top, 'YLim', [-0.07 0.07]);
+ylabel(axes_top, strcat(obj.Channels(3).Name, ' (mV)'));
+set(axes_top, 'XLim', [-2 20], 'YLim', [-0.1 0.1]*1000/intan_voltage_amplification);
+grid(axes_top, 'on');
 
 
 %%% Save for posterity!
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
-save_dir = 'data';
 nchannels = length(obj.Channels);
 
 data.current = CURRENT_uAMPS;
@@ -386,11 +406,11 @@ end
 
 if saving_stimulations
     datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
-    if ~exist(save_dir, 'dir')
-        mkdir(save_dir);
+    if ~exist(datadir, 'dir')
+        mkdir(datadir);
     end
 
-    save(fullfile(save_dir, datafile_name), 'data');
+    save(fullfile(datadir, datafile_name), 'data');
 end
 
 
@@ -401,6 +421,7 @@ function gui_close_callback(hObject, callbackdata, handles)
 
 global vvsi;
 global timer_sequence_running;
+global datadir;
 
 disp('Shutting down...');
 handles.timer = clear_timer(handles.timer);
@@ -421,13 +442,12 @@ end
 timer_sequence_running = false;
 
 file_format = 'yyyymmdd_HHMMSS.FFF';
-save_dir = 'data';
 file_basename = 'vvsi';
 datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
-if ~exist(save_dir, 'dir')
-	mkdir(save_dir);
+if ~exist(datadir, 'dir')
+	mkdir(datadir);
 end
-save(fullfile(save_dir, datafile_name), 'vvsi');
+save(fullfile(datadir, datafile_name), 'vvsi');
 delete(hObject);
 
 
@@ -741,17 +761,19 @@ end
 
 if ~isempty(vvsi)
     this_electrode = find(vvsi(:,1) == monitor_electrode);
-    cla(axes_top);
-    hold(axes_top, 'on');
-    switch increase_type
-        case 'current'
-            abscissa = 2;
-        case 'time'
-            abscissa = 6;
+    if false
+        cla(axes_top);
+        hold(axes_top, 'on');
+        switch increase_type
+            case 'current'
+                abscissa = 2;
+            case 'time'
+                abscissa = 6;
+        end
+        scatter(axes_top, vvsi(this_electrode,abscissa), vvsi(this_electrode,4), 'b');
+        scatter(axes_top, vvsi(this_electrode,abscissa), vvsi(this_electrode,5), 'r');
+        hold(axes_top, 'off');
     end
-    scatter(axes_top, vvsi(this_electrode,abscissa), vvsi(this_electrode,4), 'b');
-    scatter(axes_top, vvsi(this_electrode,abscissa), vvsi(this_electrode,5), 'r');
-    hold(axes_top, 'off');
     %set(axes_top, 'YLim', [min(vvsi(this_electrode,5)) max(vvsi(this_electrode,4))]);
 end
 
@@ -1346,3 +1368,18 @@ end
 function saving_Callback(hObject, eventdata, handles)
 global saving_stimulations;
 saving_stimulations = get(hObject, 'Value');
+
+
+
+function birdname_Callback(hObject, eventdata, handles)
+global datadir;
+
+datadir = strcat(get(hObject,'String'), '-', datestr(now, 'yyyy-mm-dd'));
+set(hObject, 'BackgroundColor', [0 0.8 0]);
+
+% --- Executes during object creation, after setting all properties.
+function birdname_CreateFcn(hObject, eventdata, handles)
+set(hObject, 'String', 'noname');
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
