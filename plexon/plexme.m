@@ -413,15 +413,20 @@ beforepulse = beforepulse(1:end-1);
 Real_Voltage_RMS = rms(event.Data(beforepulse,1:length(channels)));
 
 if isempty(rmshist)
-    rmshist = zeros(50, length(Real_Voltage_RMS));
+    rmshist = repmat(Real_Voltage_RMS, 50, 1);
 end
 
 rmshist = [rmshist(2:end, :); Real_Voltage_RMS];
+llim = floor(log10(min(min(rmshist))));
+ulim = ceil(log10(max(max(rmshist))));
+
 %set(rmsbox, 'String', sprintf('[%s ] uV', ...
 %    sprintf('  %.3g', Real_Voltage_RMS * 1e6)));
-semilogy(axes5, rmshist);
-axis(axes5, 'tight');
-
+yyrms = plotyy(axes5, 1:50, rmshist(:,1:2), ...
+                      1:50, rmshist(:,3));
+title(axes5, 'RMS (V true)');
+%rmsticks = 10.^[llim:ulim];
+%set(axes5, 'YGrid', 'on', 'XLim', [1 50], 'YLim', 10.^[llim ulim], 'YTick', rmsticks);
 interpulse_at = triggertime + halftime_us/1e6;
 
 w = find(times_aligned > halftime_us/1e6 & times_aligned < halftime_us/1e6 + interpulse_s);
@@ -429,8 +434,6 @@ w = w(1:end-1);
 min_interpulse_volts = min(abs(edata(w,1)))
 
 plot(axes4, times_aligned(w)*1000, edata(w,1));
-foo = get(axes4, 'YLim');
-%line([1 1] * halftime_us / 1e3, foo, 'Parent', axes4, 'Color', [1 0 0]);
 
 %%% Save for posterity!
 file_basename = 'stim';
