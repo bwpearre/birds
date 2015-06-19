@@ -117,6 +117,11 @@ if doplot
                 tabledata{4,1} = '?'; % negative pulse first
         end
         tabledata{5,1} = sprintf('%d', data.monitor_electrode);
+        if isfield(data, 'comments')
+            tabledata{6,1} = data.comments;
+        end
+        
+        
         set(handles.table1, 'Data', tabledata);
 end
 

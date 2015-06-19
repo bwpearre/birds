@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 17-Jun-2015 12:53:15
+% Last Modified by GUIDE v2.5 19-Jun-2015 14:18:18
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -89,13 +89,18 @@ global NEGFIRST;
 NEGFIRST = false;
 global axes_top;
 global axes_bottom;
+global axes4;
+global axes5;
+global rmsbox;
 global vvsi;
+global comments;
 global timer_sequence_running;
 global monitor_electrode;
 global electrode_last_stim;
 global max_current;
 global default_halftime_us;
 global halftime_us;
+global interpulse_s;
 global increase_type;
 global max_halftime;
 global known_invalid;
@@ -104,11 +109,13 @@ global saving_stimulations;
 global intan_voltage_amplification;
 global channel_ranges;
 global datadir;
+global channels;
 
 datadir = 'noname';
 increase_type = 'current'; % or 'time'
 default_halftime_us = 400;
 halftime_us = default_halftime_us;
+interpulse_s = 100e-6;
 monitor_electrode = 1;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
@@ -117,12 +124,15 @@ known_invalid = zeros(1, 16);
 intan_voltage_amplification = 515;
 current_amplification = 1;
 saving_stimulations = false;
-handles.TerminalConfig = 'SingleEndedNonReferenced';
+handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
+%handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
+
 %handles.TerminalConfig = 'SingleEnded';
 vvsi = [];
+comments = '';
 
 
-channel_ranges = [ 1 1 1 ];
+channel_ranges = 1 * [ 1 1 1 ];
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
@@ -168,8 +178,6 @@ for i = 1:16
     cmd = sprintf('set(handles.stim%d, ''Value'', false);', i);
     eval(cmd);
 end
-
-
 
 % Open the stimulator
 
@@ -243,20 +251,28 @@ global channel_ranges;
 %addTriggerConnection(handles.NIsession,'External','Dev1/PFI0','StartTrigger');
 % FIXME Slew rate
 
+
 for i = 1:length(channels)
     addAnalogInputChannel(handles.NIsession, dev, sprintf('ai%d', channels(i)), 'voltage');
     param_names = fieldnames(handles.NIsession.Channels(i));
 	handles.NIsession.Channels(i).Name = channel_labels{i};
 	%handles.NIsession.Channels(i).Coupling = 'AC';
     handles.NIsession.Channels(i).Range = [-1 1] * channel_ranges(i);
+    if length(handles.TerminalConfig) == length(channels)
+        foo = i;
+    else
+        foo = 1;
+    end
  	if any(strcmp(param_names,'TerminalConfig'))
- 		handles.NIsession.Channels(i).TerminalConfig = handles.TerminalConfig;
+ 		handles.NIsession.Channels(i).TerminalConfig = handles.TerminalConfig{foo};
  	elseif any(strcmp(param_names,'InputType'))
- 		handles.NIsession.Channels(i).InputType = handles.TerminalConfig;
+ 		handles.NIsession.Channels(i).InputType = handles.TerminalConfig{foo};
  	else
  		error('Could not set NiDaq input type');
     end
 end
+addDigitalChannel(handles.NIsession, dev, 'Port0/Line0:1', 'InputOnly');
+
 handles.NI.listeners{1}=addlistener(handles.NIsession, 'DataAvailable',...
 	@(obj,event) NIsession_callback(obj, event));
 handles.NIsession.NotifyWhenDataAvailableExceeds=round(handles.NIsession.Rate*handles.NIsession.DurationInSeconds);
@@ -264,7 +280,8 @@ prepare(handles.NIsession);
 
 axes_top = handles.axes_top;
 axes_bottom = handles.axes_bottom;
-
+axes4 = handles.axes4;
+axes5 = handles.axes5;
 
 timer_sequence_running = false;
 
@@ -283,12 +300,19 @@ global stim_electrodes;
 global monitor_electrode;
 global axes_bottom;
 global axes_top;
+global axes4;
+global axes5;
+global rmsbox;
 global current_amplification;
 global channel_ranges;
 global intan_voltage_amplification;
 global saving_stimulations;
 global halftime_us;
+global interpulse_s;
 global datadir;
+global channels;
+global comments;
+persistent rmshist;
 
 if isempty(datadir)
     datadir = 'null';
@@ -299,7 +323,7 @@ end
 scalefactor_V = 1/PS_GetVmonScaling(1); % V/V !!!!!!!!!!!!!!!!!!!!!!!
 scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 edata = event.Data;
-for i = 1:size(edata, 2)
+for i = 1:length(channels)
     disp(sprintf('Channel %d (%g V)', ...
                 i, max(abs(edata(i,:)))));
     if any(abs(edata(i,:)) > channel_ranges(i))
@@ -313,75 +337,100 @@ edata(:,3) = event.Data(:,3) / intan_voltage_amplification;
 
 % FIXME change data.data to edata
 
-data.data = edata;
 data.time = event.TimeStamps;
 data.fs = obj.Rate;
 
+triggerchannel = 4;
+triggerthreshold = 0.5;
 
-triggerchannel = 3;
-triggerthreshold = 0.1;
-
-triggertime = find(abs(data.data(:,triggerchannel)) > triggerthreshold);
+triggertime = event.TimeStamps(find(event.Data(:,triggerchannel) >= triggerthreshold, 1));
 if isempty(triggertime)
-    triggertime = find(abs(data.data(:,1)) > 0.01);
-    if isempty(triggertime)
-        triggertime = 0.003 * data.fs;
-    end
-end
-triggertime = (triggertime(1) / data.fs);
-beforetrigger = max(0, triggertime - 0.002);
-aftertrigger = 0.020;
+    disp('No trigger!');
+    return;
+end    
 
-% times is data.time aligned so spike=0
-times = (data.time - triggertime) * 1000; % milliseconds
-% u: indices into data.time that we want to show, aligned and shit.
-u = find(data.time > beforetrigger & data.time < triggertime + aftertrigger);
+% times_aligned is data.time aligned so spike=0
+times_aligned = event.TimeStamps - triggertime;
+beforetrigger = max(times_aligned(1), -0.002);
+aftertrigger = min(times_aligned(end), 0.020);
+
+% u: indices into times_aligned that we want to show, aligned and shit.
+u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
 % v is the times to show for the pulse
-v = find(data.time > beforetrigger & data.time < triggertime + 0.001 + 2 * halftime_us/1e6 + 100e-6);
+v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
 
 
-% Fit the ROI for de-trending
-roifit = round([ triggertime + 0.0015  triggertime + 0.015 ] * data.fs);
-roiifit = roifit(1):roifit(2);
-roitimesfit = times(roiifit);
+% Fit the ROI for de-trending.
+roifit = [ 0.0015  aftertrigger ];
+%roifit = [max(1, roifit(1)) min(length(times), roifit(2))];
+roiifit = find(times_aligned >= roifit(1) & times_aligned <= roifit(2));
+roitimesfit = times_aligned(roiifit);
 lenfit = length(roitimesfit);
 weightsfit = linspace(1, 0, lenfit);
-weightsfit = ones(1, lenfit);
-f = fit(roitimesfit, data.data(roifit(1):roifit(2), 3), 'exp1', ...
+%weightsfit = ones(1, lenfit);
+f = fit(roitimesfit, edata(roiifit, 3), 'exp1', ...
         'Weight', weightsfit, 'StartPoint', [0 0]);
 ff = f.a .* exp(f.b * roitimesfit); % + f.c .* exp(f.d * roitimesfit);
 
-roi = round([ triggertime + 0.002  triggertime + 0.01 ] * data.fs);
-roii = roi(1):roi(2);
-roitimes = times(roii);
+roi = [0.002  0.01];
+%roi = [max(1, roi(1)) min(length(times), roi(2))];
+
+roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
+roitimes = times_aligned(roii);
 len = length(roitimes);
 roitrend = f.a .* exp(f.b * roitimes);% + f.c .* exp(f.d * roitimes);
 
-responses_detrended = data.data(roi(1):roi(2), 3) - roitrend;
+responses_detrended = edata(roii, 3) - roitrend;
 
 
 
 %[B A] = butter(4, 0.1, 'low');
 
-%times = event.TimeStamps * 1000; % milliseconds
-yy = plotyy(axes_bottom, times(v), edata(v,1), ...
-    times(v), edata(v,2));
+yy = plotyy(axes_bottom, times_aligned(v)*1000, edata(v,1), ...
+    times_aligned(v)*1000, edata(v,2));
 legend(axes_bottom, {obj.Channels(1).Name obj.Channels(2).Name});
 xlabel(axes_bottom, 'ms');
 set(get(yy(1),'Ylabel'),'String','V');
 set(get(yy(2),'Ylabel'),'String','\mu A');
+%set(get(yy(2),'YLim'), [-1 1] * CURRENT_uAMPS * 1.5);
 VOLTAGE_RANGE_LAST_STIM = [ max(edata(:,1)) min(edata(:,1))];
 electrode_last_stim = monitor_electrode;
 
-plot(axes_top, times(u), edata(u,3)*1000);
+plot(axes_top, times_aligned(u)*1000, edata(u,3)*1000);
 hold(axes_top, 'on');
-plot(axes_top, roitimes, responses_detrended*1000, 'r');
+plot(axes_top, roitimes*1000, responses_detrended*1000, 'r');
 hold(axes_top, 'off');
 legend(axes_top, obj.Channels(3).Name, 'Detrended');
 ylabel(axes_top, strcat(obj.Channels(3).Name, ' (mV)'));
 set(axes_top, 'XLim', [-2 20], 'YLim', [-0.1 0.1]*1000/intan_voltage_amplification);
 grid(axes_top, 'on');
 
+%% Blow up the interpulse region--can we align this well?
+% What is the max voltage for the first millisecond of acquisition?  This
+% is before the pulse, I assume...(?)
+beforepulse = find(times_aligned < 0);
+beforepulse = beforepulse(1:end-1);
+Real_Voltage_RMS = rms(event.Data(beforepulse,1:length(channels)));
+
+if isempty(rmshist)
+    rmshist = zeros(50, length(Real_Voltage_RMS));
+end
+
+rmshist = [rmshist(2:end, :); Real_Voltage_RMS];
+%set(rmsbox, 'String', sprintf('[%s ] uV', ...
+%    sprintf('  %.3g', Real_Voltage_RMS * 1e6)));
+semilogy(axes5, rmshist);
+axis(axes5, 'tight');
+
+interpulse_at = triggertime + halftime_us/1e6;
+
+w = find(times_aligned > halftime_us/1e6 & times_aligned < halftime_us/1e6 + interpulse_s);
+w = w(1:end-1);
+min_interpulse_volts = min(abs(edata(w,1)))
+
+plot(axes4, times_aligned(w)*1000, edata(w,1));
+foo = get(axes4, 'YLim');
+%line([1 1] * halftime_us / 1e3, foo, 'Parent', axes4, 'Color', [1 0 0]);
 
 %%% Save for posterity!
 file_basename = 'stim';
@@ -391,12 +440,15 @@ nchannels = length(obj.Channels);
 data.current = CURRENT_uAMPS;
 data.data = edata;
 data.time = event.TimeStamps;
+data.times_aligned = times_aligned;
 data.stim_electrodes = stim_electrodes;
 data.monitor_electrode = monitor_electrode;
 data.fs = obj.Rate;
 data.labels = {};
 data.names = {};
+data.triggertime = triggertime;
 data.parameters.sensor_range = {};
+data.comments = comments;
 
 for i=1:nchannels
 	data.labels{i} = obj.Channels(i).ID;
@@ -1020,6 +1072,7 @@ global increase_type;
 global CURRENT_uAMPS;
 global default_halftime_us;
 global halftime_us;
+global interpulse_s;
 global max_current;
 global max_halftime;
 global change;
@@ -1055,7 +1108,7 @@ try
     end
     StimParam.W1 = halftime_us;
     StimParam.W2 = halftime_us;
-    StimParam.Delay = 100;
+    StimParam.Delay = interpulse_s * 1e6;
     
     NullPattern.W1 = 0;
     NullPattern.W2 = 0;
@@ -1380,6 +1433,26 @@ set(hObject, 'BackgroundColor', [0 0.8 0]);
 % --- Executes during object creation, after setting all properties.
 function birdname_CreateFcn(hObject, eventdata, handles)
 set(hObject, 'String', 'noname');
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function comments_Callback(hObject, eventdata, handles)
+global comments;
+
+comments = get(hObject, 'String');
+
+
+% --- Executes during object creation, after setting all properties.
+function comments_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to comments (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
