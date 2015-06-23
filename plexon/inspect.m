@@ -48,7 +48,7 @@ end
 function inspect_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
 
-global responses;
+global responses_detrended;
 global wait_bar;
 global knowngood;
 global heur;
@@ -63,7 +63,7 @@ handles.files = sorted_names;
 handles.sorted_index = sorted_index;
 set(handles.listbox1,'String',handles.files,'Value',1);
 
-responses = [];
+responses_detrended = [];
 if ~isempty(wait_bar)
         close(wait_bar);
         wait_bar = [];
@@ -86,7 +86,7 @@ do_file(hObject, eventdata, handles, file, true);
 
 
 function do_file(hObject, eventdata, handles, file, doplot);
-global responses;
+global responses_detrended;
 persistent corr_range;
 global heur;
 global knowngood;
@@ -107,8 +107,8 @@ if doplot
         else
                 tabledata{3,1} = '?';
         end
-        if isfield(data, 'negfirst')
-                if data.negfirst
+        if isfield(data, 'negativefirst')
+                if data.negativefirst
                         tabledata{4,1} = 'y';
                 else
                         tabledata{4,1} = '';
@@ -128,59 +128,62 @@ end
 knowngood(file) = sum(data.stim_electrodes) == 16 && data.current >= 2;
 set(handles.response1, 'Value', knowngood(file));        
 
-triggerchannel = 3;
-triggerthreshold = 0.1;
-aftertrigger = 0.009;
-
-triggertime = find(abs(data.data(:,triggerchannel)) > triggerthreshold);
-if isempty(triggertime)
-    triggertime = 0;
-else
-    triggertime = (triggertime(1) / data.fs);
-end
-beforetrigger = max(0, triggertime - 0.001);
+aftertrigger = 0.015;
+beforetrigger = -0.002;
 
 %disp('Bandpass-filtering the data...');
 %[B A] = butter(2, 0.1, 'low');
 %data.data = filter(B, A, data.data);
 
-if ~isfield(data, 'halftime') % old format does not scale saved data
+if ~isfield(data, 'version') % old format does not scale saved data
         scalefactor_V = 1/0.25;
         scalefactor_i = 400;
         data.data(:,1) = data.data(:,1) * scalefactor_V;
         data.data(:,2) = data.data(:,2) * scalefactor_i;
 end
-times = (data.time - triggertime) * 1000; % milliseconds
-u = find(data.time > beforetrigger & data.time < triggertime + aftertrigger);
+edata = data.data;
+halftime_us = data.halftime_us;
+interpulse_s = data.interpulse_s;
+times_aligned = data.times_aligned;
+beforetrigger = max(times_aligned(1), beforetrigger);
+aftertrigger = min(times_aligned(end), aftertrigger);
+
+% u: indices into times_aligned that we want to show, aligned and shit.
+u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
+% v is the times to show for the pulse
+v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
+
 if doplot
-        yy = plotyy(handles.axes2, times(u), data.data(u,1), ...
-                times(u), data.data(u,2));
+        
+        plot(handles.axes1, times_aligned(u), edata(u,3));
+        xl = get(handles.axes1, 'XLim');
+        xl(1) = beforetrigger;
+        set(handles.axes1, 'XLim', [beforetrigger aftertrigger], 'YLim', [-0.15 0.15]/515);
+        legend(handles.axes1, data.names{3});
+        ylabel(handles.axes1, data.names{3});
+       
+        yy = plotyy(handles.axes2, times_aligned(v), edata(v,1), ...
+                times_aligned(v), edata(v,2));
         legend(handles.axes2, data.names{1:2});
         xlabel(handles.axes2, 'ms');
         set(get(yy(1),'Ylabel'),'String','V')
         set(get(yy(2),'Ylabel'),'String','\mu A')
-        
-        plot(handles.axes1, times(u), data.data(u,3));
-        set(handles.axes1, 'YLim', [-0.1 0.1]);
-        legend(handles.axes1, data.names{3});
-        ylabel(handles.axes1, data.names{3});
-       
 end
 
 
 % Exponential curve-fit: use a slightly longer time period for better
 % results:
-roifit = round([ triggertime + 0.0015  triggertime + 0.008 ] * data.fs);
-roifit = [max(1, roifit(1)) min(length(times), roifit(2))];
-roiifit = roifit(1):roifit(2);
-
-roitimesfit = times(roiifit);
+roifit = [ 0.003  0.007 ];
+roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
+roitimesfit = times_aligned(roiifit);
 lenfit = length(roitimesfit);
 weightsfit = linspace(1, 0, lenfit);
 weightsfit = ones(1, lenfit);
-f = fit(roitimesfit, data.data(roifit(1):roifit(2), 3), 'exp1', ...
-        'Weight', weightsfit, 'StartPoint', [0 0]);
-ff = f.a .* exp(f.b * roitimesfit); % + f.c .* exp(f.d * roitimesfit);
+f = fit(roitimesfit, edata(roiifit, 3), 'exp2', ...
+        'Weight', weightsfit, 'StartPoint', [1 -3000 1 -30], ...
+        'Upper', [Inf -0.01 Inf -0.01], 'TolX', 1e-15, 'TolFun', 1e-15);
+ff = f.a .* exp(f.b * roitimesfit) + f.c .* exp(f.d * roitimesfit);
+
 if doplot
         hold(handles.axes1, 'on');
         plot(handles.axes1, roitimesfit, ff, 'g');
@@ -189,24 +192,31 @@ end
 
 % Store de-trended data in the ROI (smaller than the detrending fit
 % region):
-roi = round([ triggertime + 0.002  triggertime + 0.005 ] * data.fs);
-roi = [max(1, roi(1)) min(length(times), roi(2))];
-roii = roi(1):roi(2);
+roi = roifit;
 
-roitimes = times(roii);
+roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
+roitimes = times_aligned(roii);
 len = length(roitimes);
-roitrend = f.a .* exp(f.b * roitimes);% + f.c .* exp(f.d * roitimes);
+roitrend = f.a .* exp(f.b * roitimes) + f.c .* exp(f.d * roitimes);
+responses_detrended(1:len, file) = edata(roii, 3) - roitrend;
 
-if isempty(responses)
-        responses = zeros(len, length(handles.files));
+if doplot
+        hold(handles.axes1, 'on');
+        plot(handles.axes1, roitimes, responses_detrended(1:len, file), 'r');
+        hold(handles.axes1, 'off');
 end
-responses(1:len,file) = data.data(roi(1):roi(2), 3) - roitrend;
+
+% Kludge so we can ask for the next one for xcorr below
+if size(responses_detrended, 2) == file
+    responses_detrended(len, file+1) = 0;
+end
+%responses_detrended(1:len,file) = data.data(roi(1):roi(2), 3) - roitrend;
 
 
 if file > 1 & file < length(handles.files)
-        lastxc = [xcorr(responses(:, file-1), responses(:, file), 'coeff')'
-                  xcorr(responses(:, file+1), responses(:, file), 'coeff')']';
-        %lastxc = xcorr(responses(:, file-1:file+1));
+        lastxc = [xcorr(responses_detrended(:, file-1), responses_detrended(:, file), 'coeff')'
+                  xcorr(responses_detrended(:, file+1), responses_detrended(:, file), 'coeff')']';
+        %lastxc = xcorr(responses_detrended(:, file-1:file+1));
         corr_range = [min(corr_range(1), min(min(lastxc))) ...
                 max(corr_range(2), max(max(lastxc)))];
         if doplot
@@ -215,7 +225,7 @@ if file > 1 & file < length(handles.files)
                 legend(handles.axes3, 'Prev', 'Next');
                 
                 if 0
-                        plot(handles.axes4, roitimes, responses(:,file), 'b', ...
+                        plot(handles.axes4, roitimes, responses_detrended(:,file), 'b', ...
                                 roitimes, data.data(roi(1):roi(2), 3), 'r');
                 end
         end
@@ -227,7 +237,7 @@ if file > 1 & file < length(handles.files)
                 freqs = [300:100:2000];
                 window = hamming(FFT_SIZE);
                 [speck freqs times] = spectrogram(lastxc(:,1), window, [], freqs, data.fs);
-                %[speck freqs times] = spectrogram(responses(:,file), window, [], freqs, data.fs);
+                %[speck freqs times] = spectrogram(responses_detrended(:,file), window, [], freqs, data.fs);
                 [nfreqs, ntimes] = size(speck);
                 speck = speck + eps;
                 if doplot

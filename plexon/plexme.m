@@ -132,7 +132,7 @@ vvsi = [];
 comments = '';
 
 
-channel_ranges = 1 * [ 1 1 1 ];
+channel_ranges = 1 * [ 1 1 5 ];
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
@@ -296,6 +296,7 @@ function NIsession_callback(obj, event)
 global VOLTAGE_RANGE_LAST_STIM;
 global electrode_last_stim;
 global CURRENT_uAMPS;
+global NEGFIRST;
 global stim_electrodes;
 global monitor_electrode;
 global axes_bottom;
@@ -361,27 +362,23 @@ v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 +
 
 
 % Fit the ROI for de-trending.
-roifit = [ 0.0015  aftertrigger ];
-%roifit = [max(1, roifit(1)) min(length(times), roifit(2))];
-roiifit = find(times_aligned >= roifit(1) & times_aligned <= roifit(2));
+roifit = [ 0.003  0.007 ];
+roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 lenfit = length(roitimesfit);
 weightsfit = linspace(1, 0, lenfit);
-%weightsfit = ones(1, lenfit);
-f = fit(roitimesfit, edata(roiifit, 3), 'exp1', ...
-        'Weight', weightsfit, 'StartPoint', [0 0]);
-ff = f.a .* exp(f.b * roitimesfit); % + f.c .* exp(f.d * roitimesfit);
+weightsfit = ones(1, lenfit);
+f = fit(roitimesfit, edata(roiifit, 3), 'exp2', ...
+        'Weight', weightsfit, 'StartPoint', [1 -3000 1 -30], ...
+        'Upper', [Inf -0.01 Inf -0.01], 'TolX', 1e-15, 'TolFun', 1e-15);
+ff = f.a .* exp(f.b * roitimesfit) + f.c .* exp(f.d * roitimesfit);
 
-roi = [0.002  0.01];
-%roi = [max(1, roi(1)) min(length(times), roi(2))];
-
+roi = roifit;
 roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
 roitimes = times_aligned(roii);
 len = length(roitimes);
-roitrend = f.a .* exp(f.b * roitimes);% + f.c .* exp(f.d * roitimes);
-
+roitrend = f.a .* exp(f.b * roitimes) + f.c .* exp(f.d * roitimes);
 responses_detrended = edata(roii, 3) - roitrend;
-
 
 
 %[B A] = butter(4, 0.1, 'low');
@@ -398,6 +395,9 @@ electrode_last_stim = monitor_electrode;
 
 plot(axes_top, times_aligned(u)*1000, edata(u,3)*1000);
 hold(axes_top, 'on');
+if true
+    plot(axes_top, roitimesfit, ff, 'g');
+end
 plot(axes_top, roitimes*1000, responses_detrended*1000, 'r');
 hold(axes_top, 'off');
 legend(axes_top, obj.Channels(3).Name, 'Detrended');
@@ -422,12 +422,27 @@ ulim = ceil(log10(max(max(rmshist))));
 
 %set(rmsbox, 'String', sprintf('[%s ] uV', ...
 %    sprintf('  %.3g', Real_Voltage_RMS * 1e6)));
-yyrms = plotyy(axes5, 1:50, rmshist(:,1:2), ...
-                      1:50, rmshist(:,3));
-title(axes5, 'RMS (V true)');
+yyrms = plotyy(axes5, 1:50, rmshist(:,1:2) * 1e6, ...
+                      1:50, rmshist(:,3) * 1e6);
+for i = 1:2   
+    foo = get(yyrms(i), 'YLim');
+    foo(1) = 0;
+    set(yyrms(i), 'XLim', [1 50], 'YLim', foo, 'YTickMode', 'auto');
+end
+title(axes5, 'RMS (\mu V true)');
+npts = 50;
+foo = 10.^linspace(1, 1, npts);
+foo = foo / sum(foo);
+wmeans = sum(rmshist(end-npts+1:end, 1:3) .* repmat(foo', 1, 3));
+clear foo;
+for i = 1:3
+    foo{i} = sprintf('Ch %d RMS %.0f', i, wmeans(i) * 1e6);
+end
+baz = legend(axes5, foo, 'FontSize', 8, 'Location', 'SouthWest');
 %rmsticks = 10.^[llim:ulim];
 %set(axes5, 'YGrid', 'on', 'XLim', [1 50], 'YLim', 10.^[llim ulim], 'YTick', rmsticks);
 interpulse_at = triggertime + halftime_us/1e6;
+
 
 w = find(times_aligned > halftime_us/1e6 & times_aligned < halftime_us/1e6 + interpulse_s);
 w = w(1:end-1);
@@ -440,8 +455,12 @@ file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
 nchannels = length(obj.Channels);
 
+data.version = 5;
+data.halftime_us = halftime_us;
+data.interpulse_s = interpulse_s;
 data.current = CURRENT_uAMPS;
 data.data = edata;
+data.negativefirst = NEGFIRST;
 data.time = event.TimeStamps;
 data.times_aligned = times_aligned;
 data.stim_electrodes = stim_electrodes;
