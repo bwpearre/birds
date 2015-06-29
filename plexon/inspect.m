@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 22-May-2015 18:44:53
+% Last Modified by GUIDE v2.5 23-Jun-2015 12:59:49
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -118,7 +118,7 @@ if doplot
         end
         tabledata{5,1} = sprintf('%d', data.monitor_electrode);
         if isfield(data, 'comments')
-            tabledata{6,1} = data.comments;
+            set(handles.comments, 'String', data.comments);
         end
         
         
@@ -158,9 +158,12 @@ if doplot
         plot(handles.axes1, times_aligned(u), edata(u,3));
         xl = get(handles.axes1, 'XLim');
         xl(1) = beforetrigger;
-        set(handles.axes1, 'XLim', [beforetrigger aftertrigger], 'YLim', [-0.15 0.15]/515);
+        set(handles.axes1, ...
+            'XLim', [beforetrigger aftertrigger], ...
+            'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
         legend(handles.axes1, data.names{3});
         ylabel(handles.axes1, data.names{3});
+        grid(handles.axes1, 'on');
        
         yy = plotyy(handles.axes2, times_aligned(v), edata(v,1), ...
                 times_aligned(v), edata(v,2));
@@ -173,7 +176,7 @@ end
 
 % Exponential curve-fit: use a slightly longer time period for better
 % results:
-roifit = [ 0.003  0.007 ];
+roifit = [ 0.003  0.014 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 lenfit = length(roitimesfit);
@@ -372,4 +375,28 @@ set(handles.train, 'Enable', 'off');
 train_net(hObject, handles);
 
 set(handles.train, 'Enable', 'on');
+
+
+
+% --- Executes on slider movement.
+function yscale_Callback(hObject, eventdata, handles)
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
+
+
+
+% --- Executes during object creation, after setting all properties.
+function yscale_CreateFcn(hObject, eventdata, handles)
+if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor',[.9 .9 .9]);
+end
+
+
+function comments_Callback(hObject, eventdata, handles)
+
+% --- Executes during object creation, after setting all properties.
+function comments_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
 

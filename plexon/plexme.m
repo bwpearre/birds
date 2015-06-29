@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 19-Jun-2015 14:18:18
+% Last Modified by GUIDE v2.5 29-Jun-2015 18:35:56
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -88,6 +88,7 @@ change = handles.INCREASE_STEP;
 global NEGFIRST;
 NEGFIRST = false;
 global axes_top;
+global axes_top_yscale;
 global axes_bottom;
 global axes4;
 global axes5;
@@ -124,7 +125,7 @@ known_invalid = zeros(1, 16);
 intan_voltage_amplification = 515;
 current_amplification = 1;
 saving_stimulations = false;
-handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
+handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEnded'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 
 %handles.TerminalConfig = 'SingleEnded';
@@ -132,7 +133,7 @@ vvsi = [];
 comments = '';
 
 
-channel_ranges = 1 * [ 1 1 5 ];
+channel_ranges = 0.1 * [ 1 1 1 ];
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
@@ -206,6 +207,11 @@ end
 
 
 try
+    %err = PS_SetDigitalOutputMode(handles.box, 0); % Keep digital out HIGH in interpulse
+    %if err
+    %    ME = MException('plexon:init', 'Plexon: digital output on "%d".', handles.box);
+    %    throw(ME);
+    %end
     [nchan, err] = PS_GetNChannels(handles.box);
     if err
         ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', handles.box);
@@ -279,6 +285,7 @@ handles.NIsession.NotifyWhenDataAvailableExceeds=round(handles.NIsession.Rate*ha
 prepare(handles.NIsession);
 
 axes_top = handles.axes_top;
+axes_top_yscale = handles.yscale;
 axes_bottom = handles.axes_bottom;
 axes4 = handles.axes4;
 axes5 = handles.axes5;
@@ -301,6 +308,7 @@ global stim_electrodes;
 global monitor_electrode;
 global axes_bottom;
 global axes_top;
+global axes_top_yscale;
 global axes4;
 global axes5;
 global rmsbox;
@@ -355,6 +363,9 @@ times_aligned = event.TimeStamps - triggertime;
 beforetrigger = max(times_aligned(1), -0.002);
 aftertrigger = min(times_aligned(end), 0.020);
 
+figure(1);
+plot(event.Data(:,1:2));
+
 % u: indices into times_aligned that we want to show, aligned and shit.
 u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
 % v is the times to show for the pulse
@@ -395,14 +406,15 @@ electrode_last_stim = monitor_electrode;
 
 plot(axes_top, times_aligned(u)*1000, edata(u,3)*1000);
 hold(axes_top, 'on');
-if true
-    plot(axes_top, roitimesfit, ff, 'g');
-end
 plot(axes_top, roitimes*1000, responses_detrended*1000, 'r');
+if true
+    plot(axes_top, roitimesfit*1000, ff*1000, 'g');
+end
 hold(axes_top, 'off');
-legend(axes_top, obj.Channels(3).Name, 'Detrended');
+legend(axes_top, obj.Channels(3).Name, 'Detrended', 'Trend');
 ylabel(axes_top, strcat(obj.Channels(3).Name, ' (mV)'));
-set(axes_top, 'XLim', [-2 20], 'YLim', [-0.1 0.1]*1000/intan_voltage_amplification);
+set(axes_top, 'XLim', [-2 20], ...
+            'YLim', (2^(get(axes_top_yscale, 'Value')))*[-0.3 0.3]*1000/intan_voltage_amplification);
 grid(axes_top, 'on');
 
 %% Blow up the interpulse region--can we align this well?
@@ -1148,6 +1160,8 @@ try
         end
     end
     
+    %disp('stimulating on channels:');
+    %handles.stim
     for channel = find(handles.stim)
         err = PS_SetPatternType(handles.box, channel, 0);
         if err
@@ -1477,4 +1491,17 @@ function comments_CreateFcn(hObject, eventdata, handles)
 %       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on slider movement.
+function yscale_Callback(hObject, eventdata, handles)
+global intan_voltage_amplification;
+set(handles.axes_top, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/intan_voltage_amplification);
+
+
+% --- Executes during object creation, after setting all properties.
+function yscale_CreateFcn(hObject, eventdata, handles)
+if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
