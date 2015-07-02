@@ -125,7 +125,7 @@ known_invalid = zeros(1, 16);
 intan_voltage_amplification = 515;
 current_amplification = 1;
 saving_stimulations = false;
-handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEnded'};
+handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 
 %handles.TerminalConfig = 'SingleEnded';
@@ -133,7 +133,7 @@ vvsi = [];
 comments = '';
 
 
-channel_ranges = 0.1 * [ 1 1 1 ];
+channel_ranges = 2 * [ 1 1 1 ];
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
@@ -334,7 +334,7 @@ scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 edata = event.Data;
 for i = 1:length(channels)
     disp(sprintf('Channel %d (%g V)', ...
-                i, max(abs(edata(i,:)))));
+                i, max(abs(edata(:,i)))));
     if any(abs(edata(i,:)) > channel_ranges(i))
         disp(sprintf('WARNING: Channel %d (%g V) exceeds expected max voltage %g', ...
                 i, max(abs(edata(i,:))), channel_ranges(i)));
@@ -373,7 +373,7 @@ v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 +
 
 
 % Fit the ROI for de-trending.
-roifit = [ 0.003  0.007 ];
+roifit = [ 0.003  0.008 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 lenfit = length(roitimesfit);
@@ -456,10 +456,10 @@ baz = legend(axes5, foo, 'FontSize', 8, 'Location', 'SouthWest');
 interpulse_at = triggertime + halftime_us/1e6;
 
 
+% Plot a blow-up of the interpulse period
 w = find(times_aligned > halftime_us/1e6 & times_aligned < halftime_us/1e6 + interpulse_s);
 w = w(1:end-1);
 min_interpulse_volts = min(abs(edata(w,1)))
-
 plot(axes4, times_aligned(w)*1000, edata(w,1));
 
 %%% Save for posterity!

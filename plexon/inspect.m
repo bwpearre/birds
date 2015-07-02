@@ -99,11 +99,11 @@ end
 load(handles.files{file});
 
 if doplot
-        
+        data
         tabledata{1,1} = sprintf('%d ', data.stim_electrodes);
         tabledata{2,1} = sprintf('%.3g uA', data.current);
-        if isfield(data, 'halftime')
-                tabledata{3,1} = sprintf('%d', round(data.halftime));
+        if isfield(data, 'halftime_us')
+                tabledata{3,1} = sprintf('%d us', round(data.halftime_us));
         else
                 tabledata{3,1} = '?';
         end
@@ -128,12 +128,8 @@ end
 knowngood(file) = sum(data.stim_electrodes) == 16 && data.current >= 2;
 set(handles.response1, 'Value', knowngood(file));        
 
-aftertrigger = 0.015;
+aftertrigger = 0.016;
 beforetrigger = -0.002;
-
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(2, 0.1, 'low');
-%data.data = filter(B, A, data.data);
 
 if ~isfield(data, 'version') % old format does not scale saved data
         scalefactor_V = 1/0.25;
@@ -174,9 +170,11 @@ if doplot
 end
 
 
+
+
 % Exponential curve-fit: use a slightly longer time period for better
 % results:
-roifit = [ 0.003  0.014 ];
+roifit = [ 0.003  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 lenfit = length(roitimesfit);
@@ -185,29 +183,47 @@ weightsfit = ones(1, lenfit);
 f = fit(roitimesfit, edata(roiifit, 3), 'exp2', ...
         'Weight', weightsfit, 'StartPoint', [1 -3000 1 -30], ...
         'Upper', [Inf -0.01 Inf -0.01], 'TolX', 1e-15, 'TolFun', 1e-15);
-ff = f.a .* exp(f.b * roitimesfit) + f.c .* exp(f.d * roitimesfit);
+roitrend = f.a .* exp(f.b * times_aligned) + f.c .* exp(f.d * times_aligned);
+len = length(times_aligned);
+detrended = edata(:, 3) - roitrend;
+
+roi = [0.003 0.008 ];
+roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
+roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
+roitimes = times_aligned(roii);
+roitimesplus = times_aligned(roiiplus);
 
 if doplot
         hold(handles.axes1, 'on');
-        plot(handles.axes1, roitimesfit, ff, 'g');
+        plot(handles.axes1, roitimesfit, roitrend(roiifit), 'g');
+        plot(handles.axes1, roitimes, detrended(roii), 'r');
+        plot(handles.axes1, roitimesplus, detrended(roiiplus), 'k');
         hold(handles.axes1, 'off');
 end
+
+
+
 
 % Store de-trended data in the ROI (smaller than the detrending fit
 % region):
-roi = roifit;
+responses_detrended(1:len, file) = detrended;
 
-roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
-roitimes = times_aligned(roii);
-len = length(roitimes);
-roitrend = f.a .* exp(f.b * roitimes) + f.c .* exp(f.d * roitimes);
-responses_detrended(1:len, file) = edata(roii, 3) - roitrend;
 
-if doplot
+% Let's try a high-pass filter, shall we?
+%disp('Bandpass-filtering the data...');
+%[B A] = butter(2, 0.07, 'high');
+if false
+    [B A] = ellip(6, .2, 60, 500/(data.fs/2), 'high');
+    data2 = filtfilt(B, A, edata(roiifit,3));
+    if doplot
         hold(handles.axes1, 'on');
-        plot(handles.axes1, roitimes, responses_detrended(1:len, file), 'r');
+        plot(handles.axes1, times_aligned(roiifit), data2 - 5e-5, 'm');
+        plot(handles.axes1, times_aligned(roiifit), data2 - responses_detrended(1:length(roiifit), file) - 1e-4, 'k');
         hold(handles.axes1, 'off');
+    end
+    %data.data = filter(B, A, data.data);
 end
+
 
 % Kludge so we can ask for the next one for xcorr below
 if size(responses_detrended, 2) == file
@@ -217,14 +233,14 @@ end
 
 
 if file > 1 & file < length(handles.files)
-        lastxc = [xcorr(responses_detrended(:, file-1), responses_detrended(:, file), 'coeff')'
-                  xcorr(responses_detrended(:, file+1), responses_detrended(:, file), 'coeff')']';
+        lastxc = [xcorr(responses_detrended(roii, file-1), responses_detrended(roii, file), 'coeff')'
+                  xcorr(responses_detrended(roii, file+1), responses_detrended(roii, file), 'coeff')']';
         %lastxc = xcorr(responses_detrended(:, file-1:file+1));
         corr_range = [min(corr_range(1), min(min(lastxc))) ...
                 max(corr_range(2), max(max(lastxc)))];
         if doplot
                 plot(handles.axes3, lastxc);
-                set(handles.axes3, 'XLim', [0 2*len], 'YLim', corr_range);
+                set(handles.axes3, 'XLim', [0 2*length(roii)], 'YLim', corr_range);
                 legend(handles.axes3, 'Prev', 'Next');
                 
                 if 0
@@ -243,7 +259,7 @@ if file > 1 & file < length(handles.files)
                 %[speck freqs times] = spectrogram(responses_detrended(:,file), window, [], freqs, data.fs);
                 [nfreqs, ntimes] = size(speck);
                 speck = speck + eps;
-                if doplot
+                if doplot & false
                         plot(handles.axes4, freqs, abs(speck));
                         %imagesc(log(abs(speck)), 'Parent', handles.axes4);
                         %axis(handles.axes4, 'xy');
@@ -265,6 +281,15 @@ if ~isempty(net)
         set(handles.response2, 'Value', sim(net, nnsetX(:,file)) > 0.5);
 end
 
+if doplot
+    w = find(times_aligned > halftime_us/1e6 & times_aligned < halftime_us/1e6 + interpulse_s);
+    w = w(1:end-1);
+    min_interpulse_volts = min(abs(edata(w,1)))
+    plot(handles.axes4, times_aligned(w)*1000, edata(w,1));
+    grid(handles.axes4, 'on');
+    xlabel(handles.axes4, 'ms');
+    ylabel(handles.axes4, 'V');
+end
 %set(handles.response2, 'Value', heur(file));
 
 guidata(hObject, handles);
