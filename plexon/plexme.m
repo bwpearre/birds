@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 29-Jun-2015 18:35:56
+% Last Modified by GUIDE v2.5 31-Jul-2015 16:17:02
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -87,11 +87,11 @@ global change;
 change = handles.INCREASE_STEP;
 global NEGFIRST;
 NEGFIRST = false;
-global axes_top;
-global axes_top_yscale;
-global axes_bottom;
+global axes1;
+global axes1_yscale;
+global axes2;
 global axes4;
-global axes5;
+global axes3;
 global rmsbox;
 global vvsi;
 global comments;
@@ -109,9 +109,11 @@ global current_amplification;
 global saving_stimulations;
 global intan_voltage_amplification;
 global channel_ranges;
+global bird;
 global datadir;
 global channels;
 
+bird = 'noname';
 datadir = 'noname';
 increase_type = 'current'; % or 'time'
 default_halftime_us = 400;
@@ -280,15 +282,15 @@ end
 addDigitalChannel(handles.NIsession, dev, 'Port0/Line0:1', 'InputOnly');
 
 handles.NI.listeners{1}=addlistener(handles.NIsession, 'DataAvailable',...
-	@(obj,event) NIsession_callback(obj, event));
+	@(obj,event) NIsession_callback(obj, event, handles.figure1));
 handles.NIsession.NotifyWhenDataAvailableExceeds=round(handles.NIsession.Rate*handles.NIsession.DurationInSeconds);
 prepare(handles.NIsession);
 
-axes_top = handles.axes_top;
-axes_top_yscale = handles.yscale;
-axes_bottom = handles.axes_bottom;
+axes1 = handles.axes1;
+axes1_yscale = handles.yscale;
+axes2 = handles.axes2;
 axes4 = handles.axes4;
-axes5 = handles.axes5;
+axes3 = handles.axes3;
 
 timer_sequence_running = false;
 
@@ -299,18 +301,18 @@ guidata(hObject, handles);
 
 
 %% Called by NI data acquisition background process at end of acquisition
-function NIsession_callback(obj, event)
+function NIsession_callback(obj, event, handlefigure)
 global VOLTAGE_RANGE_LAST_STIM;
 global electrode_last_stim;
 global CURRENT_uAMPS;
 global NEGFIRST;
 global stim_electrodes;
 global monitor_electrode;
-global axes_bottom;
-global axes_top;
-global axes_top_yscale;
+global axes2;
+global axes1;
+global axes1_yscale;
 global axes4;
-global axes5;
+global axes3;
 global rmsbox;
 global current_amplification;
 global channel_ranges;
@@ -318,10 +320,16 @@ global intan_voltage_amplification;
 global saving_stimulations;
 global halftime_us;
 global interpulse_s;
+global bird;
 global datadir;
 global channels;
 global comments;
 persistent rmshist;
+
+oldplot = false;
+
+disp('In NIsession_callback');
+guihandles(handlefigure)
 
 if isempty(datadir)
     datadir = 'null';
@@ -363,8 +371,10 @@ times_aligned = event.TimeStamps - triggertime;
 beforetrigger = max(times_aligned(1), -0.002);
 aftertrigger = min(times_aligned(end), 0.020);
 
-figure(1);
-plot(event.Data(:,1:2));
+if oldplot
+    figure(1);
+    plot(event.Data(:,1:2));
+end
 
 % u: indices into times_aligned that we want to show, aligned and shit.
 u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
@@ -393,29 +403,31 @@ responses_detrended = edata(roii, 3) - roitrend;
 
 
 %[B A] = butter(4, 0.1, 'low');
+if oldplot
 
-yy = plotyy(axes_bottom, times_aligned(v)*1000, edata(v,1), ...
-    times_aligned(v)*1000, edata(v,2));
-legend(axes_bottom, {obj.Channels(1).Name obj.Channels(2).Name});
-xlabel(axes_bottom, 'ms');
-set(get(yy(1),'Ylabel'),'String','V');
-set(get(yy(2),'Ylabel'),'String','\mu A');
-%set(get(yy(2),'YLim'), [-1 1] * CURRENT_uAMPS * 1.5);
-VOLTAGE_RANGE_LAST_STIM = [ max(edata(:,1)) min(edata(:,1))];
-electrode_last_stim = monitor_electrode;
+    yy = plotyy(axes2, times_aligned(v)*1000, edata(v,1), ...
+        times_aligned(v)*1000, edata(v,2));
+    legend(axes2, {obj.Channels(1).Name obj.Channels(2).Name});
+    xlabel(axes2, 'ms');
+    set(get(yy(1),'Ylabel'),'String','V');
+    set(get(yy(2),'Ylabel'),'String','\mu A');
+    %set(get(yy(2),'YLim'), [-1 1] * CURRENT_uAMPS * 1.5);
+    VOLTAGE_RANGE_LAST_STIM = [ max(edata(:,1)) min(edata(:,1))];
+    electrode_last_stim = monitor_electrode;
 
-plot(axes_top, times_aligned(u)*1000, edata(u,3)*1000);
-hold(axes_top, 'on');
-plot(axes_top, roitimes*1000, responses_detrended*1000, 'r');
-if true
-    plot(axes_top, roitimesfit*1000, ff*1000, 'g');
+    plot(axes1, times_aligned(u)*1000, edata(u,3)*1000);
+    hold(axes1, 'on');
+    plot(axes1, roitimes*1000, responses_detrended*1000, 'r');
+    if true
+        plot(axes1, roitimesfit*1000, ff*1000, 'g');
+    end
+    hold(axes1, 'off');
+    legend(axes1, obj.Channels(3).Name, 'Detrended', 'Trend');
+    ylabel(axes1, strcat(obj.Channels(3).Name, ' (mV)'));
+    set(axes1, 'XLim', [-2 20], ...
+                'YLim', (2^(get(axes1_yscale, 'Value')))*[-0.3 0.3]*1000/intan_voltage_amplification);
+    grid(axes1, 'on');
 end
-hold(axes_top, 'off');
-legend(axes_top, obj.Channels(3).Name, 'Detrended', 'Trend');
-ylabel(axes_top, strcat(obj.Channels(3).Name, ' (mV)'));
-set(axes_top, 'XLim', [-2 20], ...
-            'YLim', (2^(get(axes_top_yscale, 'Value')))*[-0.3 0.3]*1000/intan_voltage_amplification);
-grid(axes_top, 'on');
 
 %% Blow up the interpulse region--can we align this well?
 % What is the max voltage for the first millisecond of acquisition?  This
@@ -432,27 +444,30 @@ rmshist = [rmshist(2:end, :); Real_Voltage_RMS];
 llim = floor(log10(min(min(rmshist))));
 ulim = ceil(log10(max(max(rmshist))));
 
-%set(rmsbox, 'String', sprintf('[%s ] uV', ...
-%    sprintf('  %.3g', Real_Voltage_RMS * 1e6)));
-yyrms = plotyy(axes5, 1:50, rmshist(:,1:2) * 1e6, ...
-                      1:50, rmshist(:,3) * 1e6);
-for i = 1:2   
-    foo = get(yyrms(i), 'YLim');
-    foo(1) = 0;
-    set(yyrms(i), 'XLim', [1 50], 'YLim', foo, 'YTickMode', 'auto');
+if oldplot
+
+    %set(rmsbox, 'String', sprintf('[%s ] uV', ...
+    %    sprintf('  %.3g', Real_Voltage_RMS * 1e6)));
+    yyrms = plotyy(axes3, 1:50, rmshist(:,1:2) * 1e6, ...
+                          1:50, rmshist(:,3) * 1e6);
+    for i = 1:2   
+        foo = get(yyrms(i), 'YLim');
+        foo(1) = 0;
+        set(yyrms(i), 'XLim', [1 50], 'YLim', foo, 'YTickMode', 'auto');
+    end
+    title(axes3, 'RMS (\mu V true)');
+    npts = 50;
+    foo = 10.^linspace(1, 1, npts);
+    foo = foo / sum(foo);
+    wmeans = sum(rmshist(end-npts+1:end, 1:3) .* repmat(foo', 1, 3));
+    clear foo;
+    for i = 1:3
+        foo{i} = sprintf('Ch %d RMS %.0f', i, wmeans(i) * 1e6);
+    end
+    baz = legend(axes3, foo, 'FontSize', 8, 'Location', 'SouthWest');
 end
-title(axes5, 'RMS (\mu V true)');
-npts = 50;
-foo = 10.^linspace(1, 1, npts);
-foo = foo / sum(foo);
-wmeans = sum(rmshist(end-npts+1:end, 1:3) .* repmat(foo', 1, 3));
-clear foo;
-for i = 1:3
-    foo{i} = sprintf('Ch %d RMS %.0f', i, wmeans(i) * 1e6);
-end
-baz = legend(axes5, foo, 'FontSize', 8, 'Location', 'SouthWest');
 %rmsticks = 10.^[llim:ulim];
-%set(axes5, 'YGrid', 'on', 'XLim', [1 50], 'YLim', 10.^[llim ulim], 'YTick', rmsticks);
+%set(axes3, 'YGrid', 'on', 'XLim', [1 50], 'YLim', 10.^[llim ulim], 'YTick', rmsticks);
 interpulse_at = triggertime + halftime_us/1e6;
 
 
@@ -460,14 +475,16 @@ interpulse_at = triggertime + halftime_us/1e6;
 w = find(times_aligned > halftime_us/1e6 & times_aligned < halftime_us/1e6 + interpulse_s);
 w = w(1:end-1);
 min_interpulse_volts = min(abs(edata(w,1)))
-plot(axes4, times_aligned(w)*1000, edata(w,1));
+if oldplot
+    plot(axes4, times_aligned(w)*1000, edata(w,1));
+end
 
 %%% Save for posterity!
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
 nchannels = length(obj.Channels);
 
-data.version = 5;
+data.version = 6;
 data.halftime_us = halftime_us;
 data.interpulse_s = interpulse_s;
 data.current = CURRENT_uAMPS;
@@ -483,12 +500,15 @@ data.names = {};
 data.triggertime = triggertime;
 data.parameters.sensor_range = {};
 data.comments = comments;
+data.bird = bird;
 
 for i=1:nchannels
 	data.labels{i} = obj.Channels(i).ID;
 	data.names{i} = obj.Channels(i).Name;
 	%data.parameters.sensor_range{i} = obj.Channels(i).Range;
 end
+
+plot_stimulation(data, guihandles(handlefigure));
 
 if saving_stimulations
     datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
@@ -830,7 +850,7 @@ guidata(hObject, handles);
 function stop_Callback(hObject, eventdata, handles)
 global vvsi;
 global monitor_electrode;
-global axes_top;
+global axes1;
 global increase_type;
 
 disp('Stopping everything...');
@@ -848,19 +868,19 @@ end
 if ~isempty(vvsi)
     this_electrode = find(vvsi(:,1) == monitor_electrode);
     if false
-        cla(axes_top);
-        hold(axes_top, 'on');
+        cla(axes1);
+        hold(axes1, 'on');
         switch increase_type
             case 'current'
                 abscissa = 2;
             case 'time'
                 abscissa = 6;
         end
-        scatter(axes_top, vvsi(this_electrode,abscissa), vvsi(this_electrode,4), 'b');
-        scatter(axes_top, vvsi(this_electrode,abscissa), vvsi(this_electrode,5), 'r');
-        hold(axes_top, 'off');
+        scatter(axes1, vvsi(this_electrode,abscissa), vvsi(this_electrode,4), 'b');
+        scatter(axes1, vvsi(this_electrode,abscissa), vvsi(this_electrode,5), 'r');
+        hold(axes1, 'off');
     end
-    %set(axes_top, 'YLim', [min(vvsi(this_electrode,5)) max(vvsi(this_electrode,4))]);
+    %set(axes1, 'YLim', [min(vvsi(this_electrode,5)) max(vvsi(this_electrode,4))]);
 end
 
 guidata(hObject, handles);
@@ -1462,8 +1482,10 @@ saving_stimulations = get(hObject, 'Value');
 
 function birdname_Callback(hObject, eventdata, handles)
 global datadir;
+global bird;
 
-datadir = strcat(get(hObject,'String'), '-', datestr(now, 'yyyy-mm-dd'));
+bird = get(hObject,'String');
+datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
 set(hObject, 'BackgroundColor', [0 0.8 0]);
 
 % --- Executes during object creation, after setting all properties.
@@ -1497,7 +1519,7 @@ end
 % --- Executes on slider movement.
 function yscale_Callback(hObject, eventdata, handles)
 global intan_voltage_amplification;
-set(handles.axes_top, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/intan_voltage_amplification);
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/intan_voltage_amplification);
 
 
 % --- Executes during object creation, after setting all properties.
