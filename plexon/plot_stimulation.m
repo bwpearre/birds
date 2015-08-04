@@ -10,7 +10,15 @@ if isempty(corr_range)
         corr_range = [0 eps];
 end
 
-handles
+% If plot_stimulation is called from a timer or DAQ callback, the axes are
+% not present in the handles structure.  You may need a beer for this
+% one...
+if ~isfield(handles, 'axes1')
+    handles.axes1 = axes1;
+    handles.axes2 = axes2;
+    handles.axes3 = axes3;
+    handles.axes4 = axes4;
+end
 
 persistent responses_detrended_prev;
 
@@ -28,7 +36,18 @@ if ~isfield(data, 'version') % old format does not scale saved data
         data.data(:,1) = data.data(:,1) * scalefactor_V;
         data.data(:,2) = data.data(:,2) * scalefactor_i;
 end
+
 edata = data.data;
+
+% Let's try a filter, shall we?
+%disp('Bandpass-filtering the data...');
+%[B A] = butter(2, 0.07, 'high');
+if true
+    [B A] = ellip(2, .5, 20, [300 3000]/(data.fs/2));
+    edata(:,3) = filtfilt(B, A, edata(:,3));
+end
+
+
 halftime_us = data.halftime_us;
 interpulse_s = data.interpulse_s;
 times_aligned = data.times_aligned;
@@ -49,7 +68,7 @@ if doplot
             'XLim', [beforetrigger aftertrigger], ...
             'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
         legend(handles.axes1, data.names{3});
-        ylabel(handles.axes1, data.names{3});
+        ylabel(handles.axes1, 'volts');
         grid(handles.axes1, 'on');
        
         yy = plotyy(handles.axes3, times_aligned(v), edata(v,1), ...
@@ -61,22 +80,39 @@ if doplot
 end
 
 
+% Try:
+% Fourier, 8 terms
+% Polynomial, degree 8
+% Smoothing spline with specify 0.9999999999? Hmmm...
 
 
-% Exponential curve-fit: use a slightly longer time period for better
-% results:
-roifit = [ 0.003  0.016 ];
+% Curve-fit: use a slightly longer time period
+roifit = [ 0.0027  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
+len = length(times_aligned);
 lenfit = length(roitimesfit);
 weightsfit = linspace(1, 0, lenfit);
 weightsfit = ones(1, lenfit);
-f = fit(roitimesfit, edata(roiifit, 3), 'exp2', ...
-        'Weight', weightsfit, 'StartPoint', [1 -3000 1 -30], ...
-        'Upper', [Inf -0.01 Inf -0.01], 'TolX', 1e-15, 'TolFun', 1e-15);
-roitrend = f.a .* exp(f.b * times_aligned) + f.c .* exp(f.d * times_aligned);
-len = length(times_aligned);
+
+fittype = 'fourier8';
+opts = fitoptions;
+opts.Normalize = 'on';
+
+switch fittype
+    case 'exp2'
+        opts = fitoptions(opts, 'StartPoint', [1 -3000 1 -30], ...
+                'Upper', [Inf -0.01 Inf -0.01] );
+    case 'fourier8'
+    case 'poly8'
+end
+
+f = fit(roitimesfit, edata(roiifit, 3), fittype, opts);
+roitrend = f(times_aligned);
+
 responses_detrended = edata(:, 3) - roitrend;
+
+%cftool(roitimesfit,edata(roiifit,3))
 
 roi = [0.003 0.008 ];
 roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
@@ -94,20 +130,6 @@ end
 
 
 
-% Let's try a high-pass filter, shall we?
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(2, 0.07, 'high');
-if false
-    [B A] = ellip(6, .2, 60, 500/(data.fs/2), 'high');
-    data2 = filtfilt(B, A, edata(roiifit,3));
-    if doplot
-        hold(handles.axes1, 'on');
-        plot(handles.axes1, times_aligned(roiifit), data2 - 5e-5, 'm');
-        plot(handles.axes1, times_aligned(roiifit), data2 - responses_detrended(1:length(roiifit)) - 1e-4, 'k');
-        hold(handles.axes1, 'off');
-    end
-    %data.data = filter(B, A, data.data);
-end
 
 
 if ~isempty(responses_detrended_prev)
@@ -160,7 +182,7 @@ if doplot
     w = find(times_aligned >= halftime_us/1e6 - 0.00003 ...
         & times_aligned < halftime_us/1e6 + interpulse_s + 0.00001);
     %w = w(1:end-1);
-    min_interpulse_volts = min(abs(edata(w,1)))
+    min_interpulse_volts = min(abs(edata(w,1)));
     plot(handles.axes4, times_aligned(w)*1000, edata(w,1));
     grid(handles.axes4, 'on');
     xlabel(handles.axes4, 'ms');

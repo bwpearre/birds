@@ -302,18 +302,10 @@ guidata(hObject, handles);
 
 %% Called by NI data acquisition background process at end of acquisition
 function NIsession_callback(obj, event, handlefigure)
-global VOLTAGE_RANGE_LAST_STIM;
-global electrode_last_stim;
 global CURRENT_uAMPS;
 global NEGFIRST;
 global stim_electrodes;
 global monitor_electrode;
-global axes2;
-global axes1;
-global axes1_yscale;
-global axes4;
-global axes3;
-global rmsbox;
 global current_amplification;
 global channel_ranges;
 global intan_voltage_amplification;
@@ -326,11 +318,6 @@ global channels;
 global comments;
 persistent rmshist;
 
-oldplot = false;
-
-disp('In NIsession_callback');
-guihandles(handlefigure)
-
 if isempty(datadir)
     datadir = 'null';
 end
@@ -341,10 +328,10 @@ scalefactor_V = 1/PS_GetVmonScaling(1); % V/V !!!!!!!!!!!!!!!!!!!!!!!
 scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 edata = event.Data;
 for i = 1:length(channels)
-    disp(sprintf('Channel %d (%g V)', ...
-                i, max(abs(edata(:,i)))));
+    %disp(sprintf('Channel %d (%g V)', ...
+    %            i, max(abs(edata(:,i)))));
     if any(abs(edata(i,:)) > channel_ranges(i))
-        disp(sprintf('WARNING: Channel %d (%g V) exceeds expected max voltage %g', ...
+        disp(sprintf('WARNING: Channel %d peak (%g V) exceeds expected max measurement voltage %g', ...
                 i, max(abs(edata(i,:))), channel_ranges(i)));
     end
 end
@@ -352,7 +339,9 @@ edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
 edata(:,3) = event.Data(:,3) / intan_voltage_amplification;
 
-% FIXME change data.data to edata
+file_basename = 'stim';
+file_format = 'yyyymmdd_HHMMSS.FFF';
+nchannels = length(obj.Channels);
 
 data.time = event.TimeStamps;
 data.fs = obj.Rate;
@@ -365,133 +354,16 @@ if isempty(triggertime)
     disp('No trigger!');
     return;
 end    
-
 % times_aligned is data.time aligned so spike=0
-times_aligned = event.TimeStamps - triggertime;
-beforetrigger = max(times_aligned(1), -0.002);
-aftertrigger = min(times_aligned(end), 0.020);
-
-if oldplot
-    figure(1);
-    plot(event.Data(:,1:2));
-end
-
-% u: indices into times_aligned that we want to show, aligned and shit.
-u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
-% v is the times to show for the pulse
-v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
-
-
-% Fit the ROI for de-trending.
-roifit = [ 0.003  0.008 ];
-roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
-roitimesfit = times_aligned(roiifit);
-lenfit = length(roitimesfit);
-weightsfit = linspace(1, 0, lenfit);
-weightsfit = ones(1, lenfit);
-f = fit(roitimesfit, edata(roiifit, 3), 'exp2', ...
-        'Weight', weightsfit, 'StartPoint', [1 -3000 1 -30], ...
-        'Upper', [Inf -0.01 Inf -0.01], 'TolX', 1e-15, 'TolFun', 1e-15);
-ff = f.a .* exp(f.b * roitimesfit) + f.c .* exp(f.d * roitimesfit);
-
-roi = roifit;
-roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
-roitimes = times_aligned(roii);
-len = length(roitimes);
-roitrend = f.a .* exp(f.b * roitimes) + f.c .* exp(f.d * roitimes);
-responses_detrended = edata(roii, 3) - roitrend;
-
-
-%[B A] = butter(4, 0.1, 'low');
-if oldplot
-
-    yy = plotyy(axes2, times_aligned(v)*1000, edata(v,1), ...
-        times_aligned(v)*1000, edata(v,2));
-    legend(axes2, {obj.Channels(1).Name obj.Channels(2).Name});
-    xlabel(axes2, 'ms');
-    set(get(yy(1),'Ylabel'),'String','V');
-    set(get(yy(2),'Ylabel'),'String','\mu A');
-    %set(get(yy(2),'YLim'), [-1 1] * CURRENT_uAMPS * 1.5);
-    VOLTAGE_RANGE_LAST_STIM = [ max(edata(:,1)) min(edata(:,1))];
-    electrode_last_stim = monitor_electrode;
-
-    plot(axes1, times_aligned(u)*1000, edata(u,3)*1000);
-    hold(axes1, 'on');
-    plot(axes1, roitimes*1000, responses_detrended*1000, 'r');
-    if true
-        plot(axes1, roitimesfit*1000, ff*1000, 'g');
-    end
-    hold(axes1, 'off');
-    legend(axes1, obj.Channels(3).Name, 'Detrended', 'Trend');
-    ylabel(axes1, strcat(obj.Channels(3).Name, ' (mV)'));
-    set(axes1, 'XLim', [-2 20], ...
-                'YLim', (2^(get(axes1_yscale, 'Value')))*[-0.3 0.3]*1000/intan_voltage_amplification);
-    grid(axes1, 'on');
-end
-
-%% Blow up the interpulse region--can we align this well?
-% What is the max voltage for the first millisecond of acquisition?  This
-% is before the pulse, I assume...(?)
-beforepulse = find(times_aligned < 0);
-beforepulse = beforepulse(1:end-1);
-Real_Voltage_RMS = rms(event.Data(beforepulse,1:length(channels)));
-
-if isempty(rmshist)
-    rmshist = repmat(Real_Voltage_RMS, 50, 1);
-end
-
-rmshist = [rmshist(2:end, :); Real_Voltage_RMS];
-llim = floor(log10(min(min(rmshist))));
-ulim = ceil(log10(max(max(rmshist))));
-
-if oldplot
-
-    %set(rmsbox, 'String', sprintf('[%s ] uV', ...
-    %    sprintf('  %.3g', Real_Voltage_RMS * 1e6)));
-    yyrms = plotyy(axes3, 1:50, rmshist(:,1:2) * 1e6, ...
-                          1:50, rmshist(:,3) * 1e6);
-    for i = 1:2   
-        foo = get(yyrms(i), 'YLim');
-        foo(1) = 0;
-        set(yyrms(i), 'XLim', [1 50], 'YLim', foo, 'YTickMode', 'auto');
-    end
-    title(axes3, 'RMS (\mu V true)');
-    npts = 50;
-    foo = 10.^linspace(1, 1, npts);
-    foo = foo / sum(foo);
-    wmeans = sum(rmshist(end-npts+1:end, 1:3) .* repmat(foo', 1, 3));
-    clear foo;
-    for i = 1:3
-        foo{i} = sprintf('Ch %d RMS %.0f', i, wmeans(i) * 1e6);
-    end
-    baz = legend(axes3, foo, 'FontSize', 8, 'Location', 'SouthWest');
-end
-%rmsticks = 10.^[llim:ulim];
-%set(axes3, 'YGrid', 'on', 'XLim', [1 50], 'YLim', 10.^[llim ulim], 'YTick', rmsticks);
-interpulse_at = triggertime + halftime_us/1e6;
-
-
-% Plot a blow-up of the interpulse period
-w = find(times_aligned > halftime_us/1e6 & times_aligned < halftime_us/1e6 + interpulse_s);
-w = w(1:end-1);
-min_interpulse_volts = min(abs(edata(w,1)))
-if oldplot
-    plot(axes4, times_aligned(w)*1000, edata(w,1));
-end
-
-%%% Save for posterity!
-file_basename = 'stim';
-file_format = 'yyyymmdd_HHMMSS.FFF';
-nchannels = length(obj.Channels);
 
 data.version = 6;
+data.times_aligned = event.TimeStamps - triggertime;
 data.halftime_us = halftime_us;
 data.interpulse_s = interpulse_s;
 data.current = CURRENT_uAMPS;
 data.data = edata;
 data.negativefirst = NEGFIRST;
 data.time = event.TimeStamps;
-data.times_aligned = times_aligned;
 data.stim_electrodes = stim_electrodes;
 data.monitor_electrode = monitor_electrode;
 data.fs = obj.Rate;
@@ -1136,6 +1008,7 @@ global electrode_last_stim;
 global stim_electrodes;
 global monitor_electrode;
 global timer_sequence_running;
+global axes1;
 
 global vvsi;  % Voltages vs current for each stimulation
 
@@ -1469,7 +1342,6 @@ function i_amplification_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
 
 
 
