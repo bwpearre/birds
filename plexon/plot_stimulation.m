@@ -43,7 +43,7 @@ edata = data.data;
 %disp('Bandpass-filtering the data...');
 %[B A] = butter(2, 0.07, 'high');
 if get(handles.response_filter, 'Value')
-    [B A] = ellip(2, .5, 20, [300 3000]/(data.fs/2));
+    [B A] = ellip(2, .5, 40, [300 10000]/(data.fs/2));
     edata(:,3) = filtfilt(B, A, edata(:,3));
 end
 
@@ -62,8 +62,12 @@ v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 +
 axes1legend = {};
 if doplot
     if get(handles.response_show_raw, 'Value')
-        plot(handles.axes1, times_aligned(u), edata(u,3));
+        plot(handles.axes1, times_aligned(u), edata(u,3), 'b');
         axes1legend{end+1} = 'Measured';
+        hold(handles.axes1, 'on');
+        plot(handles.axes1, times_aligned(u), edata(u,4), 'c');
+        axes1legend{end+1} = 'trigger';
+        hold(handles.axes1, 'off');
     else
         cla(handles.axes1);
     end

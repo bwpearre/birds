@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 31-Jul-2015 16:17:02
+% Last Modified by GUIDE v2.5 05-Aug-2015 16:38:03
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -112,6 +112,10 @@ global channel_ranges;
 global bird;
 global datadir;
 global channels;
+global n_repetitions repetition_Hz;
+
+n_repetitions = 20;
+repetition_Hz = 10;
 
 bird = 'noname';
 datadir = 'noname';
@@ -154,6 +158,7 @@ set(handles.negativefirst, 'Value', NEGFIRST);
 set(handles.select_all_valid, 'Enable', 'off');
 set(handles.i_amplification, 'String', sprintf('%g', current_amplification));
 set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
+set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
 
 newvals = {};
 for i = 1:16
@@ -165,7 +170,7 @@ set(handles.monitor_electrode_control, 'String', newvals);
 
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
-        handles.vvsi_auto_safe};
+        handles.vvsi_auto_safe, handles.n_repetitions_box};
 for i = 1:16
     cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i);
     eval(cmd);
@@ -247,13 +252,13 @@ set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
 
 %% Open NI acquisition board
 dev='Dev2'; % location of input device
-channels = [0 1 7];
-channel_labels = {'Voltage', 'Current', 'Response', 'error23842'}; % labels for INCHANNELS
+channels = [ 0 1 7 ];
+channel_labels = {'Voltage', 'Current', 'Response', 'Trigger'}; % labels for INCHANNELS
 daq.reset;
 handles.NIsession = daq.createSession('ni');
 handles.NIsession.Rate = 100000;
 handles.NIsession.IsContinuous = 0;
-handles.NIsession.DurationInSeconds = 0.025;
+handles.NIsession.DurationInSeconds = 1/repetition_Hz * n_repetitions + 0.03;
 global channel_ranges;
 % FIXME Add TTL-triggered acquisition?
 %addTriggerConnection(handles.NIsession,'External','Dev1/PFI0','StartTrigger');
@@ -279,6 +284,7 @@ for i = 1:length(channels)
  		error('Could not set NiDaq input type');
     end
 end
+
 addDigitalChannel(handles.NIsession, dev, 'Port0/Line0:1', 'InputOnly');
 
 handles.NI.listeners{1}=addlistener(handles.NIsession, 'DataAvailable',...
@@ -317,6 +323,7 @@ global datadir;
 global channels;
 global comments;
 persistent rmshist;
+global n_repetitions repetition_Hz;
 
 if isempty(datadir)
     datadir = 'null';
@@ -338,16 +345,39 @@ end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
 edata(:,3) = event.Data(:,3) / intan_voltage_amplification;
+edata_rawish = edata;
 
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
 nchannels = length(obj.Channels);
 
+%figure(1);
+%plot(event.Data);
+
 data.time = event.TimeStamps;
 data.fs = obj.Rate;
 
 triggerchannel = 4;
-triggerthreshold = 0.5;
+triggerthreshold = (max(abs(event.Data(:,triggerchannel))) + min(abs(event.Data(:,triggerchannel))))/2;
+trigger_ind = event.Data(:,triggerchannel) > triggerthreshold;
+trigger_ind = find(diff(trigger_ind) == 1) + 1;
+triggertimes = event.TimeStamps(trigger_ind);
+
+if n_repetitions ~= length(trigger_ind)
+    disp(sprintf('Warning: tried to repeat the pattern %d times, but only see %d triggers', ...
+        n_repetitions, length(trigger_ind)));
+    return;
+end
+
+for n = length(trigger_ind):-1:1
+    start_ind = trigger_ind(n) - trigger_ind(1) + 1;
+    foo(n,:,:) = edata(start_ind:start_ind+ceil(0.025*data.fs),:);
+end
+edata = mean(foo);
+if length(size(foo)) == 3
+    edata = squeeze(edata);
+end
+
 
 triggertime = event.TimeStamps(find(event.Data(:,triggerchannel) >= triggerthreshold, 1));
 if isempty(triggertime)
@@ -356,11 +386,14 @@ if isempty(triggertime)
 end    
 % times_aligned is data.time aligned so spike=0
 
-data.version = 6;
-data.times_aligned = event.TimeStamps - triggertime;
+data.version = 7;
+data.n_repetitions = n_repetitions;
+data.repetition_Hz = repetition_Hz;
+data.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
 data.halftime_us = halftime_us;
 data.interpulse_s = interpulse_s;
 data.current = CURRENT_uAMPS;
+data.data_raw = edata_rawish;
 data.data = edata;
 data.negativefirst = NEGFIRST;
 data.time = event.TimeStamps;
@@ -837,7 +870,7 @@ try
                 throw(ME);
         end
 
-        err = PS_SetRepetitions(1, channel, 1);
+        err = PS_SetRepetitions(handles.box, channel, 1);
         if err
             ME = MException('plexon:pattern', 'Could not set repetition on channel %d', channel);
             throw(ME);
@@ -1009,6 +1042,7 @@ global stim_electrodes;
 global monitor_electrode;
 global timer_sequence_running;
 global axes1;
+global n_repetitions repetition_Hz;
 
 global vvsi;  % Voltages vs current for each stimulation
 
@@ -1069,9 +1103,15 @@ try
         end
                 
 
-        err = PS_SetRepetitions(1, channel, 1);
+        err = PS_SetRepetitions(handles.box, channel, n_repetitions);
         if err
-            ME = MException('plexon:pattern', 'Could not set repetition on channel %d', channel);
+            ME = MException('plexon:pattern', 'Could not set repetitions on channel %d', channel);
+            throw(ME);
+        end
+        
+        err = PS_SetRate(handles.box, channel, repetition_Hz);
+        if err
+            ME = MException('plexon:pattern', 'Could not set repetition rate on channel %d', channel);
             throw(ME);
         end
 
@@ -1333,12 +1373,6 @@ current_amplification = str2double(get(hObject,'String'));
 
 % --- Executes during object creation, after setting all properties.
 function i_amplification_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to i_amplification (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -1377,12 +1411,6 @@ comments = get(hObject, 'String');
 
 % --- Executes during object creation, after setting all properties.
 function comments_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to comments (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -1398,4 +1426,28 @@ set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/in
 function yscale_CreateFcn(hObject, eventdata, handles)
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
+end
+
+
+function response_show_raw_Callback(hObject, eventdata, handles)
+
+function response_show_trend_Callback(hObject, eventdata, handles)
+
+function response_show_detrended_Callback(hObject, eventdata, handles)
+
+function response_filter_Callback(hObject, eventdata, handles)
+
+
+
+function n_repetitions_box_Callback(hObject, eventdata, handles)
+% This is broken for some unknown reason...
+global n_repetitions repetition_Hz;
+n_repetitions = str2double(get(hObject, 'String'));
+handles.NIsession.DurationInSeconds = 1/repetition_Hz * n_repetitions + 0.03;
+prepare(handles.NIsession);
+guidata(hObject, handles);
+
+function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
 end
