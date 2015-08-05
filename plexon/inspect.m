@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 31-Jul-2015 16:22:14
+% Last Modified by GUIDE v2.5 04-Aug-2015 22:21:59
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -75,17 +75,17 @@ guidata(hObject, handles);
 
 
 
-function varargout = inspect_OutputFcn(hObject, eventdata, handles) 
+function varargout = inspect_OutputFcn(hObject, ~, handles) 
 varargout{1} = handles.output;
 
 
 % --- Executes on selection change in listbox1.
-function listbox1_Callback(hObject, eventdata, handles)
+function listbox1_Callback(hObject, ~, handles)
 file = handles.sorted_index(get(hObject,'Value'));
-do_file(hObject, eventdata, handles, file, true);
+do_file(hObject, handles, file, true);
 
 
-function do_file(hObject, eventdata, handles, file, doplot);
+function do_file(hObject, handles, file, doplot);
 
 load(handles.files{file});
 
@@ -167,7 +167,7 @@ end
 nfiles = length(handles.files);
 for file = 1:nfiles
         waitbar(file / nfiles);
-        do_file(hObject, eventdata, handles, file, false);
+        do_file(hObject, handles, file, false);
 end
 
 
@@ -262,3 +262,20 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
+% --- Executes on button press in response_show_raw.
+function response_show_raw_Callback(hObject, eventdata, handles)
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+% --- Executes on button press in response_show_trend.
+function response_show_trend_Callback(hObject, eventdata, handles)
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+
+% --- Executes on button press in response_show_detrended.
+function response_show_detrended_Callback(hObject, eventdata, handles)
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+
+% --- Executes on button press in response_filter.
+function response_filter_Callback(hObject, eventdata, handles)
+listbox1_Callback(handles.listbox1, eventdata, handles);

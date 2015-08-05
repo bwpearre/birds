@@ -42,7 +42,7 @@ edata = data.data;
 % Let's try a filter, shall we?
 %disp('Bandpass-filtering the data...');
 %[B A] = butter(2, 0.07, 'high');
-if true
+if get(handles.response_filter, 'Value')
     [B A] = ellip(2, .5, 20, [300 3000]/(data.fs/2));
     edata(:,3) = filtfilt(B, A, edata(:,3));
 end
@@ -59,24 +59,29 @@ u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
 % v is the times to show for the pulse
 v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
 
+axes1legend = {};
 if doplot
-        
+    if get(handles.response_show_raw, 'Value')
         plot(handles.axes1, times_aligned(u), edata(u,3));
-        xl = get(handles.axes1, 'XLim');
-        xl(1) = beforetrigger;
-        set(handles.axes1, ...
-            'XLim', [beforetrigger aftertrigger], ...
-            'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
-        legend(handles.axes1, data.names{3});
-        ylabel(handles.axes1, 'volts');
-        grid(handles.axes1, 'on');
-       
-        yy = plotyy(handles.axes3, times_aligned(v), edata(v,1), ...
-                times_aligned(v), edata(v,2));
-        legend(handles.axes3, data.names{1:2});
-        xlabel(handles.axes3, 'ms');
-        set(get(yy(1),'Ylabel'),'String','V')
-        set(get(yy(2),'Ylabel'),'String','\mu A')
+        axes1legend{end+1} = 'Measured';
+    else
+        cla(handles.axes1);
+    end
+    title(handles.axes1, 'HVC Response');
+    xl = get(handles.axes1, 'XLim');
+    xl(1) = beforetrigger;
+    set(handles.axes1, ...
+        'XLim', [beforetrigger aftertrigger], ...
+        'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
+    ylabel(handles.axes1, 'volts');
+    grid(handles.axes1, 'on');
+
+    yy = plotyy(handles.axes3, times_aligned(v), edata(v,1), ...
+            times_aligned(v), edata(v,2));
+    legend(handles.axes3, data.names{1:2});
+    xlabel(handles.axes3, 'ms');
+    set(get(yy(1),'Ylabel'),'String','V')
+    set(get(yy(2),'Ylabel'),'String','\mu A')
 end
 
 
@@ -121,11 +126,20 @@ roitimes = times_aligned(roii);
 roitimesplus = times_aligned(roiiplus);
 
 if doplot
-        hold(handles.axes1, 'on');
+    hold(handles.axes1, 'on');
+    if get(handles.response_show_trend, 'Value')
         plot(handles.axes1, roitimesfit, roitrend(roiifit), 'g');
+        axes1legend{end+1} = 'Trend';
+    end
+    if get(handles.response_show_detrended, 'Value')
         plot(handles.axes1, roitimes, responses_detrended(roii), 'r');
         plot(handles.axes1, roitimesplus, responses_detrended(roiiplus), 'k');
-        hold(handles.axes1, 'off');
+        axes1legend{end+1} = 'Detrended';
+    end
+    hold(handles.axes1, 'off');
+    if ~isempty(axes1legend)
+        legend(handles.axes1, axes1legend);
+    end
 end
 
 
