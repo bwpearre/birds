@@ -22,9 +22,15 @@ end
 
 persistent responses_detrended_prev;
 
+if data.version >= 7
+    n_repetitions = data.n_repetitions;
+end
 % doplot could be a parameter, and it was, but let's just hardcode it for
 % now...
 doplot = true;
+
+
+
 
 
 aftertrigger = 0.016;
@@ -62,6 +68,33 @@ v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 +
 axes1legend = {};
 if doplot
     if get(handles.response_show_raw, 'Value')
+        
+        %% If available, plot each trace individually
+        if data.version >= 8
+            figure(1);
+            plot(squeeze(data.data_aligned(:,:,3))');
+        elseif data.version == 7
+            triggerchannel = 4;
+            triggerthreshold = (max(abs(data.data_raw(:,triggerchannel))) + min(abs(data.data_raw(:,triggerchannel))))/2;
+            trigger_ind = data.data_raw(:,triggerchannel) > triggerthreshold;
+            trigger_ind = find(diff(trigger_ind) == 1) + 1;
+            triggertimes = data.time(trigger_ind);
+            
+            if n_repetitions ~= length(trigger_ind)
+                disp(sprintf('Warning: tried to repeat the pattern %d times, but only see %d triggers', ...
+                    n_repetitions, length(trigger_ind)));
+                return;
+            end
+            
+            for n = length(trigger_ind):-1:1
+                start_ind = trigger_ind(n) - trigger_ind(1) + 1;
+                foo(n,:,:) = data.data_raw(start_ind:start_ind+ceil(0.025*data.fs),:);
+            end
+            figure(1);
+            plot(squeeze(foo(:,:,3))');
+        end
+
+        
         plot(handles.axes1, times_aligned(u), edata(u,3), 'b');
         axes1legend{end+1} = 'Measured';
         hold(handles.axes1, 'on');
@@ -114,6 +147,7 @@ switch fittype
                 'Upper', [Inf -0.01 Inf -0.01] );
     case 'fourier8'
     case 'poly8'
+    otherwise
 end
 
 f = fit(roitimesfit, edata(roiifit, 3), fittype, opts);

@@ -115,7 +115,7 @@ global channels;
 global n_repetitions repetition_Hz;
 
 n_repetitions = 20;
-repetition_Hz = 10;
+repetition_Hz = 5;
 
 bird = 'noname';
 datadir = 'noname';
@@ -371,10 +371,12 @@ end
 
 for n = length(trigger_ind):-1:1
     start_ind = trigger_ind(n) - trigger_ind(1) + 1;
-    foo(n,:,:) = edata(start_ind:start_ind+ceil(0.025*data.fs),:);
+    data_aligned(n,:,:) = edata(start_ind:start_ind+ceil(0.025*data.fs),:);
 end
-edata = mean(foo);
-if length(size(foo)) == 3
+figure(1);
+plot(squeeze(data_aligned(:,3,:)));
+edata = mean(data_aligned);
+if length(size(data_aligned)) == 3
     edata = squeeze(edata);
 end
 
@@ -386,7 +388,7 @@ if isempty(triggertime)
 end    
 % times_aligned is data.time aligned so spike=0
 
-data.version = 7;
+data.version = 8;
 data.n_repetitions = n_repetitions;
 data.repetition_Hz = repetition_Hz;
 data.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
@@ -394,6 +396,7 @@ data.halftime_us = halftime_us;
 data.interpulse_s = interpulse_s;
 data.current = CURRENT_uAMPS;
 data.data_raw = edata_rawish;
+data.data_aligned = data_aligned;
 data.data = edata;
 data.negativefirst = NEGFIRST;
 data.time = event.TimeStamps;
