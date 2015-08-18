@@ -48,10 +48,18 @@ edata = data.data;
 % Let's try a filter, shall we?
 %disp('Bandpass-filtering the data...');
 %[B A] = butter(2, 0.07, 'high');
+
 if get(handles.response_filter, 'Value')
-    [B A] = ellip(2, .5, 40, [300 10000]/(data.fs/2));
+    [B A] = ellip(2, .5, 40, [300 9000]/(data.fs/2));
+
     edata(:,3) = filtfilt(B, A, edata(:,3));
+    if data.version >= 8
+        data.data_aligned(:,:,3) = filtfilt(B, A, data.data_aligned(:,:,3));
+    else
+        data.data_raw(:,3) = filtfilt(B, A, data.data_raw(:,3));
+    end
 end
+
 
 
 halftime_us = data.halftime_us;
@@ -64,16 +72,14 @@ aftertrigger = min(times_aligned(end), aftertrigger);
 u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
 % v is the times to show for the pulse
 v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
+w = find(times_aligned >= 0.003 & times_aligned < 0.008);
 
 axes1legend = {};
 if doplot
-    if get(handles.response_show_raw, 'Value')
+    if get(handles.response_show_all, 'Value')
         
         %% If available, plot each trace individually
-        if data.version >= 8
-            figure(1);
-            plot(squeeze(data.data_aligned(:,:,3))');
-        elseif data.version == 7
+        if data.version == 7
             triggerchannel = 4;
             triggerthreshold = (max(abs(data.data_raw(:,triggerchannel))) + min(abs(data.data_raw(:,triggerchannel))))/2;
             trigger_ind = data.data_raw(:,triggerchannel) > triggerthreshold;
@@ -90,11 +96,25 @@ if doplot
                 start_ind = trigger_ind(n) - trigger_ind(1) + 1;
                 foo(n,:,:) = data.data_raw(start_ind:start_ind+ceil(0.025*data.fs),:);
             end
-            figure(1);
-            plot(squeeze(foo(:,:,3))');
+            data.data_aligned = foo;
+            %plot(handles.axes1, times_aligned(u), squeeze(foo(:,u,3))');
+            
+
+        end
+        
+        if data.version >= 7
+            plot(handles.axes1, times_aligned(u), squeeze(data.data_aligned(:,u,3))');
         end
 
+        deriv = diff(data.data_aligned(:,:,3), 1, 2);
+        [B A] = ellip(2, .5, 40, [300 3000]/(data.fs/2));
+        a(0)
+        deriv = filtfilt(B, A, deriv);
+        plot(handles.axes2, times_aligned(u), deriv(:, u));
+        set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv(:, w)))));
         
+        
+    elseif get(handles.response_show_raw, 'Value')
         plot(handles.axes1, times_aligned(u), edata(u,3), 'b');
         axes1legend{end+1} = 'Measured';
         hold(handles.axes1, 'on');
@@ -112,6 +132,10 @@ if doplot
         'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
     ylabel(handles.axes1, 'volts');
     grid(handles.axes1, 'on');
+    
+
+    
+    
 
     yy = plotyy(handles.axes3, times_aligned(v), edata(v,1), ...
             times_aligned(v), edata(v,2));
@@ -129,7 +153,7 @@ end
 
 
 % Curve-fit: use a slightly longer time period
-roifit = [ 0.0027  0.016 ];
+roifit = [ 0.003  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 len = length(times_aligned);
@@ -157,7 +181,7 @@ responses_detrended = edata(:, 3) - roitrend;
 
 %cftool(roitimesfit,edata(roiifit,3))
 
-roi = [0.003 0.008 ];
+roi = [0.0035 0.008 ];
 roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
 roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
 roitimes = times_aligned(roii);
@@ -178,6 +202,8 @@ if doplot
     if ~isempty(axes1legend)
         legend(handles.axes1, axes1legend);
     end
+    
+    
 end
 
 
@@ -189,7 +215,7 @@ if ~isempty(responses_detrended_prev)
 
         corr_range = [min(corr_range(1), min(min(lastxc))) ...
                 max(corr_range(2), max(max(lastxc)))];
-        if doplot
+        if doplot & false
                 plot(handles.axes2, lastxc);
                 set(handles.axes2, 'XLim', [0 2*length(roii)], 'YLim', corr_range);
                 legend(handles.axes2, 'Prev');
@@ -199,6 +225,7 @@ if ~isempty(responses_detrended_prev)
                                 roitimes, data.data(roi(1):roi(2), 3), 'r');
                 end
         end
+        
         range = 250:350;
         
         if 1

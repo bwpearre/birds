@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 04-Aug-2015 22:21:59
+% Last Modified by GUIDE v2.5 11-Aug-2015 22:01:35
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -264,6 +264,9 @@ end
 
 % --- Executes on button press in response_show_raw.
 function response_show_raw_Callback(hObject, eventdata, handles)
+if get(hObject, 'Value')
+    set(handles.response_show_all, 'Value', 0);
+end
 listbox1_Callback(handles.listbox1, eventdata, handles);
 
 % --- Executes on button press in response_show_trend.
@@ -278,4 +281,12 @@ listbox1_Callback(handles.listbox1, eventdata, handles);
 
 % --- Executes on button press in response_filter.
 function response_filter_Callback(hObject, eventdata, handles)
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+
+% --- Executes on button press in response_show_all.
+function response_show_all_Callback(hObject, eventdata, handles)
+if get(hObject, 'Value')
+    set(handles.response_show_raw, 'Value', 0);
+end
 listbox1_Callback(handles.listbox1, eventdata, handles);
