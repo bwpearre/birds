@@ -104,14 +104,20 @@ if doplot
         
         if data.version >= 7
             plot(handles.axes1, times_aligned(u), squeeze(data.data_aligned(:,u,3))');
+            
+            edata = mean(data.data_aligned);
+            sz = size(edata);
+            if length(sz) == 3 && sz(1) == 1
+                edata = reshape(edata, sz(2:3));
+            end
         end
 
+        % How about the derivative of the data?
         deriv = diff(data.data_aligned(:,:,3), 1, 2);
         [B A] = ellip(2, .5, 40, [300 3000]/(data.fs/2));
-        a(0)
-        deriv = filtfilt(B, A, deriv);
-        plot(handles.axes2, times_aligned(u), deriv(:, u));
-        set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv(:, w)))));
+        deriv2 = filtfilt(B, A, deriv);
+        plot(handles.axes2, times_aligned(u), deriv2(:, u));
+        set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv2(:, w)))));
         
         
     elseif get(handles.response_show_raw, 'Value')
@@ -194,8 +200,8 @@ if doplot
         axes1legend{end+1} = 'Trend';
     end
     if get(handles.response_show_detrended, 'Value')
-        plot(handles.axes1, roitimes, responses_detrended(roii), 'r');
-        plot(handles.axes1, roitimesplus, responses_detrended(roiiplus), 'k');
+        plot(handles.axes1, roitimes, responses_detrended(roii), 'r', 'LineWidth', 2);
+        plot(handles.axes1, roitimesplus, responses_detrended(roiiplus), 'k', 'LineWidth', 2);
         axes1legend{end+1} = 'Detrended';
     end
     hold(handles.axes1, 'off');

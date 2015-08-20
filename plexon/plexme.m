@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 05-Aug-2015 16:38:03
+% Last Modified by GUIDE v2.5 19-Aug-2015 18:16:05
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -113,12 +113,15 @@ global bird;
 global datadir;
 global channels;
 global n_repetitions repetition_Hz;
+global intandir;
+
+
 
 n_repetitions = 20;
 repetition_Hz = 5;
 
 bird = 'noname';
-datadir = 'noname';
+datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
 increase_type = 'current'; % or 'time'
 default_halftime_us = 400;
 halftime_us = default_halftime_us;
@@ -133,6 +136,8 @@ current_amplification = 1;
 saving_stimulations = false;
 handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
+intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
+
 
 %handles.TerminalConfig = 'SingleEnded';
 vvsi = [];
@@ -324,9 +329,10 @@ global channels;
 global comments;
 persistent rmshist;
 global n_repetitions repetition_Hz;
+global VOLTAGE_RANGE_LAST_STIM;
 
 if isempty(datadir)
-    datadir = 'null';
+    datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
 end
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
@@ -346,6 +352,8 @@ edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
 edata(:,3) = event.Data(:,3) / intan_voltage_amplification;
 edata_rawish = edata;
+
+VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))];
 
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
@@ -373,8 +381,8 @@ for n = length(trigger_ind):-1:1
     start_ind = trigger_ind(n) - trigger_ind(1) + 1;
     data_aligned(n,:,:) = edata(start_ind:start_ind+ceil(0.025*data.fs),:);
 end
-figure(1);
-plot(squeeze(data_aligned(:,3,:)));
+%figure(1);
+%plot(squeeze(data_aligned(:,3,:)));
 edata = mean(data_aligned);
 if length(size(data_aligned)) == 3
     edata = squeeze(edata);
@@ -761,6 +769,27 @@ global monitor_electrode;
 global axes1;
 global increase_type;
 
+% These are so we can try to grab any Intan impedance files that may be
+% lying about... if they were created within the last 30 minutes!
+global intandir;
+global datadir;
+
+if ~exist(datadir, 'dir')
+    mkdir(datadir);
+end
+
+intanfilespec = strcat(intandir, '*.csv');
+csvs = dir(intanfilespec);
+for i = 1:length(csvs)
+    % datenum's unit is days, so 1/48 of a day is 30 minutes
+    if datenum(now) - csvs(i).datenum <= 1/48
+        movefile(strcat(intandir, csvs(i).name), strcat(datadir, '\impedances-', csvs(i).name));
+    end
+end
+if exist(strcat(intandir, 'plexon-compatible.isf'), 'file')
+    copyfile(strcat(intandir, 'plexon-compatible.isf'), datadir);
+end
+
 disp('Stopping everything...');
 
 PS_StopStimAllChannels(handles.box);
@@ -897,6 +926,7 @@ guidata(hObject, handles);
 
 
 function plexon_stop_timer_callback(obj, event, hObject, handles)
+disp('Stopping timer...');
 timer_sequence_running = false;
 err = PS_StopStimAllChannels(handles.box);
 if err
@@ -1149,7 +1179,7 @@ try
     end
     handles.NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
      
-    vvsi(end+1, :) = [ monitor_electrode CURRENT_uAMPS NEGFIRST VOLTAGE_RANGE_LAST_STIM halftime_us];
+    %vvsi(end+1, :) = [ monitor_electrode CURRENT_uAMPS NEGFIRST VOLTAGE_RANGE_LAST_STIM halftime_us];
     if max(abs(VOLTAGE_RANGE_LAST_STIM)) < handles.VoltageLimit
         % We can safely stimulate with these parameters
         if monitor_electrode == electrode_last_stim
@@ -1161,6 +1191,7 @@ try
         %ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d (Intan %d) is pulling [ %.2g %.2g ] volts.  Stopping.', ...
             %channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), VOLTAGE_RANGE_LAST_STIM(2));    
         %throw(ME);
+        
         disp(sprintf('WARNING: Channel %d (Intan %d) is pulling [ %.3g %.3g ] V @ %.3g uA, %dx2 us.', ...
             channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), ...
             VOLTAGE_RANGE_LAST_STIM(2), CURRENT_uAMPS, round(halftime_us)));
@@ -1433,6 +1464,14 @@ end
 
 
 function response_show_raw_Callback(hObject, eventdata, handles)
+if get(hObject, 'Value')
+    set(handles.response_show_all, 'Value', 0);
+end
+
+function response_show_all_Callback(hObject, eventdata, handles)
+if get(hObject, 'Value')
+    set(handles.response_show_raw, 'Value', 0);
+end
 
 function response_show_trend_Callback(hObject, eventdata, handles)
 
@@ -1454,3 +1493,5 @@ function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
