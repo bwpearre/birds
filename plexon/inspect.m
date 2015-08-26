@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 11-Aug-2015 22:01:35
+% Last Modified by GUIDE v2.5 25-Aug-2015 15:42:18
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -262,8 +262,8 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
-% --- Executes on button press in response_show_raw.
-function response_show_raw_Callback(hObject, eventdata, handles)
+% --- Executes on button press in response_show_avg.
+function response_show_avg_Callback(hObject, eventdata, handles)
 if get(hObject, 'Value')
     set(handles.response_show_all, 'Value', 0);
 end
@@ -287,6 +287,6 @@ listbox1_Callback(handles.listbox1, eventdata, handles);
 % --- Executes on button press in response_show_all.
 function response_show_all_Callback(hObject, eventdata, handles)
 if get(hObject, 'Value')
-    set(handles.response_show_raw, 'Value', 0);
+    set(handles.response_show_avg, 'Value', 0);
 end
 listbox1_Callback(handles.listbox1, eventdata, handles);

@@ -45,22 +45,6 @@ end
 
 edata = data.data;
 
-% Let's try a filter, shall we?
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(2, 0.07, 'high');
-
-if get(handles.response_filter, 'Value')
-    [B A] = ellip(2, .5, 40, [300 9000]/(data.fs/2));
-
-    edata(:,3) = filtfilt(B, A, edata(:,3));
-    if data.version >= 8
-        data.data_aligned(:,:,3) = filtfilt(B, A, data.data_aligned(:,:,3));
-    else
-        data.data_raw(:,3) = filtfilt(B, A, data.data_raw(:,3));
-    end
-end
-
-
 
 halftime_us = data.halftime_us;
 interpulse_s = data.interpulse_s;
@@ -103,9 +87,10 @@ if doplot
         end
         
         if data.version >= 7
-            plot(handles.axes1, times_aligned(u), squeeze(data.data_aligned(:,u,3))');
             
-            edata = mean(data.data_aligned);
+            plot(handles.axes1, times_aligned(u), reshape(data.data_aligned(:,u,3), [data.n_repetitions length(u)])');
+            
+            edata = mean(data.data_aligned, 1);
             sz = size(edata);
             if length(sz) == 3 && sz(1) == 1
                 edata = reshape(edata, sz(2:3));
@@ -113,11 +98,11 @@ if doplot
         end
 
         % How about the derivative of the data?
-        deriv = diff(data.data_aligned(:,:,3), 1, 2);
-        [B A] = ellip(2, .5, 40, [300 3000]/(data.fs/2));
-        deriv2 = filtfilt(B, A, deriv);
-        plot(handles.axes2, times_aligned(u), deriv2(:, u));
-        set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv2(:, w)))));
+        %deriv = diff(data.data_aligned(:,:,3), 1, 2);
+        %[B A] = ellip(2, .5, 40, [300 3000]/(data.fs/2));
+        %deriv2 = filtfilt(B, A, deriv);
+        %plot(handles.axes2, times_aligned(u), deriv2(:, u));
+        %set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv2(:, w)))));
         
         
     elseif get(handles.response_show_raw, 'Value')
@@ -159,7 +144,7 @@ end
 
 
 % Curve-fit: use a slightly longer time period
-roifit = [ 0.003  0.016 ];
+roifit = [ 0.0025  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 len = length(times_aligned);
@@ -187,7 +172,7 @@ responses_detrended = edata(:, 3) - roitrend;
 
 %cftool(roitimesfit,edata(roiifit,3))
 
-roi = [0.0035 0.008 ];
+roi = [0.003 0.008 ];
 roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
 roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
 roitimes = times_aligned(roii);
@@ -208,11 +193,24 @@ if doplot
     if ~isempty(axes1legend)
         legend(handles.axes1, axes1legend);
     end
-    
-    
 end
 
 
+% Let's try a filter, shall we?  This used to filter the raw data, but I
+% think I should not filter until after detrending, if at all.
+%disp('Bandpass-filtering the data...');
+%[B A] = butter(2, 0.07, 'high');
+if get(handles.response_filter, 'Value')
+    [B A] = ellip(2, .5, 40, [300 9000]/(data.fs/2));
+
+    
+    %edata(:,3) = filtfilt(B, A, edata(:,3));
+    %if data.version >= 8
+    %    data.data_aligned(:,:,3) = filtfilt(B, A, data.data_aligned(:,:,3));
+    %else
+    %    data.data_raw(:,3) = filtfilt(B, A, data.data_raw(:,3));
+    %end
+end
 
 
 
