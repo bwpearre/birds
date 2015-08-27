@@ -98,18 +98,15 @@ if doplot
         tabledata{2,1} = sprintf('%d ', data.stim_electrodes);
         tabledata{3,1} = sprintf('%.3g uA', data.current);
         if isfield(data, 'halftime_us')
-                tabledata{4,1} = sprintf('%d us', round(data.halftime_us));
+            tabledata{4,1} = sprintf('%d us', round(data.halftime_us));
         else
-                tabledata{4,1} = '?';
+            tabledata{4,1} = '?';
         end
+        
         if isfield(data, 'negativefirst')
-                if data.negativefirst
-                        tabledata{5,1} = 'y';
-                else
-                        tabledata{5,1} = '';
-                end
+            tabledata{5,1} = sprintf('%d ', data.negativefirst);
         else
-                tabledata{5,1} = '?'; % negative pulse first
+            tabledata{5,1} = '?'; % negative pulse first
         end
         tabledata{6,1} = sprintf('%d', data.monitor_electrode);
         if isfield(data, 'comments')

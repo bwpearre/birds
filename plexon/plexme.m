@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 25-Aug-2015 15:42:01
+% Last Modified by GUIDE v2.5 27-Aug-2015 13:57:58
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -85,7 +85,6 @@ CURRENT_uAMPS = handles.START_uAMPS;
 global change;
 change = handles.INCREASE_STEP;
 global NEGFIRST;
-NEGFIRST = false;
 global axes1;
 global axes1_yscale;
 global axes2;
@@ -143,6 +142,11 @@ intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 vvsi = [];
 comments = '';
 
+NEGFIRST = zeros(1,16);
+for i = 1:16
+    cmd = sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, 'off');
+    eval(cmd);
+end
 
 channel_ranges = 2 * [ 1 1 1 ];
 
@@ -159,8 +163,7 @@ set(handles.maxcurrent, 'String', sprintf('%d', round(handles.MAX_uAMPS)));
 set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(halftime_us)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
-set(handles.negativefirst, 'Value', NEGFIRST);
-set(handles.select_all_valid, 'Enable', 'off');
+set(handles.select_all_valid, 'Enable', 'on');
 set(handles.i_amplification, 'String', sprintf('%g', current_amplification));
 set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
@@ -319,6 +322,11 @@ axes3 = handles.axes3;
 
 timer_sequence_running = false;
 
+gca = handles.stupidaxis;
+text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
+axis off;
+
+
 guidata(hObject, handles);
 
 
@@ -411,7 +419,7 @@ if isempty(triggertime)
 end    
 % times_aligned is data.time aligned so spike=0
 
-data.version = 8;
+data.version = 9;
 data.n_repetitions = n_repetitions;
 data.repetition_Hz = repetition_Hz;
 data.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
@@ -501,12 +509,12 @@ varargout{1} = handles.output;
 
 % --- Executes on button press in negativefirst.
 function negativefirst_Callback(hObject, eventdata, handles)
-global NEGFIRST;
-NEGFIRST = get(hObject, 'Value');
-global CURRENT_uAMPS;
-CURRENT_uAMPS = handles.START_uAMPS;
-set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
-guidata(hObject, handles);
+%global NEGFIRST;
+%NEGFIRST = get(hObject, 'Value');
+%global CURRENT_uAMPS;
+%CURRENT_uAMPS = handles.START_uAMPS;
+%set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+%guidata(hObject, handles);
 
 
 
@@ -593,6 +601,8 @@ end
 % state of this button
 cmd = sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate);
 eval(cmd);
+cmd = sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate);
+eval(cmd);
 % "stimulate this electrode" should default to 0...
 cmd = sprintf('set(handles.stim%d, ''Value'', 0);', whichone);
 eval(cmd);
@@ -626,71 +636,45 @@ electrode_universal_callback(hObject, eventdata, handles);
 function electrode2_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode3.
 function electrode3_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode4.
 function electrode4_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode5.
 function electrode5_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode6.
 function electrode6_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode7.
 function electrode7_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode8.
 function electrode8_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode9.
 function electrode9_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode10.
 function electrode10_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode11.
 function electrode11_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode12.
 function electrode12_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode13.
 function electrode13_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-% --- Executes on button press in electrode14.
 function electrode14_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-% --- Executes on button press in electrode15.
 function electrode15_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
-
-% --- Executes on button press in electrode16.
 function electrode16_Callback(hObject, eventdata, handles)
 electrode_universal_callback(hObject, eventdata, handles);
 
@@ -877,7 +861,6 @@ function plexon_start_timer_callback(obj, event, hObject, handles)
 
 global CURRENT_uAMPS;
 global change;
-global NEGFIRST;
 
 try
     NullPattern.W1 = 0;
@@ -1088,26 +1071,27 @@ switch increase_type
 end
        
 
-try
+% A is amplitude, W is width, Delay is interphase delay.
 
-    % Is this the easiest way to define this?  Use GUI soon.  Meanwhile, A is
-    % amplitude, W is width, Delay is interphase delay.
-    if NEGFIRST
-            StimParam.A1 = -CURRENT_uAMPS;
-            StimParam.A2 = CURRENT_uAMPS;
-    else
-            StimParam.A1 = CURRENT_uAMPS;
-            StimParam.A2 = -CURRENT_uAMPS;
-    end
-    StimParam.W1 = halftime_us;
-    StimParam.W2 = halftime_us;
-    StimParam.Delay = interpulse_s * 1e6;
-    
-    NullPattern.W1 = 0;
-    NullPattern.W2 = 0;
-    NullPattern.A1 = 0;
-    NullPattern.A2 = 0;
-    NullPattern.Delay = 0;
+StimParamPos.A1 = CURRENT_uAMPS;
+StimParamPos.A2 = -CURRENT_uAMPS;
+StimParamPos.W1 = halftime_us;
+StimParamPos.W2 = halftime_us;
+StimParamPos.Delay = interpulse_s * 1e6;
+
+StimParamNeg.A1 = -CURRENT_uAMPS;
+StimParamNeg.A2 = CURRENT_uAMPS;
+StimParamNeg.W1 = halftime_us;
+StimParamNeg.W2 = halftime_us;
+StimParamNeg.Delay = interpulse_s * 1e6;
+
+NullPattern.W1 = 0;
+NullPattern.W2 = 0;
+NullPattern.A1 = 0;
+NullPattern.A2 = 0;
+NullPattern.Delay = 0;
+
+try
 
     % If no monitor_electrode is selected, just fail silently and let the user figure
     % out what's going on :)
@@ -1128,7 +1112,11 @@ try
             throw(ME);
         end
 
-        err = PS_SetRectParam2(handles.box, channel, StimParam);
+        if NEGFIRST(channel)
+            err = PS_SetRectParam2(handles.box, channel, StimParamNeg);
+        else
+            err = PS_SetRectParam2(handles.box, channel, StimParamPos);
+        end
         if err
                 ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d', channel);
                 throw(ME);
@@ -1379,6 +1367,7 @@ for whichone = find(valid)
     % state of this button
     eval(sprintf('set(handles.electrode%d, ''Value'', 1);', whichone));
     eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate));
+    eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate));
 end
 update_monitor_electrodes(hObject, handles);
 
@@ -1570,14 +1559,80 @@ if exist(strcat(datadir, '\impedances-x.csv'), 'file')
         pchan = str2double(c(i,8:end));
         impedances_x(pchan) = b{5}(i);
         h = eval(sprintf('handles.maxi%d', pchan));
-        set(h, 'String', sprintf('%g MOhm', impedances_x(pchan)/1e6));
+        set(h, 'String', sprintf('%g', impedances_x(pchan)/1e6));
         valid(pchan) = impedances_x(pchan)/1e6 >= 0.1 & impedances_x(pchan)/1e6 <= 5;
     end
     
     update_valid_checkboxes(handles.mark_all, handles);
 end
 
+
 guidata(hObject, handles);
 
 
     
+function negfirst_toggle_all_Callback(hObject, eventdata, handles)
+global NEGFIRST;
+for i = 1:16
+    h = eval(sprintf('handles.negfirst%d', i));
+    NEGFIRST(i) = ~get(h, 'Value');
+    set(h, 'Value', NEGFIRST(i));
+end
+
+function negfirst_universal_callback(hObject, handles)
+global NEGFIRST;
+whichone = str2num(hObject.String);
+value = get(hObject, 'Value');
+NEGFIRST(whichone) = value;
+
+
+function negfirst1_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst2_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst3_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst4_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst5_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst6_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst7_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst8_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst9_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst10_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst11_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst15_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst16_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst14_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst12_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+function negfirst13_Callback(hObject, eventdata, handles)
+negfirst_universal_callback(hObject, handles);
+
+
+
