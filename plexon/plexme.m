@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 27-Aug-2015 13:57:58
+% Last Modified by GUIDE v2.5 28-Aug-2015 11:21:32
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -68,12 +68,11 @@ function plexme_OpeningFcn(hObject, ~, handles, varargin)
 handles.output = hObject;
 
 handles.START_uAMPS = 1; % Stimulating at this current will not yield enough voltage to cause injury even with a bad electrode.
-handles.MAX_uAMPS = 150;
+handles.MAX_uAMPS = 10;
 handles.INCREASE_STEP = 1.1;
 handles.INTERSPIKE_S = 0.1;
-handles.VoltageLimit = 3.5;
+handles.VoltageLimit = 3;
 handles.stim = zeros(1, 16);  % Stimulate these electrodes
-handles.timer = [];
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
 
@@ -93,7 +92,6 @@ global axes3;
 global rmsbox;
 global vvsi;
 global comments;
-global timer_sequence_running;
 global monitor_electrode;
 global electrode_last_stim;
 global max_current;
@@ -113,6 +111,7 @@ global n_repetitions repetition_Hz;
 global intandir;
 global valid; % which electrodes seem valid for stimulation?
 global impedances_x;
+global stim_timer;
 
 
 valid = zeros(1, 16);
@@ -320,8 +319,6 @@ axes2 = handles.axes2;
 axes4 = handles.axes4;
 axes3 = handles.axes3;
 
-timer_sequence_running = false;
-
 gca = handles.stupidaxis;
 text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
 axis off;
@@ -465,11 +462,19 @@ end
 function gui_close_callback(hObject, callbackdata, handles)
 
 global vvsi;
-global timer_sequence_running;
 global datadir;
+global stim_timer;
 
 disp('Shutting down...');
-handles.timer = clear_timer(handles.timer);
+
+if ~isempty(stim_timer)
+    if isvalid(stim_timer)
+        stop(stim_timer);
+        delete(stim_timer);
+    end
+    stim_timer = [];
+end
+
 if ~isempty(handles.NIsession)
     stop(handles.NIsession);
     release(handles.NIsession);
@@ -484,7 +489,6 @@ else
      msgbox({'ERROR CLOSING STIMULATOR', 'Could not contact Plexon stimulator for shutdown!'});
 end
 
-timer_sequence_running = false;
 
 file_format = 'yyyymmdd_HHMMSS.FFF';
 file_basename = 'vvsi';
@@ -698,21 +702,30 @@ set(hObject, 'BackgroundColor', [0.8 0.2 0.1]);
 
 
 function start_timer(hObject, handles)
+global stim_timer;
 
 % Clean up any stopped timers
-if ~isempty(handles.timer)
-    a(0)
+if isempty(stim_timer)
+    stim_timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedSpacing');
+    stim_timer.TimerFcn = {@plexon_control_timer_callback_2, hObject, handles};
+    stim_timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
+    stim_timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
+    stim_timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
+else
+    stim_timer.Period = handles.INTERSPIKE_S;
 end
 
 disable_controls(hObject, handles);
-handles.timer = timer('Period', handles.INTERSPIKE_S, 'ExecutionMode', 'fixedSpacing');
-handles.timer.TimerFcn = {@plexon_control_timer_callback_2, hObject, handles};
-handles.timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
-handles.timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
-handles.timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
-start(handles.timer);
+if ~timer_running(stim_timer)
+    start(stim_timer);
+end
 guidata(hObject, handles);
 
+
+
+% Stupid fucking matlab uses a string, not a boolean
+function s = timer_running(t)
+s = strcmp(t.running, 'on');
 
 
 % --- Executes on button press in increase.
@@ -725,9 +738,8 @@ global default_halftime_us;
 halftime_us = default_halftime_us;
 increase_type = 'current';
 change = handles.INCREASE_STEP;
-if isempty(handles.timer)
-    start_timer(hObject, handles);
-end
+start_timer(hObject, handles);
+
 guidata(hObject, handles);
 
 
@@ -741,9 +753,8 @@ global default_halftime_us;
 halftime_us = default_halftime_us;
 increase_type = 'current';
 change = 1/handles.INCREASE_STEP;
-if isempty(handles.timer)
-    start_timer(hObject, handles);
-end
+start_timer(hObject, handles);
+
 guidata(hObject, handles);
 
 
@@ -757,9 +768,8 @@ global default_halftime_us;
 halftime_us = default_halftime_us;
 increase_type = 'current';
 change = 1;
-if isempty(handles.timer)
-    start_timer(hObject, handles);
-end
+start_timer(hObject, handles);
+
 guidata(hObject, handles);
 
 
@@ -769,18 +779,21 @@ global vvsi;
 global monitor_electrode;
 global axes1;
 global increase_type;
+global stim_timer;
 
 
 disp('Stopping everything...');
 
 PS_StopStimAllChannels(handles.box);
 
-if ~isempty(handles.timer)
-    if isvalid(handles.timer)
-        stop(handles.timer); % this also stops and closes the Plexon box
+if ~isempty(stim_timer)
+    if isvalid(stim_timer)
+        %if timer_running(stim_timer)
+        stop(stim_timer); % this also stops and closes the Plexon box
+        %end
+    else
+        disp('*** The timer was invalid!');
     end
-    delete(handles.timer);
-    handles.timer = [];
 end
 
 if ~isempty(vvsi)
@@ -861,6 +874,7 @@ function plexon_start_timer_callback(obj, event, hObject, handles)
 
 global CURRENT_uAMPS;
 global change;
+global stim_timer;
 
 try
     NullPattern.W1 = 0;
@@ -895,6 +909,9 @@ try
         end
     end
 catch ME
+    if timer_running(stim_timer)
+        stop(stim_timer);
+    end
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
     PS_StopStimAllChannels(handles.box);
@@ -907,7 +924,6 @@ guidata(hObject, handles);
 
 function plexon_stop_timer_callback(obj, event, hObject, handles)
 disp('Stopping timer...');
-timer_sequence_running = false;
 err = PS_StopStimAllChannels(handles.box);
 if err
     msgbox('ERROR stopping stimulation (@stop)!!!!');
@@ -918,7 +934,6 @@ guidata(hObject, handles);
 
 function plexon_error_timer_callback(obj, event, hObject, handles)
 disp('Caught an error in the timer callback... Stopping...');
-timer_sequence_running = false;
 err = PS_StopStimAllChannels(handles.box);
 if err
     msgbox('ERROR stopping stimulation (@error)!!!!');
@@ -1055,9 +1070,9 @@ global VOLTAGE_RANGE_LAST_STIM;
 global electrode_last_stim;
 global stim_electrodes;
 global monitor_electrode;
-global timer_sequence_running;
 global axes1;
 global n_repetitions repetition_Hz;
+global stim_timer;
 
 global vvsi;  % Voltages vs current for each stimulation
 
@@ -1205,10 +1220,13 @@ try
         disp(sprintf('WARNING: Channel %d (Intan %d) is pulling [ %.3g %.3g ] V @ %.3g uA, %dx2 us.', ...
             channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), ...
             VOLTAGE_RANGE_LAST_STIM(2), CURRENT_uAMPS, round(halftime_us)));
-        stop(handles.timer);
-        
+        if timer_running(stim_timer)
+            stop(stim_timer);
+        end
+
         % Find the maximum current at which voltage was < handles.VoltageLimit
         %handles.voltage_at_max_current(1:2, monitor_electrode) = VOLTAGE_RANGE_LAST_STIM;
+        prevstring = eval(sprintf('get(handles.maxi%d, ''String'');', monitor_electrode));
         switch increase_type
             case 'current'
                 if isnan(max_current(monitor_electrode))
@@ -1216,37 +1234,43 @@ try
                 else
                     maxistring = sprintf('%.3g uA', max_current(monitor_electrode));
                 end
-                eval(sprintf('set(handles.maxi%d, ''String'', ''%s'');', monitor_electrode, maxistring));
+                eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
+                    monitor_electrode, prevstring, maxistring));
             case 'time'
                 if isnan(max_halftime(monitor_electrode))
                     maxistring = '***';
                 else
                     maxistring = sprintf('%.3g us', max_halftime(monitor_electrode));
                 end
-                eval(sprintf('set(handles.maxi%d, ''String'', ''%s'');', monitor_electrode, maxistring));
+                eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
+                    monitor_electrode, prevstring, maxistring));
         end
                 
-        timer_sequence_running = false;
     end
     
     
     % We've maxed out... what to do?  We can inform the user that
     % we could perhaps go higher...
+    prevstring = eval(sprintf('get(handles.maxi%d, ''String'');', monitor_electrode));
 
     switch increase_type
         case 'current'
             if CURRENT_uAMPS == handles.MAX_uAMPS
-                stop(handles.timer);
+                if timer_running(stim_timer)
+                    stop(stim_timer);
+                end
                 maxistring = sprintf('> %.3g uA', max_current(monitor_electrode));
-                eval(sprintf('set(handles.maxi%d, ''String'', ''%s +'');', monitor_electrode, maxistring));
-                timer_sequence_running = false;
+                eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s +)'');', ...
+                    monitor_electrode, prevstring, maxistring));
             end
         case 'time'
             if halftime_us == default_halftime_us
-                stop(handles.timer);
+                if timer_running(stim_timer)
+                    stop(stim_timer);
+                end
                 maxistring = sprintf('> %.3g us', max_halftime(monitor_electrode));
-                eval(sprintf('set(handles.maxi%d, ''String'', ''%s'');', monitor_electrode, maxistring));
-                timer_sequence_running = false;
+                eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
+                    monitor_electrode, prevstring, maxistring));
             end
     end
 
@@ -1293,9 +1317,9 @@ global halftime_us;
 global CURRENT_uAMPS;
 global change;
 global monitor_electrode;
-global timer_sequence_running;
 global max_halftime;
 global valid;
+global stim_timer;
 
 change = 1.1;
 
@@ -1312,16 +1336,12 @@ for i = find(valid)
     handles.stim(i) = 1;
     monitor_electrode = i;
     set(handles.monitor_electrode_control, 'Value', i);
-    
-    handles.timer = clear_timer(handles.timer);
-    
-    timer_sequence_running = true;
+        
     start_timer(hObject, handles);
-    while timer_sequence_running
+    while timer_running(stim_timer)
         pause(0.1);
     end
 end
-handles.timer = clear_timer(handles.timer);
 
 halftime_us = default_halftime_us;
 
@@ -1331,22 +1351,6 @@ for i = find(~valid)
     eval(sprintf('set(handles.stim%d, ''Value'', 0, ''Enable'', ''off'');', i));
 end
 
-
-
-function empty = clear_timer(obj);
-disp('Clearing timer');
-if ~isempty(obj)
-    disp('Timer handle exists');
-    if isvalid(obj)
-        disp('Timer handle is valid');
-        stop(obj);
-        delete(obj);
-    end
-    clear(obj);
-    obj = [];
-end
-empty = [];
-return;
 
 
 
@@ -1383,9 +1387,9 @@ global halftime_us;
 global CURRENT_uAMPS;
 global change;
 global monitor_electrode;
-global timer_sequence_running;
 global max_current;
 global valid;
+global stim_timer;
 
 max_current = NaN * ones(1, 16);
 
@@ -1401,18 +1405,12 @@ for i = find(valid)
     handles.stim(i) = 1;
     monitor_electrode = i;
     set(handles.monitor_electrode_control, 'Value', i);
-    
-    handles.timer = clear_timer(handles.timer);
-    
-    timer_sequence_running = true;
+        
     start_timer(hObject, handles);
-    while timer_sequence_running
+    while timer_running(stim_timer)
         pause(0.1);
     end
 end
-handles.timer = clear_timer(handles.timer);
-
-halftime_us = default_halftime_us;
 
 
 
@@ -1636,3 +1634,8 @@ negfirst_universal_callback(hObject, handles);
 
 
 
+
+
+% --- Executes on button press in debug.
+function debug_Callback(hObject, eventdata, handles)
+a(0)
