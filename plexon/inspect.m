@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 22-May-2015 18:44:53
+% Last Modified by GUIDE v2.5 25-Aug-2015 15:42:18
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -48,7 +48,7 @@ end
 function inspect_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
 
-global responses;
+global responses_detrended;
 global wait_bar;
 global knowngood;
 global heur;
@@ -63,7 +63,7 @@ handles.files = sorted_names;
 handles.sorted_index = sorted_index;
 set(handles.listbox1,'String',handles.files,'Value',1);
 
-responses = [];
+responses_detrended = [];
 if ~isempty(wait_bar)
         close(wait_bar);
         wait_bar = [];
@@ -75,177 +75,58 @@ guidata(hObject, handles);
 
 
 
-function varargout = inspect_OutputFcn(hObject, eventdata, handles) 
+function varargout = inspect_OutputFcn(hObject, ~, handles) 
 varargout{1} = handles.output;
 
 
 % --- Executes on selection change in listbox1.
-function listbox1_Callback(hObject, eventdata, handles)
+function listbox1_Callback(hObject, ~, handles)
 file = handles.sorted_index(get(hObject,'Value'));
-do_file(hObject, eventdata, handles, file, true);
+do_file(hObject, handles, file, true);
 
 
-function do_file(hObject, eventdata, handles, file, doplot);
-global responses;
-persistent corr_range;
-global heur;
-global knowngood;
-global nnsetX;
-global net;
-if isempty(corr_range)
-        corr_range = [0 eps];
-end
+function do_file(hObject, handles, file, doplot);
 
 load(handles.files{file});
 
+
+
 if doplot
+        if data.version >= 6
+            tabledata{1,1} = data.bird;
+        end
+        tabledata{2,1} = sprintf('%d ', data.stim_electrodes);
+        tabledata{3,1} = sprintf('%.3g uA', data.current);
+        if isfield(data, 'halftime_us')
+            tabledata{4,1} = sprintf('%d us', round(data.halftime_us));
+        else
+            tabledata{4,1} = '?';
+        end
         
-        tabledata{1,1} = sprintf('%d ', data.stim_electrodes);
-        tabledata{2,1} = sprintf('%.3g uA', data.current);
-        if isfield(data, 'halftime')
-                tabledata{3,1} = sprintf('%d', round(data.halftime));
+        if isfield(data, 'negativefirst')
+            tabledata{5,1} = sprintf('%d ', data.negativefirst);
         else
-                tabledata{3,1} = '?';
+            tabledata{5,1} = '?'; % negative pulse first
         end
-        if isfield(data, 'negfirst')
-                if data.negfirst
-                        tabledata{4,1} = 'y';
-                else
-                        tabledata{4,1} = '';
-                end
-        else
-                tabledata{4,1} = '?'; % negative pulse first
+        tabledata{6,1} = sprintf('%d', data.monitor_electrode);
+        if isfield(data, 'comments')
+            set(handles.comments, 'String', data.comments);
         end
-        tabledata{5,1} = sprintf('%d', data.monitor_electrode);
+        
+        
         set(handles.table1, 'Data', tabledata);
 end
 
+plot_stimulation(data, handles);
+
+
+% Kludge that may be appropriate for bird lw95rhp only! (?)
 knowngood(file) = sum(data.stim_electrodes) == 16 && data.current >= 2;
-set(handles.response1, 'Value', knowngood(file));        
+set(handles.response1, 'Value', knowngood(file));
 
-triggerchannel = 3;
-triggerthreshold = 0.1;
-aftertrigger = 0.009;
-
-triggertime = find(abs(data.data(:,triggerchannel)) > triggerthreshold);
-if isempty(triggertime)
-    triggertime = 0;
-else
-    triggertime = (triggertime(1) / data.fs);
-end
-beforetrigger = max(0, triggertime - 0.001);
-
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(2, 0.1, 'low');
-%data.data = filter(B, A, data.data);
-
-if ~isfield(data, 'halftime') % old format does not scale saved data
-        scalefactor_V = 1/0.25;
-        scalefactor_i = 400;
-        data.data(:,1) = data.data(:,1) * scalefactor_V;
-        data.data(:,2) = data.data(:,2) * scalefactor_i;
-end
-times = (data.time - triggertime) * 1000; % milliseconds
-u = find(data.time > beforetrigger & data.time < triggertime + aftertrigger);
-if doplot
-        yy = plotyy(handles.axes2, times(u), data.data(u,1), ...
-                times(u), data.data(u,2));
-        legend(handles.axes2, data.names{1:2});
-        xlabel(handles.axes2, 'ms');
-        set(get(yy(1),'Ylabel'),'String','V')
-        set(get(yy(2),'Ylabel'),'String','\mu A')
-        
-        plot(handles.axes1, times(u), data.data(u,3));
-        set(handles.axes1, 'YLim', [-0.1 0.1]);
-        legend(handles.axes1, data.names{3});
-        ylabel(handles.axes1, data.names{3});
-       
-end
-
-
-% Exponential curve-fit: use a slightly longer time period for better
-% results:
-roifit = round([ triggertime + 0.0015  triggertime + 0.008 ] * data.fs);
-roiifit = roifit(1):roifit(2);
-roitimesfit = times(roiifit);
-lenfit = length(roitimesfit);
-weightsfit = linspace(1, 0, lenfit);
-weightsfit = ones(1, lenfit);
-f = fit(roitimesfit, data.data(roifit(1):roifit(2), 3), 'exp1', ...
-        'Weight', weightsfit, 'StartPoint', [0 0]);
-ff = f.a .* exp(f.b * roitimesfit); % + f.c .* exp(f.d * roitimesfit);
-if doplot
-        hold(handles.axes1, 'on');
-        plot(handles.axes1, roitimesfit, ff, 'g');
-        hold(handles.axes1, 'off');
-end
-
-% Store de-trended data in the ROI (smaller than the detrending fit
-% region):
-roi = round([ triggertime + 0.002  triggertime + 0.005 ] * data.fs);
-roii = roi(1):roi(2);
-roitimes = times(roii);
-len = length(roitimes);
-roitrend = f.a .* exp(f.b * roitimes);% + f.c .* exp(f.d * roitimes);
-
-if isempty(responses)
-        responses = zeros(len, length(handles.files));
-end
-responses(1:len,file) = data.data(roi(1):roi(2), 3) - roitrend;
-
-
-if file > 1 & file < length(handles.files)
-        lastxc = [xcorr(responses(:, file-1), responses(:, file), 'coeff')'
-                  xcorr(responses(:, file+1), responses(:, file), 'coeff')']';
-        %lastxc = xcorr(responses(:, file-1:file+1));
-        corr_range = [min(corr_range(1), min(min(lastxc))) ...
-                max(corr_range(2), max(max(lastxc)))];
-        if doplot
-                plot(handles.axes3, lastxc);
-                set(handles.axes3, 'XLim', [0 2*len], 'YLim', corr_range);
-                legend(handles.axes3, 'Prev', 'Next');
-                
-                if 0
-                        plot(handles.axes4, roitimes, responses(:,file), 'b', ...
-                                roitimes, data.data(roi(1):roi(2), 3), 'r');
-                end
-        end
-        range = 250:350;
-        
-        if 1
-                % FFT the xcorr just for good measure
-                FFT_SIZE = 256;
-                freqs = [300:100:2000];
-                window = hamming(FFT_SIZE);
-                [speck freqs times] = spectrogram(lastxc(:,1), window, [], freqs, data.fs);
-                %[speck freqs times] = spectrogram(responses(:,file), window, [], freqs, data.fs);
-                [nfreqs, ntimes] = size(speck);
-                speck = speck + eps;
-                if doplot
-                        plot(handles.axes4, freqs, abs(speck));
-                        %imagesc(log(abs(speck)), 'Parent', handles.axes4);
-                        %axis(handles.axes4, 'xy');
-                        %colorbar('peer', handles.axes4);
-                end
-        end
-
-        
-        
-        [val, pos] = max(lastxc(:, 1));
-        nnsetX(:,file) = [max(lastxc(range,1)) - min(lastxc(range,1)); ...
-                abs(pos-len); ...
-                abs(speck(:,2))];
-elseif file > 1
-        nnsetX(:,file) = NaN * nnsetX(:,file-1);
-end
-
-if ~isempty(net)
-        set(handles.response2, 'Value', sim(net, nnsetX(:,file)) > 0.5);
-end
-
-%set(handles.response2, 'Value', heur(file));
 
 guidata(hObject, handles);
+
 
 
 % --- Executes during object creation, after setting all properties.
@@ -283,7 +164,7 @@ end
 nfiles = length(handles.files);
 for file = 1:nfiles
         waitbar(file / nfiles);
-        do_file(hObject, eventdata, handles, file, false);
+        do_file(hObject, handles, file, false);
 end
 
 
@@ -354,3 +235,55 @@ train_net(hObject, handles);
 
 set(handles.train, 'Enable', 'on');
 
+
+
+% --- Executes on slider movement.
+function yscale_Callback(hObject, eventdata, handles)
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
+
+
+
+% --- Executes during object creation, after setting all properties.
+function yscale_CreateFcn(hObject, eventdata, handles)
+if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor',[.9 .9 .9]);
+end
+
+
+function comments_Callback(hObject, eventdata, handles)
+
+% --- Executes during object creation, after setting all properties.
+function comments_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in response_show_avg.
+function response_show_avg_Callback(hObject, eventdata, handles)
+if get(hObject, 'Value')
+    set(handles.response_show_all, 'Value', 0);
+end
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+% --- Executes on button press in response_show_trend.
+function response_show_trend_Callback(hObject, eventdata, handles)
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+
+% --- Executes on button press in response_show_detrended.
+function response_show_detrended_Callback(hObject, eventdata, handles)
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+
+% --- Executes on button press in response_filter.
+function response_filter_Callback(hObject, eventdata, handles)
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+
+% --- Executes on button press in response_show_all.
+function response_show_all_Callback(hObject, eventdata, handles)
+if get(hObject, 'Value')
+    set(handles.response_show_avg, 'Value', 0);
+end
+listbox1_Callback(handles.listbox1, eventdata, handles);
