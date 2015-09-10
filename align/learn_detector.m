@@ -13,6 +13,11 @@ if 1
         MIC_DATA = audio.data;
         agg_audio.fs = audio.fs;
 elseif 0
+        BIRD='lw8rhp';
+        load('/Users/bwpearre/Desktop/Will/test_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
+        MIC_DATA = audio.data;
+        agg_audio.fs = audio.fs;
+elseif 0
         load('~/r/data/wintest25/out_MANUALCLUST/extracted_data');
         MIC_DATA = agg_audio.data;
 elseif 0
@@ -184,8 +189,8 @@ colorbar;
 
 %% Cut out a region of the spectrum (in space and time) to save on compute
 %% time:
-freq_range = [3000 6000];
-time_window = 0.04;
+freq_range = [2000 7000]; % TUNE
+time_window = 0.03; % TUNE
 %%%%%%%%%%%%
 
 
@@ -223,11 +228,11 @@ if 0
                 ntimes, ...
                 freq_range_ds);
         times_of_interest = tstep_of_interest * timestep
-else
+else % TUNE
         %times_of_interest = 0.78;
         %times_of_interest = [ 0.28 0.775 ];
         %times_of_interest = 0.325;
-        times_of_interest = 0.2;
+        times_of_interest = [0.325];
         %times_of_interest = 0.45:0.01:0.48;
         %times_of_interest = [ 0.2:0.01:0.35 ];
         %times_of_interest = 0.5;
@@ -307,7 +312,7 @@ nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 % This only indirectly affects final timing precision, since thresholds are
 % optimally tuned based on the window defined in MATCH_PLUSMINUS.
 shotgun_max_sec = 0.02;
-shotgun_sigma = 0.003;
+shotgun_sigma = 0.003; % TUNE
 shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
 shotgun = shotgun / max(shotgun);
 shotgun = shotgun(find(shotgun>0.1));
@@ -366,7 +371,7 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([3 * ntsteps_of_interest]));
+net = feedforwardnet(ceil([4 * ntsteps_of_interest])); % TUNE
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
@@ -406,7 +411,7 @@ disp('Computing optimal output thresholds...');
 % How many seconds on either side of the tstep_of_interest is an acceptable match?
 MATCH_PLUSMINUS = 0.02;
 % Cost of false positives is relative to that of false negatives.
-FALSE_POSITIVE_COST = 1
+FALSE_POSITIVE_COST = 1 % TUNE
 
 songs_with_hits = [ones(1, nmatchingsongs) zeros(1, nsongs - nmatchingsongs)]';
 songs_with_hits = songs_with_hits(randomsongs);
