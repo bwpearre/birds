@@ -34,7 +34,7 @@ doplot = true;
 
 
 aftertrigger = 0.016;
-beforetrigger = -0.002;
+beforetrigger = -0.003;
 
 if ~isfield(data, 'version') % old format does not scale saved data
         scalefactor_V = 1/0.25;
@@ -137,6 +137,9 @@ if doplot
 end
 
 
+%figure(1);
+%plot(times_aligned(u), reshape(data.data_aligned(:,u,data.channels_out), [ length(u) length(data.channels_out)])');
+
 % Try:
 % Fourier, 8 terms
 % Polynomial, degree 8
@@ -144,7 +147,7 @@ end
 
 
 % Curve-fit: use a slightly longer time period
-roifit = [ 0.0025  0.016 ];
+roifit = [ 0.003  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 len = length(times_aligned);
@@ -167,8 +170,13 @@ end
 
 f = fit(roitimesfit, edata(roiifit, 3), fittype, opts);
 roitrend = f(times_aligned);
-
 responses_detrended = edata(:, 3) - roitrend;
+
+if false
+    f = fit(roitimesfit,  responses_detrended(roiifit), fittype, opts);
+    roitrend = f(times_aligned);
+    responses_detrended = responses_detrended - roitrend;
+end
 
 %cftool(roitimesfit,edata(roiifit,3))
 
