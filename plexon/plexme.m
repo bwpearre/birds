@@ -113,22 +113,54 @@ global stim; % which electrodes will we stimulate?
 global impedances_x;
 global stim_timer;
 global recording_channels;
+global controller;
+
 
 
 valid = zeros(1, 16);
 stim = zeros(1, 16);
 
+
+
+
+
+% Who controls pulses?
+% "master8": trigger pulses or pulse trains using Master8 and 3 pulse generators
+% "arduino": trigger pulses or pulse trains with an arduino (not yet
+%            implemented)
+% "ni":      first pulse triggered by NI acquisition, probably sent to a pulse
+%            generator so a baseline can be found before triggering; subsequent
+%            pulses come from multipulse sequences programmed into plexon.
+%            That makes amplifier blanking difficult to synchronise for
+%            more than a single pulse.
+% "plexon:   pulses come from Plexon--and cannot trigger amp blanking
+controller = master8;
+
+
 n_repetitions = 1;
 repetition_Hz = 10;
 
-disp('Program the Master-8:');
-disp('           OFF, All, All, All, Enter         # reset all');
-disp('           TRIG, 1, Enter                    # channel 1 in trigger mode');
-disp('           DURA, 1, 1, Enter, 4, Enter       # duration of trigger pulse');
-disp('           TRAIN, 1, Enter                   # channel 1 in pulsetrain mode');
-disp(sprintf('           INTER, 1, %d, Enter, 3, Enter    # interpulse interval', 1e3/repetition_Hz));
-disp(sprintf('           M, 1, %d, Enter, 0, Enter          # channel 1 train has m pulses', n_repetitions));
-
+switch controller
+    case 'master8'
+        disp('Program the Master-8:');
+        disp('           OFF, All, All, All, Enter         # reset all');
+        disp('           TRIG, 1, Enter                    # channel 1 in trigger mode');
+        disp('           DURA, 1, 1, Enter, 4, Enter       # duration of trigger pulse');
+        disp('           TRAIN, 1, Enter                   # channel 1 in pulsetrain mode');
+        disp(sprintf('           INTER, 1, %d, Enter, 3, Enter    # interpulse interval', 1e3/repetition_Hz));
+        disp(sprintf('           M, 1, %d, Enter, 0, Enter          # channel 1 train has m pulses', n_repetitions));
+    case 'arduino'
+        disp('Arduino triggering is not yet supported');
+        a(0);
+    case 'ni':
+        disp('Using NI to trigger first pulse.  Amplifier blanking WILL BE DIFFICULT!');
+    case 'plexon':
+        disp('Using Plexon to generate pulse trains.  Amplifier blanking WON''T WORK!');
+    otherwise:
+        disp('Invalid multipulse controller keyword');
+        a(0)
+end
+        
 
 bird = 'noname';
 datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
@@ -164,7 +196,7 @@ for i = 1:16
     eval(cmd);
 end
 
-channel_ranges = 5 * [ 1 1 1 1 1 1 1 ];
+channel_ranges = 2 * [ 1 1 1 1 1 1 1 ];
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
