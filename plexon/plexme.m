@@ -152,11 +152,11 @@ switch controller
     case 'arduino'
         disp('Arduino triggering is not yet supported');
         a(0);
-    case 'ni':
+    case 'ni'
         disp('Using NI to trigger first pulse.  Amplifier blanking WILL BE DIFFICULT!');
-    case 'plexon':
+    case 'plexon'
         disp('Using Plexon to generate pulse trains.  Amplifier blanking WON''T WORK!');
-    otherwise:
+    otherwise
         disp('Invalid multipulse controller keyword');
         a(0)
 end
