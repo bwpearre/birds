@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 21-Sep-2015 16:46:08
+% Last Modified by GUIDE v2.5 21-Sep-2015 17:37:20
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -215,6 +215,7 @@ set(handles.select_all_valid, 'Enable', 'on');
 set(handles.i_amplification, 'String', sprintf('%g', current_amplification));
 set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
+set(handles.recording_amplifier_gain_box, 'String', sprintf('%g', recording_amplifier_gain));
 
 newvals = {};
 for i = 1:16
@@ -308,11 +309,12 @@ guidata(hObject, handles);
 
 
 function [handles] = configure_acquisition_device(handles);
-global recording_channels repetition_Hz n_repetitions
+global recording_channels repetition_Hz n_repetitions recording_channel_indices
 
 %% Open NI acquisition board
 dev='Dev2'; % location of input device
-plexon_monitor_channels = [0 1];
+plexon_monitor_channels = [0 1]
+recording_channel_indices = length(plexon_monitor_channels)+1 : length(plexon_monitor_channels) + length(find(recording_channels))
 channels = [ plexon_monitor_channels find(recording_channels)];
 channel_labels = {'Voltage', 'Current'}; % labels for INCHANNELS
 for i = find(recording_channels)
@@ -401,6 +403,7 @@ global interpulse_s;
 global bird;
 global datadir;
 global channels;
+global recording_channel_indices;
 global comments;
 global stim;
 persistent rmshist;
@@ -410,6 +413,7 @@ global VOLTAGE_RANGE_LAST_STIM;
 if isempty(datadir)
     datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
 end
+
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
 % output because, um, TEXAS!
@@ -426,7 +430,7 @@ for i = 1:length(channels)
 end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
-edata(:,3) = event.Data(:,3) / recording_amplifier_gain;
+edata(:,recording_channel_indices) = event.Data(:,recording_channel_indices) / recording_amplifier_gain;
 edata_rawish = edata;
 
 VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))];
@@ -442,7 +446,7 @@ data.time = event.TimeStamps;
 data.fs = obj.Rate;
 
 
-triggerchannel = 4; % FIXME trigger
+triggerchannel = size(event.Data, 2);
 triggerthreshold = (max(abs(event.Data(:,triggerchannel))) + min(abs(event.Data(:,triggerchannel))))/2;
 trigger_ind = event.Data(:,triggerchannel) > triggerthreshold;
 trigger_ind = find(diff(trigger_ind) == 1) + 1;
@@ -481,9 +485,9 @@ if isempty(triggertime)
 end    
 % times_aligned is data.time aligned so spike=0
 
-data.version = 10;
-data.channels_out = [3];
-data.channel_trigger = 4;
+data.version = 11;
+data.channels_out = recording_channel_indices;
+data.channel_trigger = triggerchannel;
 data.n_repetitions = n_repetitions_actual;
 data.repetition_Hz = repetition_Hz;
 data.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
@@ -497,6 +501,7 @@ data.negativefirst = NEGFIRST;
 data.time = event.TimeStamps;
 data.stim_electrodes = stim;
 data.monitor_electrode = monitor_electrode;
+data.recording_amplifier_gain = recording_amplifier_gain;
 data.fs = obj.Rate;
 data.labels = {};
 data.names = {};
@@ -1696,7 +1701,7 @@ a(0)
 
 function recording_amplifier_gain_box_Callback(hObject, eventdata, handles)
 global recording_amplifier_gain;
-recording_amplifier_gain = str2num(get(handles.recording_amplifier_gain_box, 'Value'));
+recording_amplifier_gain = str2num(get(handles.recording_amplifier_gain_box, 'String'));
 
 function recording_amplifier_gain_box_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -1719,4 +1724,3 @@ recording_channels(whichone) = get(hObject, 'Value');
 
 handles = configure_acquisition_device(handles);
 guidata(hObject, handles);
-
