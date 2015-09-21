@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 28-Aug-2015 11:21:32
+% Last Modified by GUIDE v2.5 21-Sep-2015 16:46:08
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -102,7 +102,7 @@ global increase_type;
 global max_halftime;
 global current_amplification;
 global saving_stimulations;
-global intan_voltage_amplification;
+global recording_amplifier_gain;
 global channel_ranges;
 global bird;
 global datadir;
@@ -137,7 +137,7 @@ monitor_electrode = 1;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
-intan_voltage_amplification = 515;
+recording_amplifier_gain = 515;
 current_amplification = 1;
 saving_stimulations = false;
 handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
@@ -346,7 +346,7 @@ global stim_electrodes;
 global monitor_electrode;
 global current_amplification;
 global channel_ranges;
-global intan_voltage_amplification;
+global recording_amplifier_gain;
 global saving_stimulations;
 global halftime_us;
 global interpulse_s;
@@ -377,7 +377,7 @@ for i = 1:length(channels)
 end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
-edata(:,3) = event.Data(:,3) / intan_voltage_amplification;
+edata(:,3) = event.Data(:,3) / recording_amplifier_gain;
 edata_rawish = edata;
 
 VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))];
@@ -1711,8 +1711,8 @@ end
 
 % --- Executes on slider movement.
 function yscale_Callback(hObject, eventdata, handles)
-global intan_voltage_amplification;
-set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/intan_voltage_amplification);
+global recording_amplifier_gain;
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/recording_amplifier_gain);
 
 
 % --- Executes during object creation, after setting all properties.
@@ -1883,3 +1883,14 @@ negfirst_universal_callback(hObject, handles);
 % --- Executes on button press in debug.
 function debug_Callback(hObject, eventdata, handles)
 a(0)
+
+
+
+function recording_amplifier_gain_box_Callback(hObject, eventdata, handles)
+global recording_amplifier_gain;
+recording_amplifier_gain = str2num(get(handles.recording_amplifier_gain_box, 'Value'));
+
+function recording_amplifier_gain_box_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
