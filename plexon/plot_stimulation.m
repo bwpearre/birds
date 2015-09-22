@@ -13,12 +13,14 @@ end
 % If plot_stimulation is called from a timer or DAQ callback, the axes are
 % not present in the handles structure.  You may need a beer for this
 % one...
-if ~isfield(handles, 'axes1')
+if isfield(handles, 'startcurrent')
     handles.axes1 = axes1;
     handles.axes2 = axes2;
     handles.axes3 = axes3;
     handles.axes4 = axes4;
 end
+
+colours = get(handles.axes1, 'ColorOrder');
 
 persistent responses_detrended_prev;
 
@@ -64,9 +66,9 @@ if doplot
         
         %% If available, plot each trace individually
         if data.version == 7
-            triggerchannel = 4;
-            triggerthreshold = (max(abs(data.data_raw(:,triggerchannel))) + min(abs(data.data_raw(:,triggerchannel))))/2;
-            trigger_ind = data.data_raw(:,triggerchannel) > triggerthreshold;
+            trigger_index = 4;
+            triggerthreshold = (max(abs(data.data_raw(:,trigger_index))) + min(abs(data.data_raw(:,trigger_index))))/2;
+            trigger_ind = data.data_raw(:,trigger_index) > triggerthreshold;
             trigger_ind = find(diff(trigger_ind) == 1) + 1;
             triggertimes = data.time(trigger_ind);
             
@@ -82,19 +84,33 @@ if doplot
             end
             data.data_aligned = foo;
             %plot(handles.axes1, times_aligned(u), squeeze(foo(:,u,3))');
-            
-
         end
         
         if data.version >= 7
-            
-            plot(handles.axes1, times_aligned(u), reshape(data.data_aligned(:,u,3), [data.n_repetitions length(u)])');
-            
             edata = mean(data.data_aligned, 1);
             sz = size(edata);
             if length(sz) == 3 && sz(1) == 1
                 edata = reshape(edata, sz(2:3));
             end
+        end
+        
+        if data.version >= 7 & data.version < 11
+            plot(handles.axes1, times_aligned(u), reshape(data.data_aligned(:,u,3), [data.n_repetitions length(u)])');          
+        end
+        
+        if data.version >= 11
+            cla(handles.axes1);
+            colour_index = 1;
+            hold(handles.axes1, 'on');
+            for i = data.index_recording
+                plot(handles.axes1, ...
+                    times_aligned(u), ...
+                    reshape(data.data_aligned(:,u,i), [data.n_repetitions length(u)])', ...
+                    'Color', colours(colour_index, :));
+                colour_index = colour_index + 1;
+            end
+            hold(handles.axes1, 'off');
+            %legend(handles.axes1, data.names(data.index_recording));
         end
 
         % How about the derivative of the data?
@@ -105,13 +121,28 @@ if doplot
         %set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv2(:, w)))));
         
         
-    elseif get(handles.response_show_raw, 'Value')
-        plot(handles.axes1, times_aligned(u), edata(u,3), 'b');
-        axes1legend{end+1} = 'Measured';
-        hold(handles.axes1, 'on');
-        plot(handles.axes1, times_aligned(u), edata(u,4), 'c');
-        axes1legend{end+1} = 'trigger';
-        hold(handles.axes1, 'off');
+    elseif get(handles.response_show_avg, 'Value')
+        if data.version >= 11
+            cla(handles.axes1);
+            colour_index = 1;
+            hold(handles.axes1, 'on');
+            for i = data.index_recording
+                plot(handles.axes1, ...
+                    times_aligned(u), ...
+                    edata(u, i), ...
+                    'Color', colours(colour_index, :));
+                colour_index = colour_index + 1;
+            end
+            hold(handles.axes1, 'off');
+            %legend(handles.axes1, data.names(data.index_recording));
+        else
+            plot(handles.axes1, times_aligned(u), edata(u,3), 'b');
+            axes1legend{end+1} = 'Measured';
+            hold(handles.axes1, 'on');
+            plot(handles.axes1, times_aligned(u), edata(u,4), 'c');
+            axes1legend{end+1} = 'trigger';
+            hold(handles.axes1, 'off');
+        end
     else
         cla(handles.axes1);
     end
@@ -123,9 +154,7 @@ if doplot
         'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
     ylabel(handles.axes1, 'volts');
     grid(handles.axes1, 'on');
-    
 
-    
     
 
     yy = plotyy(handles.axes3, times_aligned(v), edata(v,1), ...
@@ -147,7 +176,7 @@ end
 
 
 % Curve-fit: use a slightly longer time period
-roifit = [ 0.003  0.016 ];
+roifit = [ 250e-6  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 len = length(times_aligned);
@@ -180,7 +209,7 @@ end
 
 %cftool(roitimesfit,edata(roiifit,3))
 
-roi = [0.003 0.008 ];
+roi = [250e-6 0.008 ];
 roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
 roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
 roitimes = times_aligned(roii);

@@ -45,16 +45,6 @@ end
 
 
 
-
-function [ intan_pin] = map_plexon_pin_to_intan(plexon_pin, handles)
-intan_pin = handles.PIN_NAMES(2, find(handles.PIN_NAMES(1,:) == plexon_pin));
-
-
-function [ plexon_pin] = map_intan_pin_to_plexon(intan_pin, handles)
-plexon_pin = handles.PIN_NAMES(1, find(handles.PIN_NAMES(2,:) == intan_pin));
-
-
-
 % --- Executes just before plexme is made visible.
 function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % This function has no output args, see OutputFcn.
@@ -67,11 +57,11 @@ function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 1; % Stimulating at this current will not yield enough voltage to cause injury even with a bad electrode.
-handles.MAX_uAMPS = 10;
+handles.START_uAMPS = 10; % Stimulating at this current will not yield enough voltage to cause injury even with a bad electrode.
+handles.MAX_uAMPS = 1000; % tdt
 handles.INCREASE_STEP = 1.1;
-handles.INTERSPIKE_S = 0.1;
-handles.VoltageLimit = 3;
+handles.INTERSPIKE_S = 0.01;
+handles.VoltageLimit = 5;
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
 
@@ -86,8 +76,8 @@ global NEGFIRST;
 global axes1;
 global axes1_yscale;
 global axes2;
-global axes4;
 global axes3;
+global axes4;
 global rmsbox;
 global vvsi;
 global comments;
@@ -113,7 +103,7 @@ global stim; % which electrodes will we stimulate?
 global impedances_x;
 global stim_timer;
 global recording_channels;
-global controller;
+global stim_trigger;
 
 
 
@@ -129,20 +119,20 @@ stim = zeros(1, 16);
 % "arduino": trigger pulses or pulse trains with an arduino (not yet
 %            implemented)
 % "ni":      first pulse triggered by NI acquisition, probably sent to a pulse
-%            generator so a baseline can be found before triggering; subsequent
+%            generator so a baseline can be found before stimulating; any subsequent
 %            pulses come from multipulse sequences programmed into plexon.
 %            That makes amplifier blanking difficult to synchronise for
 %            more than a single pulse.
 % "plexon:   pulses come from Plexon--and cannot trigger amp blanking
-controller = master8;
 
+stim_trigger = 'ni';
 
 n_repetitions = 1;
 repetition_Hz = 10;
 
-switch controller
+switch stim_trigger
     case 'master8'
-        disp('Program the Master-8:');
+        disp('Program the Master-8 thusly:');
         disp('           OFF, All, All, All, Enter         # reset all');
         disp('           TRIG, 1, Enter                    # channel 1 in trigger mode');
         disp('           DURA, 1, 1, Enter, 4, Enter       # duration of trigger pulse');
@@ -157,29 +147,30 @@ switch controller
     case 'plexon'
         disp('Using Plexon to generate pulse trains.  Amplifier blanking WON''T WORK!');
     otherwise
-        disp('Invalid multipulse controller keyword');
+        disp('Invalid multipulse stim_trigger keyword');
         a(0)
 end
-        
+
 
 bird = 'noname';
 datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
 increase_type = 'current'; % or 'time'
-default_halftime_us = 400;
+default_halftime_us = 100; %tdt
 halftime_us = default_halftime_us;
-interpulse_s = 100e-6;
+%interpulse_s = 100e-6;
+interpulse_s = 0; %tdt
 monitor_electrode = 1;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
-recording_amplifier_gain = 515;
+recording_amplifier_gain = 200; %tdt
 current_amplification = 1;
 saving_stimulations = false;
 handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
-recording_channels = [ 0 0 0 0 0 0 1 ];
+recording_channels = [ 0 0 0 1 1 1 1 ];
 
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
@@ -196,7 +187,7 @@ for i = 1:16
     eval(cmd);
 end
 
-channel_ranges = 2 * [ 1 1 1 1 1 1 1 ];
+channel_ranges = 2 * [ 1 1 1 1 1 1 1 1 ];
 
 
 % Top row is the names of pins on the Plexon.  Bottom row is corresponding
@@ -224,10 +215,12 @@ end
 set(handles.monitor_electrode_control, 'String', newvals);
 % Also make sure that the monitor spinbox is the right colour
 
+set(handles.n_repetitions_box, 'Enable', 'off');
+
 
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
-        handles.vvsi_auto_safe, handles.n_repetitions_box};
+        handles.vvsi_auto_safe};
 for i = 1:16
     cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i);
     eval(cmd);
@@ -303,24 +296,35 @@ catch ME
     rethrow(ME);
 end
 
+axes1 = handles.axes1;
+axes1_yscale = handles.yscale;
+axes2 = handles.axes2;
+axes4 = handles.axes4;
+axes3 = handles.axes3;
+
+
+gca = handles.stupidaxis;
+text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
+axis off;
+
 set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
 handles = configure_acquisition_device(handles);
 guidata(hObject, handles);
 
 
 function [handles] = configure_acquisition_device(handles);
-global recording_channels repetition_Hz n_repetitions recording_channel_indices
+global recording_channels repetition_Hz n_repetitions recording_channel_indices trigger_index;
 
 %% Open NI acquisition board
 dev='Dev2'; % location of input device
-plexon_monitor_channels = [0 1]
+plexon_monitor_channels = [0 1];
 recording_channel_indices = length(plexon_monitor_channels)+1 : length(plexon_monitor_channels) + length(find(recording_channels))
 channels = [ plexon_monitor_channels find(recording_channels)];
 channel_labels = {'Voltage', 'Current'}; % labels for INCHANNELS
 for i = find(recording_channels)
     channel_labels{end+1} = sprintf('Response %d', i);
 end
-channel_labels{end+1} = 'Trigger'
+channel_labels{end+1} = 'Trigger';
 
 daq.reset;
 handles.NIsession = daq.createSession('ni');
@@ -353,7 +357,9 @@ for i = 1:length(channels)
     end
 end
 
-addDigitalChannel(handles.NIsession, dev, 'Port0/Line0', 'InputOnly');
+foo = addDigitalChannel(handles.NIsession, dev, 'Port0/Line0', 'InputOnly');
+trigger_index = size(handles.NIsession.Channels, 2);
+handles.NIsession.Channels(trigger_index).Name = channel_labels{trigger_index};
 nscans = round(handles.NIsession.Rate * handles.NIsession.DurationInSeconds);
 tc = addTriggerConnection(handles.NIsession, sprintf('%s/PFI0', dev), 'external', 'StartTrigger');
 
@@ -374,16 +380,7 @@ handles.NI.listeners{1}=addlistener(handles.NIsession, 'DataAvailable',...
 handles.NIsession.NotifyWhenDataAvailableExceeds = nscans;
 prepare(handles.NIsession);
 
-axes1 = handles.axes1;
-axes1_yscale = handles.yscale;
-axes2 = handles.axes2;
-axes4 = handles.axes4;
-axes3 = handles.axes3;
-
-gca = handles.stupidaxis;
-text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
-axis off;
-
+handles.NIsession
 
 
 
@@ -403,6 +400,7 @@ global interpulse_s;
 global bird;
 global datadir;
 global channels;
+global trigger_index;
 global recording_channel_indices;
 global comments;
 global stim;
@@ -445,10 +443,8 @@ nchannels = length(obj.Channels);
 data.time = event.TimeStamps;
 data.fs = obj.Rate;
 
-
-triggerchannel = size(event.Data, 2);
-triggerthreshold = (max(abs(event.Data(:,triggerchannel))) + min(abs(event.Data(:,triggerchannel))))/2;
-trigger_ind = event.Data(:,triggerchannel) > triggerthreshold;
+triggerthreshold = (max(abs(event.Data(:,trigger_index))) + min(abs(event.Data(:,trigger_index))))/2;
+trigger_ind = event.Data(:,trigger_index) > triggerthreshold;
 trigger_ind = find(diff(trigger_ind) == 1) + 1;
 triggertimes = event.TimeStamps(trigger_ind);
 
@@ -478,16 +474,18 @@ if length(size(data_aligned)) == 3
 end
 
 
-triggertime = event.TimeStamps(find(event.Data(:,triggerchannel) >= triggerthreshold, 1));
+triggertime = event.TimeStamps(find(event.Data(:,trigger_index) >= triggerthreshold, 1));
 if isempty(triggertime)
     disp('No trigger!');
     return;
 end    
 % times_aligned is data.time aligned so spike=0
 
+%%%%% Increment the version whenever adding anything to the savefile format!
 data.version = 11;
-data.channels_out = recording_channel_indices;
-data.channel_trigger = triggerchannel;
+
+data.index_recording = recording_channel_indices;
+data.index_trigger = trigger_index;
 data.n_repetitions = n_repetitions_actual;
 data.repetition_Hz = repetition_Hz;
 data.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
@@ -562,13 +560,16 @@ else
 end
 
 
-file_format = 'yyyymmdd_HHMMSS.FFF';
-file_basename = 'vvsi';
-datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
-if ~exist(datadir, 'dir')
-	mkdir(datadir);
+if false
+    file_format = 'yyyymmdd_HHMMSS.FFF';
+    file_basename = 'vvsi';
+    datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
+    if ~exist(datadir, 'dir')
+        mkdir(datadir);
+    end
+    save(fullfile(datadir, datafile_name), 'vvsi');
 end
-save(fullfile(datadir, datafile_name), 'vvsi');
+
 delete(hObject);
 
 
@@ -579,6 +580,14 @@ delete(hObject);
 % --- Outputs from this function are returned to the command line.
 function varargout = plexme_OutputFcn(hObject, eventdata, handles) 
 varargout{1} = handles.output;
+
+
+function [ intan_pin] = map_plexon_pin_to_intan(plexon_pin, handles)
+intan_pin = handles.PIN_NAMES(2, find(handles.PIN_NAMES(1,:) == plexon_pin));
+
+
+function [ plexon_pin] = map_intan_pin_to_plexon(intan_pin, handles)
+plexon_pin = handles.PIN_NAMES(1, find(handles.PIN_NAMES(2,:) == intan_pin));
 
 
 
@@ -1134,6 +1143,7 @@ global monitor_electrode;
 global axes1;
 global n_repetitions repetition_Hz;
 global stim_timer;
+global stim_trigger;
 global stim;
 
 global vvsi;  % Voltages vs current for each stimulation
@@ -1198,8 +1208,19 @@ try
                 ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d', channel);
                 throw(ME);
         end
-        
-        err = PS_SetRepetitions(handles.box, channel, 1);
+ 
+        switch stim_trigger
+            case 'master8'
+                err = PS_SetRepetitions(handles.box, channel, 1);
+            case 'arduino'
+                err = PS_SetRepetitions(handles.box, channel, 1);
+            case 'ni'
+                err = PS_SetRepetitions(handles.box, channel, n_repetitions);
+            case 'plexon'
+                err = PS_SetRepetitions(handles.box, channel, n_repetitions);
+            otherwise
+                disp(sprintf('You must set a valid value for stim_trigger! ''%s'' is invalid.', stim_trigger));
+        end       
         if err
             ME = MException('plexon:pattern', 'Could not set repetitions on channel %d', channel);
             throw(ME);
@@ -1229,7 +1250,16 @@ try
         end
     end
     
-    err = PS_SetTriggerMode(handles.box, 1);
+    switch stim_trigger
+        case 'master8'
+            err = PS_SetTriggerMode(handles.box, 1);
+        case 'arduino'
+            err = PS_SetTriggerMode(handles.box, 1);
+        case 'ni'
+            err = PS_SetTriggerMode(handles.box, 1);
+        case 'plexon'
+            err = PS_SetTriggerMode(handles.box, 0);
+    end
     if err
         ME = MException('plexon:trigger', 'Could not set trigger mode on channel %d', channel);
         throw(ME);
@@ -1237,22 +1267,22 @@ try
                 
 
     
-    if true
-        %disp('***** Running in external-trigger mode 2');
-        handles.NIsession.startForeground;
-    else
-        % Start it!
-        handles.NIsession.startBackground;
-
-        
-        err = PS_StartStimAllChannels(handles.box);
-        if err
-            handles.NIsession.stop;
-            ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', handles.box, PS_GetExtendedErrorInfo(err));
-            throw(ME);
-        end
-        handles.NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
-
+    switch stim_trigger
+        case 'master8'
+            handles.NIsession.startForeground;
+        case 'arduino'
+            handles.NIsession.startForeground;
+        case 'ni'
+            handles.NIsession.startForeground;
+        case 'plexon'
+            handles.NIsession.startBackground;
+            err = PS_StartStimAllChannels(handles.box);
+            if err
+                handles.NIsession.stop;
+                ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', handles.box, PS_GetExtendedErrorInfo(err));
+                throw(ME);
+            end
+            handles.NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
     end
      
     %vvsi(end+1, :) = [ monitor_electrode CURRENT_uAMPS NEGFIRST VOLTAGE_RANGE_LAST_STIM halftime_us];
@@ -1338,7 +1368,7 @@ end
 
 
   
-  
+
   
   
 % --- Executes on button press in stimMultiple.
