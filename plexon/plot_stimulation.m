@@ -35,8 +35,8 @@ doplot = true;
 
 
 
-aftertrigger = 0.016;
-beforetrigger = -0.003;
+aftertrigger = 10e-3;
+beforetrigger = -3e-3;
 
 if ~isfield(data, 'version') % old format does not scale saved data
         scalefactor_V = 1/0.25;
@@ -45,6 +45,9 @@ if ~isfield(data, 'version') % old format does not scale saved data
         data.data(:,2) = data.data(:,2) * scalefactor_i;
 end
 
+% I create this convenience variable so that I can dump the averaged data
+% for (later versioned) multi-pulse trains into the single-pulse data
+% structure used in earlier versions.  (?)
 edata = data.data;
 
 
@@ -101,16 +104,20 @@ if doplot
         if data.version >= 11
             cla(handles.axes1);
             colour_index = 1;
+            legend_handles = [];
             hold(handles.axes1, 'on');
             for i = data.index_recording
-                plot(handles.axes1, ...
+                foo = plot(handles.axes1, ...
                     times_aligned(u), ...
                     reshape(data.data_aligned(:,u,i), [data.n_repetitions length(u)])', ...
                     'Color', colours(colour_index, :));
                 colour_index = colour_index + 1;
+                legend_handles(end+1) = foo(1);
             end
             hold(handles.axes1, 'off');
-            %legend(handles.axes1, data.names(data.index_recording));
+            legend(handles.axes1, ...
+                legend_handles, ...
+                data.names(data.index_recording));
         end
 
         % How about the derivative of the data?
@@ -134,7 +141,6 @@ if doplot
                 colour_index = colour_index + 1;
             end
             hold(handles.axes1, 'off');
-            %legend(handles.axes1, data.names(data.index_recording));
         else
             plot(handles.axes1, times_aligned(u), edata(u,3), 'b');
             axes1legend{end+1} = 'Measured';
@@ -165,6 +171,8 @@ if doplot
     set(get(yy(2),'Ylabel'),'String','\mu A')
 end
 
+xtick = get(handles.axes1, 'XTick');
+set(handles.axes1, 'XTick', xtick(1):0.001:xtick(end));
 
 %figure(1);
 %plot(times_aligned(u), reshape(data.data_aligned(:,u,data.channels_out), [ length(u) length(data.channels_out)])');
@@ -176,7 +184,7 @@ end
 
 
 % Curve-fit: use a slightly longer time period
-roifit = [ 250e-6  0.016 ];
+roifit = [ 500e-6  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 len = length(times_aligned);
@@ -209,7 +217,7 @@ end
 
 %cftool(roitimesfit,edata(roiifit,3))
 
-roi = [250e-6 0.008 ];
+roi = [500e-6 0.008 ];
 roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
 roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
 roitimes = times_aligned(roii);
@@ -227,7 +235,7 @@ if doplot
         axes1legend{end+1} = 'Detrended';
     end
     hold(handles.axes1, 'off');
-    if ~isempty(axes1legend)
+    if ~isempty(axes1legend) & false
         legend(handles.axes1, axes1legend);
     end
 end

@@ -57,7 +57,7 @@ function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 10; % Stimulating at this current will not yield enough voltage to cause injury even with a bad electrode.
+handles.START_uAMPS = 1; % Stimulating at this current will not yield enough voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 1000; % tdt
 handles.INCREASE_STEP = 1.1;
 handles.INTERSPIKE_S = 0.01;
@@ -114,20 +114,26 @@ stim = zeros(1, 16);
 
 
 
-% Who controls pulses?
-% "master8": trigger pulses or pulse trains using Master8 and 3 pulse generators
-% "arduino": trigger pulses or pulse trains with an arduino (not yet
-%            implemented)
-% "ni":      first pulse triggered by NI acquisition, probably sent to a pulse
-%            generator so a baseline can be found before stimulating; any subsequent
-%            pulses come from multipulse sequences programmed into plexon.
-%            That makes amplifier blanking difficult to synchronise for
-%            more than a single pulse.
-% "plexon:   pulses come from Plexon--and cannot trigger amp blanking
+% Who controls pulses?  Three functional paradigms, and one special case:
+% ACQUISITION-INITIATED, EACH PULSE EXTERNALLY TRIGGERED:
+%    "master8": trigger pulses or pulse trains using Master8 (and 3 pulse
+%               generators).  Also, print out programming instructions for
+%               Master8.
+%    "arduino": trigger pulses or pulse trains with an arduino (not yet
+%               implemented)
+% ACQUISITION-INITIATED, FIRST PULSE IN TRAIN EXTERNALLY TRIGGERED,
+% SUBSEQUENT PULSES INITIATED INTERNALLY BY STIMULATOR (Plexon):
+%    "ni":      first pulse triggered by NI acquisition, probably sent to a
+%               pulse generator so a baseline can be found before
+%               stimulating; any subsequent pulses come from multipulse
+%               sequences programmed into plexon.  That may make amplifier
+%               blanking difficult to synchronise for more than a single pulse.
+% SOFTWARE-INITIATED, ALL PULSES IN TRAIN INITIATED INTERNALLY BY STIMULATOR:
+%    "plexon:   pulses come from Plexon--and cannot trigger amp blanking.
 
 stim_trigger = 'ni';
 
-n_repetitions = 1;
+n_repetitions = 20;
 repetition_Hz = 10;
 
 switch stim_trigger
@@ -140,7 +146,8 @@ switch stim_trigger
         disp(sprintf('           INTER, 1, %d, Enter, 3, Enter    # interpulse interval', 1e3/repetition_Hz));
         disp(sprintf('           M, 1, %d, Enter, 0, Enter          # channel 1 train has m pulses', n_repetitions));
     case 'arduino'
-        disp('Arduino triggering is not yet supported');
+        disp('Arduino triggering is not yet supported.  TO DO: write code');
+        disp('  to generate/upload/run Arduino pulse-train-generating code.');
         a(0);
     case 'ni'
         disp('Using NI to trigger first pulse.  Amplifier blanking WILL BE DIFFICULT!');
@@ -159,7 +166,7 @@ default_halftime_us = 100; %tdt
 halftime_us = default_halftime_us;
 %interpulse_s = 100e-6;
 interpulse_s = 0; %tdt
-monitor_electrode = 1;
+monitor_electrode = 2;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
@@ -318,7 +325,7 @@ global recording_channels repetition_Hz n_repetitions recording_channel_indices 
 %% Open NI acquisition board
 dev='Dev2'; % location of input device
 plexon_monitor_channels = [0 1];
-recording_channel_indices = length(plexon_monitor_channels)+1 : length(plexon_monitor_channels) + length(find(recording_channels))
+recording_channel_indices = length(plexon_monitor_channels)+1 : length(plexon_monitor_channels) + length(find(recording_channels));
 channels = [ plexon_monitor_channels find(recording_channels)];
 channel_labels = {'Voltage', 'Current'}; % labels for INCHANNELS
 for i = find(recording_channels)
