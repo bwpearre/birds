@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 21-Sep-2015 17:37:20
+% Last Modified by GUIDE v2.5 23-Sep-2015 16:32:40
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -54,10 +54,12 @@ function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % varargin   command line arguments to plexme (see VARARGIN)
 
 
+
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 1; % Stimulating at this current will not yield enough voltage to cause injury even with a bad electrode.
+handles.START_uAMPS = 1; % Stimulating at this current will not yield enough
+                         % voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 1000; % tdt
 handles.INCREASE_STEP = 1.1;
 handles.INTERSPIKE_S = 0.01;
@@ -68,6 +70,7 @@ handles.open = false;
 % NI control rubbish
 handles.NIsession = [];
 
+global homedir datadir intandir;
 global CURRENT_uAMPS;
 CURRENT_uAMPS = handles.START_uAMPS;
 global change;
@@ -89,15 +92,12 @@ global halftime_us;
 global interpulse_s;
 global increase_type;
 global max_halftime;
-global current_amplification;
 global saving_stimulations;
 global recording_amplifier_gain;
 global channel_ranges;
 global bird;
-global datadir;
 global channels;
 global n_repetitions repetition_Hz;
-global intandir;
 global valid; % which electrodes seem valid for stimulation?
 global stim; % which electrodes will we stimulate?
 global impedances_x;
@@ -105,12 +105,21 @@ global stim_timer;
 global recording_channels;
 global stim_trigger;
 
+n_repetitions = 10;
+repetition_Hz = 10;
+
 
 
 valid = zeros(1, 16);
 stim = zeros(1, 16);
 
 
+
+if ispc
+    homedir = getenv('USERPROFILE');
+else
+    homedir = getenv('HOME');
+end
 
 
 
@@ -133,8 +142,6 @@ stim = zeros(1, 16);
 
 stim_trigger = 'ni';
 
-n_repetitions = 20;
-repetition_Hz = 10;
 
 switch stim_trigger
     case 'master8'
@@ -160,7 +167,8 @@ end
 
 
 bird = 'noname';
-datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
+datadir = strcat(homedir, '/v/birds/plexon/', bird, '-', datestr(now, 'yyyy-mm-dd'));
+set(handles.datadir_box, 'String', datadir);
 increase_type = 'current'; % or 'time'
 default_halftime_us = 100; %tdt
 halftime_us = default_halftime_us;
@@ -171,13 +179,12 @@ electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
 recording_amplifier_gain = 200; %tdt
-current_amplification = 1;
 saving_stimulations = false;
 handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
-recording_channels = [ 0 0 0 1 1 1 1 ];
+recording_channels = [ 0 0 1 1 1 1 1 ];
 
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
@@ -210,10 +217,10 @@ set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(halftime_us)));
 set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.select_all_valid, 'Enable', 'on');
-set(handles.i_amplification, 'String', sprintf('%g', current_amplification));
 set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
 set(handles.recording_amplifier_gain_box, 'String', sprintf('%g', recording_amplifier_gain));
+set(handles.response_dummy, 'Enable', 'off', 'Value', 0);
 
 newvals = {};
 for i = 1:16
@@ -398,7 +405,6 @@ function NIsession_callback(obj, event, handlefigure)
 global CURRENT_uAMPS;
 global NEGFIRST;
 global monitor_electrode;
-global current_amplification;
 global channel_ranges;
 global recording_amplifier_gain;
 global saving_stimulations;
@@ -411,13 +417,9 @@ global trigger_index;
 global recording_channel_indices;
 global comments;
 global stim;
-persistent rmshist;
 global n_repetitions repetition_Hz;
 global VOLTAGE_RANGE_LAST_STIM;
-
-if isempty(datadir)
-    datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
-end
+persistent rmshist;
 
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
@@ -434,7 +436,7 @@ for i = 1:length(channels)
     end
 end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
-edata(:,2) = event.Data(:,2) * scalefactor_i / current_amplification;
+edata(:,2) = event.Data(:,2) * scalefactor_i;
 edata(:,recording_channel_indices) = event.Data(:,recording_channel_indices) / recording_amplifier_gain;
 edata_rawish = edata;
 
@@ -1197,8 +1199,8 @@ try
         end
     end
     
-    disp('stimulating on channels:');
-    stim
+    %disp('stimulating on channels:');
+    %stim
     for channel = find(stim)
         err = PS_SetPatternType(handles.box, channel, 0);
         if err
@@ -1508,20 +1510,6 @@ end
 
 
 
-
-function i_amplification_Callback(hObject, eventdata, handles)
-global current_amplification;
-current_amplification = str2double(get(hObject,'String'));
-
-
-% --- Executes during object creation, after setting all properties.
-function i_amplification_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-
 % --- Executes on button press in saving.
 function saving_Callback(hObject, eventdata, handles)
 global saving_stimulations;
@@ -1530,14 +1518,19 @@ saving_stimulations = get(hObject, 'Value');
 
 
 function birdname_Callback(hObject, eventdata, handles)
-global datadir;
+global homedir datadir;
 global bird;
 
 bird = get(hObject,'String');
-datadir = strcat(bird, '-', datestr(now, 'yyyy-mm-dd'));
+datadir = strcat(homedir, '/v/birds/plexon/', bird, '-', datestr(now, 'yyyy-mm-dd'));
+if ~exist(datadir, 'dir')
+    mkdir(datadir);
+end
+set(handles.datadir_box, 'String', datadir);
+
 set(hObject, 'BackgroundColor', [0 0.8 0]);
 
-% --- Executes during object creation, after setting all properties.
+
 function birdname_CreateFcn(hObject, eventdata, handles)
 set(hObject, 'String', 'noname');
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -1735,18 +1728,11 @@ function debug_Callback(hObject, eventdata, handles)
 a(0)
 
 
-
 function recording_amplifier_gain_box_Callback(hObject, eventdata, handles)
 global recording_amplifier_gain;
 recording_amplifier_gain = str2num(get(handles.recording_amplifier_gain_box, 'String'));
 
 function recording_amplifier_gain_box_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-% --- Executes during object creation, after setting all properties.
-function recording_channels_bitmask_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -1761,3 +1747,14 @@ recording_channels(whichone) = get(hObject, 'Value');
 
 handles = configure_acquisition_device(handles);
 guidata(hObject, handles);
+
+
+% --- Executes on button press in response_dummy.
+function response_dummy_Callback(hObject, eventdata, handles)
+% Hint: get(hObject,'Value') returns toggle state of response_dummy
+global response_dummy_channel;
+if get(hObject, 'Value')
+    response_dummy_channel = 3;
+else
+    response_dummy_channel = 0;
+end

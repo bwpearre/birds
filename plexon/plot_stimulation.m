@@ -78,9 +78,12 @@ if doplot
             if n_repetitions ~= length(trigger_ind)
                 disp(sprintf('Warning: tried to repeat the pattern %d times, but only see %d triggers', ...
                     n_repetitions, length(trigger_ind)));
-                return;
             end
-            
+            n_repetitions_actual = length(trigger_ind);
+            if n_repetitions_actual == 0
+                return
+            end
+
             for n = length(trigger_ind):-1:1
                 start_ind = trigger_ind(n) - trigger_ind(1) + 1;
                 foo(n,:,:) = data.data_raw(start_ind:start_ind+ceil(0.025*data.fs),:);
@@ -109,7 +112,7 @@ if doplot
             for i = data.index_recording
                 foo = plot(handles.axes1, ...
                     times_aligned(u), ...
-                    reshape(data.data_aligned(:,u,i), [data.n_repetitions length(u)])', ...
+                    reshape(data.data_aligned(:,u,i), [size(data.data_aligned, 1) length(u)])', ...
                     'Color', colours(colour_index, :));
                 colour_index = colour_index + 1;
                 legend_handles(end+1) = foo(1);
@@ -152,7 +155,7 @@ if doplot
     else
         cla(handles.axes1);
     end
-    title(handles.axes1, 'HVC Response');
+    title(handles.axes1, 'Response');
     xl = get(handles.axes1, 'XLim');
     xl(1) = beforetrigger;
     set(handles.axes1, ...
