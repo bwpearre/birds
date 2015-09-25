@@ -157,9 +157,9 @@ switch stim_trigger
         disp('  to generate/upload/run Arduino pulse-train-generating code.');
         a(0);
     case 'ni'
-        disp('Using NI to trigger first pulse.  Amplifier blanking WILL BE DIFFICULT!');
+        disp('Using NI to trigger first pulse.  Amplifier blanking will be difficult.');
     case 'plexon'
-        disp('Using Plexon to generate pulse trains.  Amplifier blanking WON''T WORK!');
+        disp('Using Plexon to generate pulse trains.  Amplifier blanking WON''T WORK.');
     otherwise
         disp('Invalid multipulse stim_trigger keyword');
         a(0)
@@ -178,13 +178,13 @@ monitor_electrode = 2;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
-recording_amplifier_gain = 200; %tdt
+recording_amplifier_gain = 140; % tdt, gain set to "200".  (If that's 200, then I'm well-endowed.)
 saving_stimulations = false;
 handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
-recording_channels = [ 0 0 1 1 1 1 1 ];
+recording_channels = [ 0 0 0 1 1 1 1 ];
 
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
@@ -203,11 +203,15 @@ end
 
 channel_ranges = 2 * [ 1 1 1 1 1 1 1 1 ];
 
-
-% Top row is the names of pins on the Plexon.  Bottom row is corresponding
-% pins on the Intan.
+%% ROWS:
+% (1) Pins on the Plexon
+% (2) Pins on the Intan.
+% (3) Pins on TDT ZIFclip if my guess about their value of "the connector" is right
+% (4) Pins on TDT ZIFclip if I'm backwards...
 handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ...
-                     19 18 17 16 15 14 13 12 20  21  22  23   8   9  10  11 ];
+                     19 18 17 16 15 14 13 12 20  21  22  23   8   9  10  11 ; ...
+                     15 13 11  9  7  5  3  1 16  14  12  10   8   6   4   2 ; ...
+                      1  3  5  7  9 11 13 15  2   4   6   8  10  12  14  16];
 
 
 set(handles.startcurrent, 'String', sprintf('%d', round(handles.START_uAMPS)));
@@ -451,7 +455,6 @@ nchannels = length(obj.Channels);
 
 data.time = event.TimeStamps;
 data.fs = obj.Rate;
-
 triggerthreshold = (max(abs(event.Data(:,trigger_index))) + min(abs(event.Data(:,trigger_index))))/2;
 trigger_ind = event.Data(:,trigger_index) > triggerthreshold;
 trigger_ind = find(diff(trigger_ind) == 1) + 1;
