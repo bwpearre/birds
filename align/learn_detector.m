@@ -55,7 +55,7 @@ if agg_audio.fs ~= samplerate
         [a b] = rat(samplerate/agg_audio.fs);
 
         MIC_DATA = double(MIC_DATA);
-        MIC_DATA = resample(double(MIC_DATA), a, b);
+        MIC_DATA = resample(MIC_DATA, a, b);
 end
 %MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
 MIC_DATA = MIC_DATA / max(max(max(MIC_DATA)), -min(min(MIC_DATA)));
@@ -158,7 +158,7 @@ spectrograms = zeros([nsongs nfreqs ntimes]);
 spectrograms(1, :, :) = speck;
 disp('Computing spectrograms...');
 parfor i = 2:nsongs
-        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), FFT_SIZE, NOVERLAP, [], samplerate) + eps;
+        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), window, NOVERLAP, [], samplerate) + eps;
 end
 
 spectrograms = single(spectrograms);
