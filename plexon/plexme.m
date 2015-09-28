@@ -45,6 +45,9 @@ end
 
 
 
+
+
+
 % --- Executes just before plexme is made visible.
 function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % This function has no output args, see OutputFcn.
@@ -67,9 +70,7 @@ handles.VoltageLimit = 5;
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
 
-% NI control rubbish
-handles.NIsession = [];
-
+global NIsession;
 global homedir datadir intandir;
 global CURRENT_uAMPS;
 CURRENT_uAMPS = handles.START_uAMPS;
@@ -97,6 +98,7 @@ global recording_amplifier_gain;
 global channel_ranges;
 global bird;
 global channels;
+global response_dummy_channel;
 global n_repetitions repetition_Hz;
 global valid; % which electrodes seem valid for stimulation?
 global stim; % which electrodes will we stimulate?
@@ -108,20 +110,17 @@ global stim_trigger;
 n_repetitions = 10;
 repetition_Hz = 10;
 
-
+% NI control rubbish
+NIsession = [];
 
 valid = zeros(1, 16);
 stim = zeros(1, 16);
-
-
 
 if ispc
     homedir = getenv('USERPROFILE');
 else
     homedir = getenv('HOME');
 end
-
-
 
 % Who controls pulses?  Three functional paradigms, and one special case:
 % ACQUISITION-INITIATED, EACH PULSE EXTERNALLY TRIGGERED:
@@ -157,7 +156,7 @@ switch stim_trigger
         disp('  to generate/upload/run Arduino pulse-train-generating code.');
         a(0);
     case 'ni'
-        disp('Using NI to trigger first pulse.  Amplifier blanking will be difficult.');
+        disp('Using NI to trigger first pulse.  Amplifier blanking will require no clock drift.');
     case 'plexon'
         disp('Using Plexon to generate pulse trains.  Amplifier blanking WON''T WORK.');
     otherwise
@@ -213,7 +212,12 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
                      15 13 11  9  7  5  3  1 16  14  12  10   8   6   4   2 ; ...
                       1  3  5  7  9 11 13 15  2   4   6   8  10  12  14  16];
 
-
+for i = 1:16
+    eval(sprintf('set(handles.negfirst%d, ''String'', ''%s'');', ...
+        i,...
+        sprintf('%d', handles.PIN_NAMES(3,i))));
+end
+    
 set(handles.startcurrent, 'String', sprintf('%d', round(handles.START_uAMPS)));
 set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
 set(handles.maxcurrent, 'String', sprintf('%d', round(handles.MAX_uAMPS)));
@@ -224,7 +228,7 @@ set(handles.select_all_valid, 'Enable', 'on');
 set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
 set(handles.recording_amplifier_gain_box, 'String', sprintf('%g', recording_amplifier_gain));
-set(handles.response_dummy, 'Enable', 'off', 'Value', 0);
+%set(handles.response_dummy, 'Enable', 'off', 'Value', 0);
 
 newvals = {};
 for i = 1:16
@@ -238,7 +242,7 @@ set(handles.n_repetitions_box, 'Enable', 'off');
 
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
-        handles.vvsi_auto_safe};
+        handles.vvsi_auto_safe, handles.response_dummy};
 for i = 1:16
     cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i);
     eval(cmd);
@@ -326,12 +330,20 @@ text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
 axis off;
 
 set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
-handles = configure_acquisition_device(handles);
+handles = configure_acquisition_device(hObject, handles);
 guidata(hObject, handles);
 
 
-function [handles] = configure_acquisition_device(handles);
-global recording_channels repetition_Hz n_repetitions recording_channel_indices trigger_index;
+
+
+
+
+
+function [handles] = configure_acquisition_device(hObject, handles);
+global NIsession;
+global recording_channels repetition_Hz n_repetitions recording_channel_indices;
+global trigger_index;
+global response_dummy_channel;
 
 %% Open NI acquisition board
 dev='Dev2'; % location of input device
@@ -345,44 +357,44 @@ end
 channel_labels{end+1} = 'Trigger';
 
 daq.reset;
-handles.NIsession = daq.createSession('ni');
-handles.NIsession.Rate = 100000;
-handles.NIsession.IsContinuous = 0;
-handles.NIsession.DurationInSeconds = 1/repetition_Hz * n_repetitions + 0.03;
+NIsession = daq.createSession('ni');
+NIsession.Rate = 100000;
+NIsession.IsContinuous = 0;
+NIsession.DurationInSeconds = 1/repetition_Hz * n_repetitions + 0.03;
 global channel_ranges;
 % FIXME Add TTL-triggered acquisition?
-%addTriggerConnection(handles.NIsession,'External','Dev1/PFI0','StartTrigger');
+%addTriggerConnection(NIsession,'External','Dev1/PFI0','StartTrigger');
 % FIXME Slew rate
 
 
 for i = 1:length(channels)
-    addAnalogInputChannel(handles.NIsession, dev, sprintf('ai%d', channels(i)), 'voltage');
-    param_names = fieldnames(handles.NIsession.Channels(i));
-	handles.NIsession.Channels(i).Name = channel_labels{i};
-	%handles.NIsession.Channels(i).Coupling = 'AC';
-    handles.NIsession.Channels(i).Range = [-1 1] * channel_ranges(i);
+    addAnalogInputChannel(NIsession, dev, sprintf('ai%d', channels(i)), 'voltage');
+    param_names = fieldnames(NIsession.Channels(i));
+	NIsession.Channels(i).Name = channel_labels{i};
+	%NIsession.Channels(i).Coupling = 'AC';
+    NIsession.Channels(i).Range = [-1 1] * channel_ranges(i);
     if length(handles.TerminalConfig) == length(channels)
         foo = i;
     else
         foo = 1;
     end
  	if any(strcmp(param_names,'TerminalConfig'))
- 		handles.NIsession.Channels(i).TerminalConfig = handles.TerminalConfig{foo};
+ 		NIsession.Channels(i).TerminalConfig = handles.TerminalConfig{foo};
  	elseif any(strcmp(param_names,'InputType'))
- 		handles.NIsession.Channels(i).InputType = handles.TerminalConfig{foo};
+ 		NIsession.Channels(i).InputType = handles.TerminalConfig{foo};
  	else
  		error('Could not set NiDaq input type');
     end
 end
 
-foo = addDigitalChannel(handles.NIsession, dev, 'Port0/Line0', 'InputOnly');
-trigger_index = size(handles.NIsession.Channels, 2);
-handles.NIsession.Channels(trigger_index).Name = channel_labels{trigger_index};
-nscans = round(handles.NIsession.Rate * handles.NIsession.DurationInSeconds);
-tc = addTriggerConnection(handles.NIsession, sprintf('%s/PFI0', dev), 'external', 'StartTrigger');
+foo = addDigitalChannel(NIsession, dev, 'Port0/Line0', 'InputOnly');
+trigger_index = size(NIsession.Channels, 2);
+NIsession.Channels(trigger_index).Name = channel_labels{trigger_index};
+nscans = round(NIsession.Rate * NIsession.DurationInSeconds);
+tc = addTriggerConnection(NIsession, sprintf('%s/PFI0', dev), 'external', 'StartTrigger');
 
-%ch = handles.NIsession.addDigitalChannel(dev, 'Port0/Line1', 'OutputOnly');
-%ch = handles.NIsession.addCounterOutputChannel(dev, 'ctr0', 'PulseGeneration');
+%ch = NIsession.addDigitalChannel(dev, 'Port0/Line1', 'OutputOnly');
+%ch = NIsession.addCounterOutputChannel(dev, 'ctr0', 'PulseGeneration');
 %disp(sprintf('Output trigger channel is ctr0 = %s', ch.Terminal));
 %ch.Frequency = 0.1;
 %ch.InitialDelay = 0;
@@ -390,15 +402,27 @@ tc = addTriggerConnection(handles.NIsession, sprintf('%s/PFI0', dev), 'external'
 
 %pulseme = zeros(nscans, 1);
 %pulseme(1:1000) = ones(1000, 1);
-%handles.NIsession.queueOutputData(pulseme);
+%NIsession.queueOutputData(pulseme);
 
-
-handles.NI.listeners{1}=addlistener(handles.NIsession, 'DataAvailable',...
+if isfield(handles, 'NI') & isfield(handles.NI, 'listeners')
+    delete(handles.NI.listeners{1});
+end
+handles.NI.listeners{1} = addlistener(NIsession, 'DataAvailable',...
 	@(obj,event) NIsession_callback(obj, event, handles.figure1));
-handles.NIsession.NotifyWhenDataAvailableExceeds = nscans;
-prepare(handles.NIsession);
+NIsession.NotifyWhenDataAvailableExceeds = nscans;
+prepare(NIsession);
 
-handles.NIsession
+NIsession
+
+if response_dummy_channel & sum(recording_channels) <= 1
+    disp('Warning: Dummy channel, but no non-dummy channels?');
+    disp('      Enable another channel, dummy!');
+end
+
+guidata(hObject, handles);
+
+
+
 
 
 
@@ -418,7 +442,8 @@ global bird;
 global datadir;
 global channels;
 global trigger_index;
-global recording_channel_indices;
+global recording_channels recording_channel_indices;
+global response_dummy_channel;
 global comments;
 global stim;
 global n_repetitions repetition_Hz;
@@ -496,7 +521,18 @@ end
 %%%%% Increment the version whenever adding anything to the savefile format!
 data.version = 11;
 
-data.index_recording = recording_channel_indices;
+
+if response_dummy_channel
+    if sum(recording_channels) <= 1
+        disp('Warning: Dummy channel, but no non-dummy channels?');
+        disp('      Enable another channel, dummy!');
+        data.index_recording = recording_channel_indices;
+    else
+        data.index_recording = recording_channel_indices(2:end);
+    end
+else
+    data.index_recording = recording_channel_indices;
+end
 data.index_trigger = trigger_index;
 data.n_repetitions = n_repetitions_actual;
 data.repetition_Hz = repetition_Hz;
@@ -542,7 +578,7 @@ end
 
 
 function gui_close_callback(hObject, callbackdata, handles)
-
+global NIsession;
 global vvsi;
 global datadir;
 global stim_timer;
@@ -557,10 +593,10 @@ if ~isempty(stim_timer)
     stim_timer = [];
 end
 
-if ~isempty(handles.NIsession)
-    stop(handles.NIsession);
-    release(handles.NIsession);
-    handles.NIsession = [];
+if ~isempty(NIsession)
+    stop(NIsession);
+    release(NIsession);
+    NIsession = [];
 end
 if handles.open
     err = PS_CloseAllStim;
@@ -1139,7 +1175,7 @@ guidata(hObject, handles);
 
 
 function plexon_control_timer_callback_2(obj, event, hObject, handles)
-
+global NIsession;
 global increase_type;
 global CURRENT_uAMPS;
 global default_halftime_us;
@@ -1281,20 +1317,20 @@ try
     
     switch stim_trigger
         case 'master8'
-            handles.NIsession.startForeground;
+            NIsession.startForeground;
         case 'arduino'
-            handles.NIsession.startForeground;
+            NIsession.startForeground;
         case 'ni'
-            handles.NIsession.startForeground;
+            NIsession.startForeground;
         case 'plexon'
-            handles.NIsession.startBackground;
+            NIsession.startBackground;
             err = PS_StartStimAllChannels(handles.box);
             if err
-                handles.NIsession.stop;
+                NIsession.stop;
                 ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', handles.box, PS_GetExtendedErrorInfo(err));
                 throw(ME);
             end
-            handles.NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
+            NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
     end
      
     %vvsi(end+1, :) = [ monitor_electrode CURRENT_uAMPS NEGFIRST VOLTAGE_RANGE_LAST_STIM halftime_us];
@@ -1587,11 +1623,12 @@ function response_filter_Callback(hObject, eventdata, handles)
 
 
 function n_repetitions_box_Callback(hObject, eventdata, handles)
+global NIsession;
 % This is broken for some unknown reason...
 global n_repetitions repetition_Hz;
 n_repetitions = str2double(get(hObject, 'String'));
-handles.NIsession.DurationInSeconds = 1/repetition_Hz * n_repetitions + 0.03;
-prepare(handles.NIsession);
+NIsession.DurationInSeconds = 1/repetition_Hz * n_repetitions + 0.03;
+prepare(NIsession);
 guidata(hObject, handles);
 
 function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
@@ -1740,6 +1777,8 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
+%% Controls which NI channels are used for recording.  If "dummy" is true, then
+% the first one will be ignored in the graph.
 function hvc_Callback(hObject, eventdata, handles)
 global recording_channels;
 
@@ -1748,16 +1787,13 @@ global recording_channels;
 whichone = str2double(get(hObject, 'String'));
 recording_channels(whichone) = get(hObject, 'Value');
 
-handles = configure_acquisition_device(handles);
+handles = configure_acquisition_device(hObject, handles);
 guidata(hObject, handles);
 
 
 % --- Executes on button press in response_dummy.
 function response_dummy_Callback(hObject, eventdata, handles)
 % Hint: get(hObject,'Value') returns toggle state of response_dummy
-global response_dummy_channel;
-if get(hObject, 'Value')
-    response_dummy_channel = 3;
-else
-    response_dummy_channel = 0;
-end
+global response_dummy_channel recording_channels;
+    
+response_dummy_channel = get(hObject, 'Value');
