@@ -63,6 +63,11 @@ u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
 v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
 w = find(times_aligned >= 0.003 & times_aligned < 0.008);
 
+if isempty(u) | length(u) < 5
+    disp(sprintf('WARNING: time alignment problem.  Is triggering working?'));
+    return;
+end
+
 axes1legend = {};
 if doplot
     if get(handles.response_show_all, 'Value')

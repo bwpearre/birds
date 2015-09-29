@@ -344,6 +344,7 @@ global NIsession;
 global recording_channels repetition_Hz n_repetitions recording_channel_indices;
 global trigger_index;
 global response_dummy_channel;
+global recording_time;
 
 %% Open NI acquisition board
 dev='Dev2'; % location of input device
@@ -360,7 +361,8 @@ daq.reset;
 NIsession = daq.createSession('ni');
 NIsession.Rate = 100000;
 NIsession.IsContinuous = 0;
-NIsession.DurationInSeconds = 1/repetition_Hz * n_repetitions + 0.03;
+recording_time = 1/repetition_Hz * n_repetitions + 0.03
+NIsession.DurationInSeconds = recording_time;
 global channel_ranges;
 % FIXME Add TTL-triggered acquisition?
 %addTriggerConnection(NIsession,'External','Dev1/PFI0','StartTrigger');
@@ -419,9 +421,65 @@ if response_dummy_channel & sum(recording_channels) <= 1
     disp('      Enable another channel, dummy!');
 end
 
+tdt_init(hObject, handles);
+
 guidata(hObject, handles);
 
 
+
+
+
+
+
+
+
+function [] = tdt_init(hObject, handles)
+global recording_channels response_dummy_channel;
+global tdt;
+global homedir;
+global tdt_samplerate recording_time tdt_nsamples;
+
+if true
+    tdtprogram = strrep(strcat(homedir, '/v/birds/plexon/TDT_triggered_recorder.rcx'), ...
+        '/', ...
+        filesep);
+elseif false
+    tdtprogram = strrep(strcat(homedir, '/Desktop/wintdt/RCOCircuits/16ChannelSelect.rcx'), ...
+        '/', ...
+        filesep);
+else
+    tdtprogram = strrep('C:\TDT\ActiveX\ActXExamples/RP_files/Continuous_Acquire.rcx', ...
+        '/', ...
+        filesep);
+end
+
+tdt = actxcontrol('RPco.X', [5 5 26 26]);
+if tdt.ConnectRZ5('GB', 1)
+    disp('Connected to RZ5');
+else
+    disp('Could not connect to RZ5');
+end
+
+tdt.ClearCOF
+
+if ~tdt.LoadCOFsf(tdtprogram, 2)
+    error('tdt:start', 'Can''t load TDT program ''%s''', tdtprogram);
+end
+tdt_samplerate = tdt.GetSFreq;
+tdt_nsamples = ceil(tdt_samplerate * recording_time);
+
+if ~tdt.Run
+    error('tdt:start', 'Can''t start TDT program.');
+elseif ~tdt.SetTagVal('record_time', recording_time * 1e3)
+    error('tdt:start', 'Can''t set TDT recording time');
+elseif ~tdt.SetTagVal('down_time', recording_time * 1e3 / 100)
+    error('tdt:start', 'Can''t set TDT schmitt down time');
+elseif ~tdt.SetTagVal('buffer_size', ceil(16 * tdt_nsamples * 1.01));
+    error('tdt:start', 'Can''t set TDT data buffer size to %d words', ...
+        ceil(16 * tdt_nsamples * 1.01));
+end
+
+disp(sprintf('TDT running ''%s'' at %g Hz)', tdtprogram, tdt_samplerate));
 
 
 
@@ -486,11 +544,8 @@ trigger_ind = find(diff(trigger_ind) == 1) + 1;
 triggertimes = event.TimeStamps(trigger_ind);
 
 if n_repetitions ~= length(trigger_ind)
-    disp(sprintf('Tried to repeat the pattern %d times, but only see %d triggers', ...
+    disp(sprintf('NOTE: tried to repeat the pattern %d times, but see %d triggers', ...
         n_repetitions, length(trigger_ind)));
-    if length(trigger_ind) & false
-        a(0)
-    end
 end
 
 n_repetitions_actual = length(trigger_ind);
@@ -582,6 +637,7 @@ global NIsession;
 global vvsi;
 global datadir;
 global stim_timer;
+global tdt;
 
 disp('Shutting down...');
 
@@ -616,6 +672,10 @@ if false
         mkdir(datadir);
     end
     save(fullfile(datadir, datafile_name), 'vvsi');
+end
+
+if ~isempty(tdt)
+    tdt.Halt;
 end
 
 delete(hObject);
@@ -892,6 +952,7 @@ global monitor_electrode;
 global axes1;
 global increase_type;
 global stim_timer;
+global tdt;
 
 
 disp('Stopping everything...');
@@ -997,13 +1058,16 @@ try
     NullPattern.A2 = 0;
     NullPattern.Delay = 0;
 
+    % Set up all non-stimulating channels to nil
     for channel = find(~stim)
+        % We will be using the rectangular pattern
         err = PS_SetPatternType(handles.box, channel, 0);
         if err
             ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
             throw(ME);
         end
 
+        % Set these channels to nothing.
         err = PS_SetRectParam2(handles.box, channel, NullPattern);
         if err
                 ME = MException('plexon:pattern', 'Could not set NULL pattern parameters on channel %d', channel);
@@ -1193,6 +1257,7 @@ global n_repetitions repetition_Hz;
 global stim_timer;
 global stim_trigger;
 global stim;
+global tdt tdt_nsamples;
 
 global vvsi;  % Voltages vs current for each stimulation
 
@@ -1332,6 +1397,21 @@ try
             end
             NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
     end
+    
+    % If recording with TDT, block until the data buffer has enough samples:
+    curidx = tdt.GetTagVal('DataIdx');
+    disp(sprintf('TDT contains %d samples', curidx));
+    lastidx = curidx;
+	while curidx < tdt_nsamples
+        disp(sprintf('Waiting for TDT: buffer now contains %d samples', curidx));
+		curidx = tdt.GetTagVal('DataIdx');
+        if lastidx == curidx
+            error('tdt:fail', 'TDT doesn''t seem to be getting triggers.');
+        end
+        lastidx = curidx;
+	end
+
+    
      
     %vvsi(end+1, :) = [ monitor_electrode CURRENT_uAMPS NEGFIRST VOLTAGE_RANGE_LAST_STIM halftime_us];
     if max(abs(VOLTAGE_RANGE_LAST_STIM)) < handles.VoltageLimit
