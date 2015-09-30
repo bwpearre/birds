@@ -32,7 +32,10 @@ end
 doplot = true;
 
 
-
+if data.version >= 12
+    plot(axes2, data.tddata);
+    drawnow;
+end
 
 
 aftertrigger = 10e-3;

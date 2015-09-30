@@ -466,7 +466,7 @@ if ~tdt.LoadCOFsf(tdtprogram, 2)
     error('tdt:start', 'Can''t load TDT program ''%s''', tdtprogram);
 end
 tdt_samplerate = tdt.GetSFreq;
-tdt_nsamples = ceil(tdt_samplerate * recording_time);
+tdt_nsamples = ceil(tdt_samplerate * recording_time) + 1;
 
 if ~tdt.Run
     error('tdt:start', 'Can''t start TDT program.');
@@ -477,6 +477,8 @@ elseif ~tdt.SetTagVal('down_time', recording_time * 1e3 / 100)
 elseif ~tdt.SetTagVal('buffer_size', ceil(16 * tdt_nsamples * 1.01));
     error('tdt:start', 'Can''t set TDT data buffer size to %d words', ...
         ceil(16 * tdt_nsamples * 1.01));
+elseif ~tdt.SetTagVal('dbuffer_size', ceil(tdt_nsamples * 1.01))
+    error('tdt:start', 'Can''t set TDT digital buffer size.');
 end
 
 disp(sprintf('TDT running ''%s'' at %g Hz)', tdtprogram, tdt_samplerate));
@@ -488,6 +490,7 @@ disp(sprintf('TDT running ''%s'' at %g Hz)', tdtprogram, tdt_samplerate));
 
 %% Called by NI data acquisition background process at end of acquisition
 function NIsession_callback(obj, event, handlefigure)
+global NIsession;
 global CURRENT_uAMPS;
 global NEGFIRST;
 global monitor_electrode;
@@ -507,6 +510,7 @@ global stim;
 global n_repetitions repetition_Hz;
 global VOLTAGE_RANGE_LAST_STIM;
 persistent rmshist;
+global tdt tdt_nsamples tdt_samplerate;
 
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
@@ -526,6 +530,38 @@ edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i;
 edata(:,recording_channel_indices) = event.Data(:,recording_channel_indices) / recording_amplifier_gain;
 edata_rawish = edata;
+
+if ~isempty(tdt)
+    %% If recording with TDT, block until the data buffer has enough samples:
+    curidx = tdt.GetTagVal('DataIdx');
+    disp(sprintf('TDT contains %d samples', curidx));
+    lastidx = curidx;
+	while curidx < tdt_nsamples
+        disp(sprintf('Waiting for TDT: buffer now contains %d samples', curidx));
+		curidx = tdt.GetTagVal('DataIdx');
+        if lastidx == curidx
+            error('tdt:fail', 'TDT doesn''t seem to be getting triggers.');
+        end
+        lastidx = curidx;
+    end
+    curidx2 = tdt.GetTagVal('DDataIdx')
+    if curidx ~= curidx2 * 16
+        error('tdt', 'Data buffer indices are not the same length.');
+    end
+
+    [a b] = rat(NIsession.Rate / tdt_samplerate);
+
+    tdata = tdt.ReadTagVEX('Data', 0, curidx / 16, 'F32', 'F32', 16)';
+    tddata = tdt.ReadTagV('DData', 0, curidx2)';
+    %tddatar = resample(tddata, a, b);
+    %tdata = resample(tdata, a, b);
+    %tddata = resample(tddata, a, b);
+    %figure(1);
+    %subplot(3,1,[1 2]);
+    %plot(tdata);
+    %subplot(3,1,3);
+    %plot(tddata);
+end
 
 VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))];
 
@@ -574,7 +610,7 @@ end
 % times_aligned is data.time aligned so spike=0
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 11;
+data.version = 12;
 
 
 if response_dummy_channel
@@ -598,6 +634,10 @@ data.current = CURRENT_uAMPS;
 data.data_raw = edata_rawish;
 data.data_aligned = data_aligned;
 data.data = edata;
+if ~isempty(tdt)
+    data.tdata = tdata;
+    data.tddata = tddata;
+end
 data.negativefirst = NEGFIRST;
 data.time = event.TimeStamps;
 data.stim_electrodes = stim;
@@ -1398,18 +1438,7 @@ try
             NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
     end
     
-    % If recording with TDT, block until the data buffer has enough samples:
-    curidx = tdt.GetTagVal('DataIdx');
-    disp(sprintf('TDT contains %d samples', curidx));
-    lastidx = curidx;
-	while curidx < tdt_nsamples
-        disp(sprintf('Waiting for TDT: buffer now contains %d samples', curidx));
-		curidx = tdt.GetTagVal('DataIdx');
-        if lastidx == curidx
-            error('tdt:fail', 'TDT doesn''t seem to be getting triggers.');
-        end
-        lastidx = curidx;
-	end
+    
 
     
      
