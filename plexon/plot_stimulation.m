@@ -32,13 +32,13 @@ end
 doplot = true;
 
 
-if data.version >= 12
-    plot(axes2, data.tddata);
-    drawnow;
+if data.version >= 12 & ~isempty(data.tdata_aligned)
+    data_to_plot = data.tdata_aligned;
+    
 end
 
 
-aftertrigger = 10e-3;
+aftertrigger = 12e-3;
 beforetrigger = -3e-3;
 
 if ~isfield(data, 'version') % old format does not scale saved data

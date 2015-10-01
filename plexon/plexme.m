@@ -61,7 +61,7 @@ function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 1; % Stimulating at this current will not yield enough
+handles.START_uAMPS = 50; % Stimulating at this current will not yield enough
                          % voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 1000; % tdt
 handles.INCREASE_STEP = 1.1;
@@ -107,8 +107,8 @@ global stim_timer;
 global recording_channels;
 global stim_trigger;
 
-n_repetitions = 10;
-repetition_Hz = 10;
+n_repetitions = 4;
+repetition_Hz = 20;
 
 % NI control rubbish
 NIsession = [];
@@ -511,6 +511,7 @@ global n_repetitions repetition_Hz;
 global VOLTAGE_RANGE_LAST_STIM;
 persistent rmshist;
 global tdt tdt_nsamples tdt_samplerate;
+global recording_time;
 
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
@@ -548,19 +549,27 @@ if ~isempty(tdt)
     if curidx ~= curidx2 * 16
         error('tdt', 'Data buffer indices are not the same length.');
     end
-
+    
     [a b] = rat(NIsession.Rate / tdt_samplerate);
 
-    tdata = tdt.ReadTagVEX('Data', 0, curidx / 16, 'F32', 'F32', 16)';
-    tddata = tdt.ReadTagV('DData', 0, curidx2)';
-    %tddatar = resample(tddata, a, b);
-    %tdata = resample(tdata, a, b);
-    %tddata = resample(tddata, a, b);
+    tdata = tdt.ReadTagVEX('Data', 0, curidx / 16, 'F32', 'F64', 16)';
+    tddata = tdt.ReadTagV('DData', 0, curidx2)' ~= 0;
+    figure(1);
+    subplot(1,2,1);
+    plot(tddata);
+    tdata = resample(tdata, a, b);
+    tddata = resample(double(tddata), a, b);
+    %subplot(1,2,2);
+    %plot(tddata);
+
     %figure(1);
     %subplot(3,1,[1 2]);
     %plot(tdata);
     %subplot(3,1,3);
     %plot(tddata);
+else
+    tdata = [];
+    tddata = [];
 end
 
 VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))];
@@ -572,42 +581,34 @@ nchannels = length(obj.Channels);
 %figure(1);
 %plot(event.Data);
 
+%%%%%
+%%%%% Chop/align the multiple stimulations from the NI
+%%%%%
 data.time = event.TimeStamps;
 data.fs = obj.Rate;
-triggerthreshold = (max(abs(event.Data(:,trigger_index))) + min(abs(event.Data(:,trigger_index))))/2;
-trigger_ind = event.Data(:,trigger_index) > triggerthreshold;
-trigger_ind = find(diff(trigger_ind) == 1) + 1;
-triggertimes = event.TimeStamps(trigger_ind);
 
-if n_repetitions ~= length(trigger_ind)
-    disp(sprintf('NOTE: tried to repeat the pattern %d times, but see %d triggers', ...
-        n_repetitions, length(trigger_ind)));
-end
-
-n_repetitions_actual = length(trigger_ind);
-if n_repetitions_actual == 0
-    return
-end
-
-
-for n = length(trigger_ind):-1:1
-    start_ind = trigger_ind(n) - trigger_ind(1) + 1;
-    data_aligned(n,:,:) = edata(start_ind:start_ind+ceil(0.025*data.fs),:);
-end
-%figure(1);
-%plot(squeeze(data_aligned(:,3,:)));
+[data_aligned triggertime n_repetitions_actual] = chop_and_align(event.Data, ...
+    event.Data(:, trigger_index), ...
+    event.TimeStamps, ...
+    n_repetitions, ...
+    data.fs);
+% times_aligned is data.time aligned so spike=0
 edata = mean(data_aligned, 1);
 if length(size(data_aligned)) == 3
     edata = squeeze(edata);
 end
 
+%%%%%
+%%%%% Chop/align the multiple stimulations from the TDT
+%%%%%
 
-triggertime = event.TimeStamps(find(event.Data(:,trigger_index) >= triggerthreshold, 1));
-if isempty(triggertime)
-    disp('No trigger!');
-    return;
-end    
-% times_aligned is data.time aligned so spike=0
+if ~isempty(tdt)
+    [tdata_aligned, tdt_triggertime, n_repetitions_actual_tdt ] = chop_and_align(tdata, ...
+        tddata, ...
+        0:1/data.fs:recording_time, ...
+        n_repetitions, ...
+        data.fs);
+end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
 data.version = 12;
@@ -624,8 +625,11 @@ if response_dummy_channel
 else
     data.index_recording = recording_channel_indices;
 end
+data.responses = data_aligned(:, :, 
+
 data.index_trigger = trigger_index;
 data.n_repetitions = n_repetitions_actual;
+data.n_repetitions_tdt = n_repetitions_actual_tdt;
 data.repetition_Hz = repetition_Hz;
 data.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
 data.halftime_us = halftime_us;
@@ -634,10 +638,8 @@ data.current = CURRENT_uAMPS;
 data.data_raw = edata_rawish;
 data.data_aligned = data_aligned;
 data.data = edata;
-if ~isempty(tdt)
-    data.tdata = tdata;
-    data.tddata = tddata;
-end
+data.tdata_aligned = tdata_aligned;
+data.tddata = tddata;
 data.negativefirst = NEGFIRST;
 data.time = event.TimeStamps;
 data.stim_electrodes = stim;
@@ -667,6 +669,48 @@ if saving_stimulations
 
     save(fullfile(datadir, datafile_name), 'data');
 end
+
+data
+
+
+
+
+
+function [data_aligned, triggertime, n_repetitions_actual] ...
+    = chop_and_align(data, triggers, timestamps, n_repetitions_sought, fs);
+
+%triggerthreshold = (max(abs(triggers)) + min(abs(triggers)))/2;
+triggerthreshold = 0.5;
+trigger_ind = triggers >= triggerthreshold;
+trigger_ind = find(diff(trigger_ind) == 1) + 1;
+triggertimes = timestamps(trigger_ind);
+
+if n_repetitions_sought ~= length(trigger_ind)
+    disp(sprintf('NOTE: looking for %d triggers, but found %d (threshold %d)', ...
+        n_repetitions_sought, length(trigger_ind), triggerthreshold));
+end
+
+n_repetitions_actual = length(trigger_ind);
+if n_repetitions_actual == 0
+    data_aligned = [];
+    triggertime = NaN;
+    return
+end
+
+
+for n = length(trigger_ind):-1:1
+    start_ind = trigger_ind(n) - trigger_ind(1) + 1;
+    data_aligned(n,:,:) = data(start_ind:start_ind+ceil(0.025*fs),:);
+end
+
+
+triggertime = timestamps(find(triggers >= triggerthreshold, 1));
+if isempty(triggertime)
+    disp('No trigger!');
+    data_aligned = [];
+    triggertime = NaN;
+    return;
+end    
 
 
 
