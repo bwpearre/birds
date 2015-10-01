@@ -108,7 +108,7 @@ global recording_channels;
 global stim_trigger;
 
 n_repetitions = 4;
-repetition_Hz = 20;
+repetition_Hz = 10;
 
 % NI control rubbish
 NIsession = [];
@@ -534,8 +534,11 @@ edata_rawish = edata;
 
 if ~isempty(tdt)
     %% If recording with TDT, block until the data buffer has enough samples:
+    tdt_TimeStamps = 0:1/tdt_samplerate:recording_time';
+    tdt_TimeStamps = tdt_TimeStamps(1:end-1);
+
     curidx = tdt.GetTagVal('DataIdx');
-    disp(sprintf('TDT contains %d samples', curidx));
+    %disp(sprintf('TDT contains %d samples', curidx));
     lastidx = curidx;
 	while curidx < tdt_nsamples
         disp(sprintf('Waiting for TDT: buffer now contains %d samples', curidx));
@@ -545,20 +548,20 @@ if ~isempty(tdt)
         end
         lastidx = curidx;
     end
-    curidx2 = tdt.GetTagVal('DDataIdx')
+    curidx2 = tdt.GetTagVal('DDataIdx');
     if curidx ~= curidx2 * 16
         error('tdt', 'Data buffer indices are not the same length.');
     end
     
-    [a b] = rat(NIsession.Rate / tdt_samplerate);
 
     tdata = tdt.ReadTagVEX('Data', 0, curidx / 16, 'F32', 'F64', 16)';
     tddata = tdt.ReadTagV('DData', 0, curidx2)' ~= 0;
     figure(1);
-    subplot(1,2,1);
-    plot(tddata);
-    tdata = resample(tdata, a, b);
-    tddata = resample(double(tddata), a, b);
+    subplot(3, 1, [1 2]);
+    plot(tdt_TimeStamps, tdata);
+    % [a b] = rat(NIsession.Rate / tdt_samplerate);
+    % tdata = resample(tdata, a, b);
+    % tddata = resample(double(tddata), a, b);
     %subplot(1,2,2);
     %plot(tddata);
 
@@ -584,18 +587,20 @@ nchannels = length(obj.Channels);
 %%%%%
 %%%%% Chop/align the multiple stimulations from the NI
 %%%%%
-data.time = event.TimeStamps;
-data.fs = obj.Rate;
 
 [data_aligned triggertime n_repetitions_actual] = chop_and_align(event.Data, ...
     event.Data(:, trigger_index), ...
     event.TimeStamps, ...
     n_repetitions, ...
-    data.fs);
+    obj.Rate);
 % times_aligned is data.time aligned so spike=0
 edata = mean(data_aligned, 1);
 if length(size(data_aligned)) == 3
     edata = squeeze(edata);
+end
+
+if n_repetitions_actual == 0
+    return;
 end
 
 %%%%%
@@ -603,11 +608,15 @@ end
 %%%%%
 
 if ~isempty(tdt)
-    [tdata_aligned, tdt_triggertime, n_repetitions_actual_tdt ] = chop_and_align(tdata, ...
+    [tdata_aligned, tdt_triggertime, n_repetitions_actual_tdt, d2] = chop_and_align(tdata, ...
         tddata, ...
-        0:1/data.fs:recording_time, ...
+        tdt_TimeStamps, ...
         n_repetitions, ...
-        data.fs);
+        tdt_samplerate);
+end
+
+if n_repetitions_actual_tdt == 0
+    return;
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
@@ -618,48 +627,65 @@ if response_dummy_channel
     if sum(recording_channels) <= 1
         disp('Warning: Dummy channel, but no non-dummy channels?');
         disp('      Enable another channel, dummy!');
-        data.index_recording = recording_channel_indices;
+        data.ni.index_recording = recording_channel_indices;
     else
-        data.index_recording = recording_channel_indices(2:end);
+        data.ni.index_recording = recording_channel_indices(2:end);
     end
 else
-    data.index_recording = recording_channel_indices;
+    data.ni.index_recording = recording_channel_indices;
 end
-data.responses = data_aligned(:, :, 
 
-data.index_trigger = trigger_index;
-data.n_repetitions = n_repetitions_actual;
-data.n_repetitions_tdt = n_repetitions_actual_tdt;
+data.ni.stim = data_aligned(:, :, 1:2);
+data.ni.response = data_aligned(:, :, recording_channel_indices);
+data.ni.n_repetitions = n_repetitions_actual;
+data.ni.index_trigger = trigger_index;
+data.ni.n_repetitions = n_repetitions_actual;
+data.ni.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
+data.ni.data_raw = edata_rawish;
+data.ni.time = event.TimeStamps;
+data.ni.recording_amplifier_gain = recording_amplifier_gain;
+data.ni.fs = obj.Rate;
+data.ni.triggertime = triggertime;
+for i=1:nchannels
+	data.ni.labels{i} = obj.Channels(i).ID;
+	data.ni.names{i} = obj.Channels(i).Name;
+end
+
+
+
+if ~isempty(tdt)
+    %data.tdt.response = tdata_aligned;
+    data.tdt.response = d2;
+    data.tdt.index_recording = 1:size(data.tdt.response, 3);
+    data.tdt.index_trigger = [];
+    data.tdt.n_repetitions = n_repetitions_actual_tdt;
+    data.tdt.time = tdt_TimeStamps;
+    data.tdt.times_aligned = tdt_TimeStamps(1:size(tdata_aligned,2)) - tdt_triggertime;
+    data.tdt.recording_amplifier_gain = 1;
+    data.tdt.fs = tdt_samplerate;
+    data.tdt.triggertime = triggertime;
+    for i=1:size(data.tdt.response, 3)
+        data.tdt.labels{i} = sprintf('tdt %d', i);
+        data.tdt.names{i} = sprintf('tdt %d', i);
+    end
+end
+
 data.repetition_Hz = repetition_Hz;
-data.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
 data.halftime_us = halftime_us;
 data.interpulse_s = interpulse_s;
 data.current = CURRENT_uAMPS;
-data.data_raw = edata_rawish;
-data.data_aligned = data_aligned;
-data.data = edata;
-data.tdata_aligned = tdata_aligned;
-data.tddata = tddata;
 data.negativefirst = NEGFIRST;
-data.time = event.TimeStamps;
 data.stim_electrodes = stim;
 data.monitor_electrode = monitor_electrode;
-data.recording_amplifier_gain = recording_amplifier_gain;
-data.fs = obj.Rate;
-data.labels = {};
-data.names = {};
-data.triggertime = triggertime;
-data.parameters.sensor_range = {};
 data.comments = comments;
 data.bird = bird;
 
-for i=1:nchannels
-	data.labels{i} = obj.Channels(i).ID;
-	data.names{i} = obj.Channels(i).Name;
-	%data.parameters.sensor_range{i} = obj.Channels(i).Range;
+if data.version >= 12
+    plot_stimulation_12(data, guihandles(handlefigure));
+else
+    plot_stimulation(data, guihandles(handlefigure));
 end
 
-plot_stimulation(data, guihandles(handlefigure));
 
 if saving_stimulations
     datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
@@ -670,13 +696,12 @@ if saving_stimulations
     save(fullfile(datadir, datafile_name), 'data');
 end
 
-data
 
 
 
 
 
-function [data_aligned, triggertime, n_repetitions_actual] ...
+function [data_aligned, triggertime, n_repetitions_actual, d2] ...
     = chop_and_align(data, triggers, timestamps, n_repetitions_sought, fs);
 
 %triggerthreshold = (max(abs(triggers)) + min(abs(triggers)))/2;
@@ -690,10 +715,15 @@ if n_repetitions_sought ~= length(trigger_ind)
         n_repetitions_sought, length(trigger_ind), triggerthreshold));
 end
 
+figure(1);
+subplot(3, 1, 3);
+plot(timestamps, triggers);
+
 n_repetitions_actual = length(trigger_ind);
 if n_repetitions_actual == 0
     data_aligned = [];
     triggertime = NaN;
+    d2 = 0;
     return
 end
 
@@ -701,6 +731,7 @@ end
 for n = length(trigger_ind):-1:1
     start_ind = trigger_ind(n) - trigger_ind(1) + 1;
     data_aligned(n,:,:) = data(start_ind:start_ind+ceil(0.025*fs),:);
+    d2(n,:,:) = repmat(triggers(start_ind:start_ind+ceil(0.025*fs)), 1, 3);
 end
 
 
@@ -710,7 +741,7 @@ if isempty(triggertime)
     data_aligned = [];
     triggertime = NaN;
     return;
-end    
+end
 
 
 

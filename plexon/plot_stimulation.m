@@ -33,8 +33,9 @@ doplot = true;
 
 
 if data.version >= 12 & ~isempty(data.tdata_aligned)
-    data_to_plot = data.tdata_aligned;
-    
+    d = data.responses_tdt;
+else
+    d = data.responses_ni;
 end
 
 
