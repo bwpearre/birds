@@ -106,6 +106,12 @@ global impedances_x;
 global stim_timer;
 global recording_channels;
 global stim_trigger;
+global tdt_show;  % Which TDT recording channels to show?
+global currently_reconfiguring;
+
+currently_reconfiguring = true;
+
+
 
 n_repetitions = 4;
 repetition_Hz = 10;
@@ -183,11 +189,13 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
-recording_channels = [ 0 0 0 1 1 1 1 ];
+recording_channels = [ 0 0 0 0 0 0 1 ];
+tdt_show = ones(1, 16);
 
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
 end
+
 
 
 %handles.TerminalConfig = 'SingleEnded';
@@ -237,12 +245,11 @@ end
 set(handles.monitor_electrode_control, 'String', newvals);
 % Also make sure that the monitor spinbox is the right colour
 
-set(handles.n_repetitions_box, 'Enable', 'off');
-
+%set(handles.n_repetitions_box, 'Enable', 'off');
 
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
-        handles.vvsi_auto_safe, handles.response_dummy};
+        handles.vvsi_auto_safe, handles.response_dummy handles.n_repetitions_box };
 for i = 1:16
     cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i);
     eval(cmd);
@@ -258,6 +265,8 @@ for i = 1:16
     cmd = sprintf('set(handles.stim%d, ''Value'', false);', i);
     eval(cmd);
 end
+
+
 
 % Open the stimulator
 
@@ -345,6 +354,10 @@ global recording_channels repetition_Hz n_repetitions recording_channel_indices;
 global trigger_index;
 global response_dummy_channel;
 global recording_time;
+global currently_reconfiguring;
+
+currently_reconfiguring = true;
+
 
 %% Open NI acquisition board
 dev='Dev2'; % location of input device
@@ -425,7 +438,7 @@ tdt_init(hObject, handles);
 
 guidata(hObject, handles);
 
-
+currently_reconfiguring = false;
 
 
 
@@ -454,10 +467,9 @@ else
 end
 
 tdt = actxcontrol('RPco.X', [5 5 26 26]);
-if tdt.ConnectRZ5('GB', 1)
-    disp('Connected to RZ5');
-else
+if ~tdt.ConnectRZ5('GB', 1)
     disp('Could not connect to RZ5');
+    return;
 end
 
 tdt.ClearCOF
@@ -482,6 +494,17 @@ elseif ~tdt.SetTagVal('dbuffer_size', ceil(tdt_nsamples * 1.01))
 end
 
 disp(sprintf('TDT running ''%s'' at %g Hz)', tdtprogram, tdt_samplerate));
+
+for i = 1:16
+    handles.tdt_show{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+                       'Value',1,'Position', [780 764-22*(i-1) 50 20], ...
+                        'Callback',{@tdt_show_channel_Callback});
+end
+guidata(hObject, handles);
+
+
+
+
 
 
 
@@ -512,6 +535,7 @@ global VOLTAGE_RANGE_LAST_STIM;
 persistent rmshist;
 global tdt tdt_nsamples tdt_samplerate;
 global recording_time;
+global tdt_show;
 
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
@@ -534,8 +558,7 @@ edata_rawish = edata;
 
 if ~isempty(tdt)
     %% If recording with TDT, block until the data buffer has enough samples:
-    tdt_TimeStamps = 0:1/tdt_samplerate:recording_time';
-    tdt_TimeStamps = tdt_TimeStamps(1:end-1);
+    tdt_TimeStamps = 0:1/tdt_samplerate:(recording_time+0.01);
 
     curidx = tdt.GetTagVal('DataIdx');
     %disp(sprintf('TDT contains %d samples', curidx));
@@ -544,21 +567,28 @@ if ~isempty(tdt)
         disp(sprintf('Waiting for TDT: buffer now contains %d samples', curidx));
 		curidx = tdt.GetTagVal('DataIdx');
         if lastidx == curidx
-            error('tdt:fail', 'TDT doesn''t seem to be getting triggers.');
+            disp('TDT doesn''t seem to be getting triggers.  Discarding...');
+            return;
         end
         lastidx = curidx;
     end
     curidx2 = tdt.GetTagVal('DDataIdx');
-    if curidx ~= curidx2 * 16
-        error('tdt', 'Data buffer indices are not the same length.');
-    end
     
+    goodlength = min(curidx/16, curidx2);
 
-    tdata = tdt.ReadTagVEX('Data', 0, curidx / 16, 'F32', 'F64', 16)';
-    tddata = tdt.ReadTagV('DData', 0, curidx2)' ~= 0;
+    tdata = tdt.ReadTagVEX('Data', 0, curidx/16, 'F16', 'F64', 16)';
+    tddata = tdt.ReadTagV('DData', 0, curidx2)';
+    tdata = tdata(1:goodlength, :);
+    tddata = tddata(1:goodlength, :);
+    
+    tdt_TimeStamps = tdt_TimeStamps(1:goodlength);
     figure(1);
     subplot(3, 1, [1 2]);
     plot(tdt_TimeStamps, tdata);
+    subplot(3,1,3);
+    plot(tdt_TimeStamps, tddata);
+    set(gca, 'YLim', [-0.1 6]);
+    %set(gca, 'XScale', 'linear');
     % [a b] = rat(NIsession.Rate / tdt_samplerate);
     % tdata = resample(tdata, a, b);
     % tddata = resample(double(tddata), a, b);
@@ -616,6 +646,7 @@ if ~isempty(tdt)
 end
 
 if n_repetitions_actual_tdt == 0
+    disp('...no triggers on TDT; aborting this train...');
     return;
 end
 
@@ -634,9 +665,9 @@ if response_dummy_channel
 else
     data.ni.index_recording = recording_channel_indices;
 end
-
 data.ni.stim = data_aligned(:, :, 1:2);
-data.ni.response = data_aligned(:, :, recording_channel_indices);
+data.ni.response = data_aligned(:, :, data.ni.index_recording);
+data.ni.show = 1:length(data.ni.index_recording); % For now, show everything that there is.
 data.ni.n_repetitions = n_repetitions_actual;
 data.ni.index_trigger = trigger_index;
 data.ni.n_repetitions = n_repetitions_actual;
@@ -655,7 +686,9 @@ end
 
 if ~isempty(tdt)
     %data.tdt.response = tdata_aligned;
+    %data.tdt.show = find(tdt_show);
     data.tdt.response = d2;
+    data.tdt.show = 1;
     data.tdt.index_recording = 1:size(data.tdt.response, 3);
     data.tdt.index_trigger = [];
     data.tdt.n_repetitions = n_repetitions_actual_tdt;
@@ -680,11 +713,7 @@ data.monitor_electrode = monitor_electrode;
 data.comments = comments;
 data.bird = bird;
 
-if data.version >= 12
-    plot_stimulation_12(data, guihandles(handlefigure));
-else
-    plot_stimulation(data, guihandles(handlefigure));
-end
+plot_stimulation(data, guihandles(handlefigure));
 
 
 if saving_stimulations
@@ -715,9 +744,6 @@ if n_repetitions_sought ~= length(trigger_ind)
         n_repetitions_sought, length(trigger_ind), triggerthreshold));
 end
 
-figure(1);
-subplot(3, 1, 3);
-plot(timestamps, triggers);
 
 n_repetitions_actual = length(trigger_ind);
 if n_repetitions_actual == 0
@@ -742,6 +768,15 @@ if isempty(triggertime)
     triggertime = NaN;
     return;
 end
+
+
+
+
+
+function tdt_show_channel_Callback(hObject, eventData, handles)
+global tdt_show;
+tdt_show(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
+
 
 
 
@@ -1373,6 +1408,12 @@ global stim_timer;
 global stim_trigger;
 global stim;
 global tdt tdt_nsamples;
+global currently_reconfiguring;
+
+if currently_reconfiguring
+    disp('Still reconfiguring the hardware... please wait...');
+    return;
+end
 
 global vvsi;  % Voltages vs current for each stimulation
 
@@ -1808,12 +1849,19 @@ function response_filter_Callback(hObject, eventdata, handles)
 
 function n_repetitions_box_Callback(hObject, eventdata, handles)
 global NIsession;
-% This is broken for some unknown reason...
 global n_repetitions repetition_Hz;
+
 n_repetitions = str2double(get(hObject, 'String'));
-NIsession.DurationInSeconds = 1/repetition_Hz * n_repetitions + 0.03;
-prepare(NIsession);
+
+if ~isempty(NIsession)
+    stop(NIsession);
+    release(NIsession);
+    NIsession = [];
+end
+
+handles = configure_acquisition_device(hObject, handles);
 guidata(hObject, handles);
+
 
 function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
