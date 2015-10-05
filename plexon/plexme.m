@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 23-Sep-2015 16:32:40
+% Last Modified by GUIDE v2.5 05-Oct-2015 18:36:58
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -61,12 +61,12 @@ function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 5; % Stimulating at this current will not yield enough
+handles.START_uAMPS = 10; % Stimulating at this current will not yield enough
                          % voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 1000; % tdt
 handles.INCREASE_STEP = 1.1;
 handles.INTERSPIKE_S = 0.01;
-handles.VoltageLimit = 10;
+handles.VoltageLimit = 5;
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
 
@@ -204,7 +204,6 @@ for i = 2:length(recording_channels)
 end
 
 
-
 %handles.TerminalConfig = 'SingleEnded';
 vvsi = [];
 comments = '';
@@ -242,6 +241,7 @@ set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
 set(handles.select_all_valid, 'Enable', 'on');
 set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
+set(handles.n_repetitions_hz_box, 'String', sprintf('%d', repetition_Hz));
 set(handles.recording_amplifier_gain_box, 'String', sprintf('%g', recording_amplifier_gain));
 %set(handles.response_dummy, 'Enable', 'off', 'Value', 0);
 
@@ -256,7 +256,8 @@ set(handles.monitor_electrode_control, 'String', newvals);
 
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
-        handles.vvsi_auto_safe, handles.response_dummy handles.n_repetitions_box };
+        handles.vvsi_auto_safe, handles.response_dummy handles.n_repetitions_box ...
+        handles.n_repetitions_hz_box};
 for i = 1:16
     cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i);
     eval(cmd);
@@ -577,8 +578,6 @@ for i = 1:length(channels)
 end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i;
-figure(2);
-plot(edata(:,1));
 edata(:,recording_channel_indices) = event.Data(:,recording_channel_indices) / recording_amplifier_gain;
 
 if ~isempty(tdt)
@@ -607,12 +606,14 @@ if ~isempty(tdt)
     tddata = tddata(1:goodlength, :);
     
     tdt_TimeStamps = tdt_TimeStamps(1:goodlength);
-    figure(1);
-    subplot(3, 1, [1 2]);
-    plot(tdt_TimeStamps, tdata);
-    subplot(3,1,3);
-    plot(tdt_TimeStamps, tddata);
-    set(gca, 'YLim', [-0.1 6]);
+    if false
+        figure(1);
+        subplot(3, 1, [1 2]);
+        plot(tdt_TimeStamps, tdata);
+        subplot(3,1,3);
+        plot(tdt_TimeStamps, tddata);
+        set(gca, 'YLim', [-0.1 6]);
+    end
     
     %set(gca, 'XScale', 'linear');
     % [a b] = rat(NIsession.Rate / tdt_samplerate);
@@ -1900,6 +1901,25 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
+function n_repetitions_hz_box_Callback(hObject, eventdata, handles)
+global NIsession n_repetitions repetition_Hz;
+
+repetition_Hz = str2double(get(hObject, 'String'));
+if ~isempty(NIsession)
+    stop(NIsession);
+    release(NIsession);
+    NIsession = [];
+end
+handles = configure_acquisition_device(hObject, handles);
+guidata(hObject, handles);
+
+
+% --- Executes during object creation, after setting all properties.
+function n_repetitions_hz_box_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
 
 
 % --- Executes on button press in load_impedances.
@@ -2060,3 +2080,5 @@ function response_dummy_Callback(hObject, eventdata, handles)
 global response_dummy_channel recording_channels;
     
 response_dummy_channel = get(hObject, 'Value');
+
+
