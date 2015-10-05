@@ -190,7 +190,9 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 recording_channels = [ 0 0 0 0 0 0 1 ];
-tdt_show = ones(1, 16);
+tdt_show = zeros(1, 16);
+tdt_show(13) = 1; % plexon 2
+tdt_show(2) = 1; % plexon 16
 
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
@@ -418,6 +420,17 @@ tc = addTriggerConnection(NIsession, sprintf('%s/PFI0', dev), 'external', 'Start
 %pulseme = zeros(nscans, 1);
 %pulseme(1:1000) = ones(1000, 1);
 %NIsession.queueOutputData(pulseme);
+if false
+    % Generate a test signal for dac0 output
+    global outputSignal;
+
+    foo = addAnalogOutputChannel(NIsession, dev, 'ao0', 'Voltage');
+    outputSignalLength = recording_time * NIsession.Rate;
+    outputSignal = (sin((1:outputSignalLength)/(30*2*pi))') * 1e-3;
+    outputSignal(end) = 0;
+    NIsession.Channels(end).Range = [-1 1] * 5;
+    queueOutputData(NIsession, outputSignal);
+end
 
 if isfield(handles, 'NI') & isfield(handles.NI, 'listeners')
     delete(handles.NI.listeners{1});
@@ -451,6 +464,7 @@ global recording_channels response_dummy_channel;
 global tdt;
 global homedir;
 global tdt_samplerate recording_time tdt_nsamples;
+global tdt_show;
 
 if true
     tdtprogram = strrep(strcat(homedir, '/v/birds/plexon/TDT_triggered_recorder.rcx'), ...
@@ -486,21 +500,26 @@ elseif ~tdt.SetTagVal('record_time', recording_time * 1e3)
     error('tdt:start', 'Can''t set TDT recording time');
 elseif ~tdt.SetTagVal('down_time', recording_time * 1e3 / 100)
     error('tdt:start', 'Can''t set TDT schmitt down time');
-elseif ~tdt.SetTagVal('buffer_size', ceil(16 * tdt_nsamples * 1.01));
-    error('tdt:start', 'Can''t set TDT data buffer size to %d words', ...
-        ceil(16 * tdt_nsamples * 1.01));
-elseif ~tdt.SetTagVal('dbuffer_size', ceil(tdt_nsamples * 1.01))
-    error('tdt:start', 'Can''t set TDT digital buffer size.');
+%elseif ~tdt.SetTagVal('buffer_size', ceil(16 * tdt_nsamples * 1.1));
+%    error('tdt:start', 'Can''t set TDT data buffer size to %d words', ...
+%        ceil(16 * tdt_nsamples * 1.1));
+%elseif ~tdt.SetTagVal('dbuffer_size', ceil(tdt_nsamples * 1.1))
+%    error('tdt:start', 'Can''t set TDT digital buffer size.');
 end
 
-disp(sprintf('TDT running ''%s'' at %g Hz)', tdtprogram, tdt_samplerate));
+disp(sprintf('TDT running ''%s'' at %g Hz, buffer %d)', tdtprogram, tdt_samplerate, ...
+    tdt.GetTagVal('buffer_size')));
 
 for i = 1:16
     handles.tdt_show{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
-                       'Value',1,'Position', [780 764-22*(i-1) 50 20], ...
+                       'Value',tdt_show(i),'Position', [780 764-22*(i-1) 50 20], ...
                         'Callback',{@tdt_show_channel_Callback});
 end
 guidata(hObject, handles);
+
+
+
+
 
 
 
@@ -576,7 +595,7 @@ if ~isempty(tdt)
     
     goodlength = min(curidx/16, curidx2);
 
-    tdata = tdt.ReadTagVEX('Data', 0, curidx/16, 'F16', 'F64', 16)';
+    tdata = tdt.ReadTagVEX('Data', 0, curidx, 'F32', 'F64', 16)';
     tddata = tdt.ReadTagV('DData', 0, curidx2)';
     tdata = tdata(1:goodlength, :);
     tddata = tddata(1:goodlength, :);
@@ -588,6 +607,7 @@ if ~isempty(tdt)
     subplot(3,1,3);
     plot(tdt_TimeStamps, tddata);
     set(gca, 'YLim', [-0.1 6]);
+    
     %set(gca, 'XScale', 'linear');
     % [a b] = rat(NIsession.Rate / tdt_samplerate);
     % tdata = resample(tdata, a, b);
@@ -685,10 +705,10 @@ end
 
 
 if ~isempty(tdt)
-    %data.tdt.response = tdata_aligned;
-    %data.tdt.show = find(tdt_show);
-    data.tdt.response = d2;
-    data.tdt.show = 1;
+    data.tdt.response = tdata_aligned;
+    data.tdt.show = find(tdt_show);
+    %data.tdt.response = d2;
+    %data.tdt.show = 1;
     data.tdt.index_recording = 1:size(data.tdt.response, 3);
     data.tdt.index_trigger = [];
     data.tdt.n_repetitions = n_repetitions_actual_tdt;
@@ -1446,6 +1466,10 @@ NullPattern.W2 = 0;
 NullPattern.A1 = 0;
 NullPattern.A2 = 0;
 NullPattern.Delay = 0;
+
+    %global outputSignal;
+    %queueOutputData(NIsession, outputSignal);
+
 
 try
 

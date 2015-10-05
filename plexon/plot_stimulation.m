@@ -63,19 +63,31 @@ axes1legend = {};
 response = d.response;
 sz = size(response);
 
+% Shall we compute the average of time-aligned responses?
 response_avg = mean(response, 1);
+%foo = size(response_avg);
+%if length(foo) == 3
+%    response_avg = reshape(response_avg, foo(2:3));
+%end
 
 if get(handles.response_show_avg, 'Value')
     response = response_avg;
 end
+% get(handles.response_show_all, 'Value')
 
-foo = size(response_avg);
-if length(foo) == 3
-    response_avg = reshape(response_avg, foo(2:3));
+% Let's try a filter, shall we?  This used to filter the raw data, but I
+% think I should not filter until after detrending, if at all.
+%disp('Bandpass-filtering the data...');
+%[B A] = butter(2, 0.07, 'high');
+if get(handles.response_filter, 'Value')
+    [B A] = ellip(2, .5, 40, [200 5000]/(d.fs/2));
+    for i = 1:size(response, 1)
+        response(i,:,:) = filtfilt(B, A, squeeze(response(i,:,:)));
+    end
 end
 
-% get(handles.response_show_all, 'Value')
-    
+
+
 cla(handles.axes1);
 colour_index = 1;
 legend_handles = [];
@@ -89,7 +101,7 @@ for i = d.show
     legend_handles(end+1) = foo(1);
 end
 hold(handles.axes1, 'off');
-legend_names = d.names{d.show};
+legend_names = d.names(d.show);
 legend(handles.axes1, legend_handles, legend_names);
     
 
@@ -129,6 +141,12 @@ set(handles.axes1, 'XTick', xtick(1):0.001:xtick(end));
 %figure(1);
 %plot(times_aligned(u), reshape(data.data_aligned(:,u,data.channels_out), [ length(u) length(data.channels_out)])');
 
+
+
+% Detrend!
+
+
+
 % Try:
 % Fourier, 8 terms
 % Polynomial, degree 8
@@ -139,6 +157,13 @@ set(handles.axes1, 'XTick', xtick(1):0.001:xtick(end));
 roifit = [ 2*data.halftime_us/1e6+data.interpulse_s+100e-6  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
+
+roi = [roifit(1) 0.008 ];
+roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
+roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
+roitimes = times_aligned(roii);
+roitimesplus = times_aligned(roiiplus);
+
 len = length(times_aligned);
 lenfit = length(roitimesfit);
 weightsfit = linspace(1, 0, lenfit);
@@ -157,62 +182,46 @@ switch fittype
     otherwise
 end
 
-response_avg_avg = mean(response_avg, 2);
+colour_index = 1;
+for channel = d.show
 
-f = fit(roitimesfit', response_avg_avg(roiifit), fittype, opts);
-roitrend = f(times_aligned);
-responses_detrended = response_avg_avg - roitrend;
+    f = fit(roitimesfit', squeeze(response_avg(1, roiifit, channel))', fittype, opts);
+    roitrend(:, channel) = f(times_aligned);
+    responses_detrended(:, channel) = squeeze(response_avg(1, :, channel))' - roitrend(:, channel);
 
-if false
-    f = fit(roitimesfit,  responses_detrended(roiifit), fittype, opts);
-    roitrend = f(times_aligned);
-    responses_detrended = responses_detrended - roitrend;
-end
+    if false
+        f = fit(roitimesfit,  responses_detrended(roiifit, channel), fittype, opts);
+        roitrend(:, channel) = f(times_aligned);
+        responses_detrended = responses_detrended - roitrend;
+    end
 
-%cftool(roitimesfit,response_avg(roiifit,3))
-
-roi = [500e-6 0.008 ];
-roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
-roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
-roitimes = times_aligned(roii);
-roitimesplus = times_aligned(roiiplus);
-
-hold(handles.axes1, 'on');
-if get(handles.response_show_trend, 'Value')
-    plot(handles.axes1, roitimesfit, roitrend(roiifit), 'g');
-    axes1legend{end+1} = 'Trend';
-end
-if get(handles.response_show_detrended, 'Value')
-    plot(handles.axes1, roitimes, responses_detrended(roii), 'r', 'LineWidth', 2);
-    plot(handles.axes1, roitimesplus, responses_detrended(roiiplus), 'k', 'LineWidth', 2);
-    axes1legend{end+1} = 'Detrended';
-end
-hold(handles.axes1, 'off');
-if ~isempty(axes1legend) & false
-    legend(handles.axes1, axes1legend);
-end
-
-
-
-% Let's try a filter, shall we?  This used to filter the raw data, but I
-% think I should not filter until after detrending, if at all.
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(2, 0.07, 'high');
-if get(handles.response_filter, 'Value')
-    [B A] = ellip(2, .5, 40, [300 9000]/(data.fs/2));
-
+    %cftool(roitimesfit,response_avg(roiifit,3))
     
-    %response_avg(:,3) = filtfilt(B, A, response_avg(:,3));
-    %if data.version >= 8
-    %    data.data_aligned(:,:,3) = filtfilt(B, A, data.data_aligned(:,:,3));
-    %else
-    %    data.data_raw(:,3) = filtfilt(B, A, data.data_raw(:,3));
+    
+    hold(handles.axes1, 'on');
+    if get(handles.response_show_trend, 'Value')
+        plot(handles.axes1, roitimesfit, roitrend(roiifit, channel), 'g');
+        axes1legend{end+1} = 'Trend';
+    end
+    if get(handles.response_show_detrended, 'Value')
+        %plot(handles.axes1, roitimes, responses_detrended(roii, channel), 'r', 'LineWidth', 2);
+        plot(handles.axes1, roitimes, responses_detrended(roii, channel), ...
+            'LineWidth', 2, 'Color', colours(colour_index, :));
+        %plot(handles.axes1, roitimesplus, responses_detrended(roiiplus, channel), 'k', 'LineWidth', 2);
+        %axes1legend{end+1} = 'Detrended';
+    end
+    colour_index = colour_index + 1;
+    hold(handles.axes1, 'off');
+    %if ~isempty(axes1legend) & false
+    %    legend(handles.axes1, axes1legend);
     %end
+    
+
 end
 
 
 
-if ~isempty(responses_detrended_prev)
+if ~isempty(responses_detrended_prev) & false
         lastxc = [xcorr(responses_detrended_prev(roii), responses_detrended(roii), 'coeff')']';
 
         corr_range = [min(corr_range(1), min(min(lastxc))) ...
@@ -262,8 +271,9 @@ end
 w = find(times_aligned >= halftime_us/1e6 - 0.00003 ...
     & times_aligned < halftime_us/1e6 + interpulse_s + 0.00001);
 %w = w(1:end-1);
-min_interpulse_volts = min(abs(response_avg(w,1)));
-plot(handles.axes4, times_aligned(w)*1000, response_avg(w,1));
+stim_avg = mean(data.ni.stim, 1);
+min_interpulse_volts = min(abs(stim_avg(1, w, 1)));
+plot(handles.axes4, times_aligned(w)*1000, squeeze(stim_avg(1, w, 1)));
 grid(handles.axes4, 'on');
 xlabel(handles.axes4, 'ms');
 ylabel(handles.axes4, 'V');
