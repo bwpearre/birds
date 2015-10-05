@@ -61,12 +61,12 @@ function plexme_OpeningFcn(hObject, ~, handles, varargin)
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 50; % Stimulating at this current will not yield enough
+handles.START_uAMPS = 5; % Stimulating at this current will not yield enough
                          % voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 1000; % tdt
 handles.INCREASE_STEP = 1.1;
 handles.INTERSPIKE_S = 0.01;
-handles.VoltageLimit = 5;
+handles.VoltageLimit = 10;
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
 
@@ -113,8 +113,8 @@ currently_reconfiguring = true;
 
 
 
-n_repetitions = 4;
-repetition_Hz = 10;
+n_repetitions = 50;
+repetition_Hz = 100;
 
 % NI control rubbish
 NIsession = [];
@@ -162,7 +162,7 @@ switch stim_trigger
         disp('  to generate/upload/run Arduino pulse-train-generating code.');
         a(0);
     case 'ni'
-        disp('Using NI to trigger first pulse.  Amplifier blanking will require no clock drift.');
+        disp('Using NI to trigger first pulse.  Clock drift will kill amplifier blanking.');
     case 'plexon'
         disp('Using Plexon to generate pulse trains.  Amplifier blanking WON''T WORK.');
     otherwise
@@ -184,15 +184,20 @@ electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
 recording_amplifier_gain = 140; % tdt, gain set to "200".  (If that's 200, then I'm well-endowed.)
-saving_stimulations = false;
+saving_stimulations = true;
 handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 recording_channels = [ 0 0 0 0 0 0 1 ];
 tdt_show = zeros(1, 16);
-tdt_show(13) = 1; % plexon 2
-tdt_show(2) = 1; % plexon 16
+if false
+    tdt_show(13) = 1; % plexon 2
+    tdt_show(2) = 1; % plexon 16
+else
+    % For the experiment with Win's 4-channel electrodes
+    tdt_show([5 7 9 11]) = [1 1 1 1];
+end
 
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
@@ -404,7 +409,7 @@ for i = 1:length(channels)
     end
 end
 
-foo = addDigitalChannel(NIsession, dev, 'Port0/Line0', 'InputOnly');
+addDigitalChannel(NIsession, dev, 'Port0/Line0', 'InputOnly');
 trigger_index = size(NIsession.Channels, 2);
 NIsession.Channels(trigger_index).Name = channel_labels{trigger_index};
 nscans = round(NIsession.Rate * NIsession.DurationInSeconds);
@@ -559,7 +564,7 @@ global tdt_show;
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
 % output because, um, TEXAS!
-scalefactor_V = 1/PS_GetVmonScaling(1); % V/V !!!!!!!!!!!!!!!!!!!!!!!
+scalefactor_V = 1/PS_GetVmonScaling(1);
 scalefactor_i = 400; % uA/mV, always!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 edata = event.Data;
 for i = 1:length(channels)
@@ -572,8 +577,9 @@ for i = 1:length(channels)
 end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i;
+figure(2);
+plot(edata(:,1));
 edata(:,recording_channel_indices) = event.Data(:,recording_channel_indices) / recording_amplifier_gain;
-edata_rawish = edata;
 
 if ~isempty(tdt)
     %% If recording with TDT, block until the data buffer has enough samples:
@@ -625,21 +631,18 @@ else
     tddata = [];
 end
 
-VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))];
+VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))]
 
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
 nchannels = length(obj.Channels);
 
-%figure(1);
-%plot(event.Data);
-
 %%%%%
 %%%%% Chop/align the multiple stimulations from the NI
 %%%%%
 
-[data_aligned triggertime n_repetitions_actual] = chop_and_align(event.Data, ...
-    event.Data(:, trigger_index), ...
+[data_aligned triggertime n_repetitions_actual] = chop_and_align(edata, ...
+    edata(:, trigger_index), ...
     event.TimeStamps, ...
     n_repetitions, ...
     obj.Rate);
@@ -658,7 +661,7 @@ end
 %%%%%
 
 if ~isempty(tdt)
-    [tdata_aligned, tdt_triggertime, n_repetitions_actual_tdt, d2] = chop_and_align(tdata, ...
+    [tdata_aligned, tdt_triggertime, n_repetitions_actual_tdt] = chop_and_align(tdata, ...
         tddata, ...
         tdt_TimeStamps, ...
         n_repetitions, ...
@@ -671,7 +674,7 @@ if n_repetitions_actual_tdt == 0
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 12;
+data.version = 13;
 
 
 if response_dummy_channel
@@ -692,7 +695,6 @@ data.ni.n_repetitions = n_repetitions_actual;
 data.ni.index_trigger = trigger_index;
 data.ni.n_repetitions = n_repetitions_actual;
 data.ni.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
-data.ni.data_raw = edata_rawish;
 data.ni.time = event.TimeStamps;
 data.ni.recording_amplifier_gain = recording_amplifier_gain;
 data.ni.fs = obj.Rate;
@@ -1431,7 +1433,7 @@ global tdt tdt_nsamples;
 global currently_reconfiguring;
 
 if currently_reconfiguring
-    disp('Still reconfiguring the hardware... please wait...');
+    disp('Still reconfiguring the hardware... please wait (about 3 seconds, usually)...');
     return;
 end
 
@@ -1467,8 +1469,13 @@ NullPattern.A1 = 0;
 NullPattern.A2 = 0;
 NullPattern.Delay = 0;
 
+if false
+    % Re-load output signal (for debugging; this must also be enabled where
+    % the NI device is initialised)
+    
     %global outputSignal;
     %queueOutputData(NIsession, outputSignal);
+end
 
 
 try

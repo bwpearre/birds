@@ -16,6 +16,12 @@ if isempty(corr_range)
         corr_range = [0 eps];
 end
 
+% Repair my stupidity -- version 12 has unscaled data.
+if data.version == 12
+    data.ni.stim(:,:,1) = data.ni.stim(:,:,1) * 4;
+    data.ni.stim(:,:,2) = data.ni.stim(:,:,2) * 400;
+end
+
 % If plot_stimulation is called from a timer or DAQ callback, the axes are
 % not present in the handles structure.  You may need a beer for this
 % one...
