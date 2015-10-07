@@ -69,4 +69,3 @@ for i = 1:length(tstep_of_interest)
         axis square;
 end
 
-a(0)

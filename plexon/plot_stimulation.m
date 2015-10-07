@@ -1,4 +1,10 @@
 function plot_stimulation(data, handles);
+
+if data.version < 12
+    plot_stimulation_pre12(data, handles);
+    return;
+end
+
 global responses_detrended;
 persistent corr_range;
 global heur;
@@ -10,140 +16,141 @@ if isempty(corr_range)
         corr_range = [0 eps];
 end
 
+% Repair my stupidity -- version 12 has unscaled data.
+if data.version == 12
+    data.ni.stim(:,:,1) = data.ni.stim(:,:,1) * 4;
+    data.ni.stim(:,:,2) = data.ni.stim(:,:,2) * 400;
+end
+
 % If plot_stimulation is called from a timer or DAQ callback, the axes are
 % not present in the handles structure.  You may need a beer for this
 % one...
-if ~isfield(handles, 'axes1')
+if isfield(handles, 'startcurrent')
     handles.axes1 = axes1;
     handles.axes2 = axes2;
     handles.axes3 = axes3;
     handles.axes4 = axes4;
 end
 
+colours = repmat(get(handles.axes1, 'ColorOrder'), 3, 1);
+
 persistent responses_detrended_prev;
 
-if data.version >= 7
-    n_repetitions = data.n_repetitions;
-end
-% doplot could be a parameter, and it was, but let's just hardcode it for
-% now...
-doplot = true;
 
 
-
-
-
-aftertrigger = 0.016;
-beforetrigger = -0.002;
-
-if ~isfield(data, 'version') % old format does not scale saved data
-        scalefactor_V = 1/0.25;
-        scalefactor_i = 400;
-        data.data(:,1) = data.data(:,1) * scalefactor_V;
-        data.data(:,2) = data.data(:,2) * scalefactor_i;
+if isfield(data, 'tdt')
+    d = data.tdt;
+else
+    d = data.ni;
 end
 
-edata = data.data;
-
-% Let's try a filter, shall we?
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(2, 0.07, 'high');
-
-if get(handles.response_filter, 'Value')
-    [B A] = ellip(2, .5, 40, [300 9000]/(data.fs/2));
-
-    edata(:,3) = filtfilt(B, A, edata(:,3));
-    if data.version >= 8
-        data.data_aligned(:,:,3) = filtfilt(B, A, data.data_aligned(:,:,3));
-    else
-        data.data_raw(:,3) = filtfilt(B, A, data.data_raw(:,3));
-    end
-end
-
+n_repetitions = d.n_repetitions;
+aftertrigger = 12e-3;
+beforetrigger = -3e-3;
 
 
 halftime_us = data.halftime_us;
 interpulse_s = data.interpulse_s;
-times_aligned = data.times_aligned;
+times_aligned = d.times_aligned;
 beforetrigger = max(times_aligned(1), beforetrigger);
 aftertrigger = min(times_aligned(end), aftertrigger);
 
 % u: indices into times_aligned that we want to show, aligned and shit.
 u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
-% v is the times to show for the pulse
-v = find(times_aligned >= -0.001 & times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
 w = find(times_aligned >= 0.003 & times_aligned < 0.008);
 
-axes1legend = {};
-if doplot
-    if get(handles.response_show_all, 'Value')
-        
-        %% If available, plot each trace individually
-        if data.version == 7
-            triggerchannel = 4;
-            triggerthreshold = (max(abs(data.data_raw(:,triggerchannel))) + min(abs(data.data_raw(:,triggerchannel))))/2;
-            trigger_ind = data.data_raw(:,triggerchannel) > triggerthreshold;
-            trigger_ind = find(diff(trigger_ind) == 1) + 1;
-            triggertimes = data.time(trigger_ind);
-            
-            if n_repetitions ~= length(trigger_ind)
-                disp(sprintf('Warning: tried to repeat the pattern %d times, but only see %d triggers', ...
-                    n_repetitions, length(trigger_ind)));
-                return;
-            end
-            
-            for n = length(trigger_ind):-1:1
-                start_ind = trigger_ind(n) - trigger_ind(1) + 1;
-                foo(n,:,:) = data.data_raw(start_ind:start_ind+ceil(0.025*data.fs),:);
-            end
-            data.data_aligned = foo;
-            %plot(handles.axes1, times_aligned(u), squeeze(foo(:,u,3))');
-            
-
-        end
-        
-        if data.version >= 7
-            plot(handles.axes1, times_aligned(u), squeeze(data.data_aligned(:,u,3))');
-        end
-
-        deriv = diff(data.data_aligned(:,:,3), 1, 2);
-        [B A] = ellip(2, .5, 40, [300 3000]/(data.fs/2));
-        a(0)
-        deriv = filtfilt(B, A, deriv);
-        plot(handles.axes2, times_aligned(u), deriv(:, u));
-        set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv(:, w)))));
-        
-        
-    elseif get(handles.response_show_raw, 'Value')
-        plot(handles.axes1, times_aligned(u), edata(u,3), 'b');
-        axes1legend{end+1} = 'Measured';
-        hold(handles.axes1, 'on');
-        plot(handles.axes1, times_aligned(u), edata(u,4), 'c');
-        axes1legend{end+1} = 'trigger';
-        hold(handles.axes1, 'off');
-    else
-        cla(handles.axes1);
-    end
-    title(handles.axes1, 'HVC Response');
-    xl = get(handles.axes1, 'XLim');
-    xl(1) = beforetrigger;
-    set(handles.axes1, ...
-        'XLim', [beforetrigger aftertrigger], ...
-        'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
-    ylabel(handles.axes1, 'volts');
-    grid(handles.axes1, 'on');
-    
-
-    
-    
-
-    yy = plotyy(handles.axes3, times_aligned(v), edata(v,1), ...
-            times_aligned(v), edata(v,2));
-    legend(handles.axes3, data.names{1:2});
-    xlabel(handles.axes3, 'ms');
-    set(get(yy(1),'Ylabel'),'String','V')
-    set(get(yy(2),'Ylabel'),'String','\mu A')
+if isempty(u) | length(u) < 5
+    disp(sprintf('WARNING: time alignment problem.  Is triggering working?'));
+    return;
 end
+
+axes1legend = {};
+
+response = d.response;
+sz = size(response);
+
+% Shall we compute the average of time-aligned responses?
+response_avg = mean(response, 1);
+%foo = size(response_avg);
+%if length(foo) == 3
+%    response_avg = reshape(response_avg, foo(2:3));
+%end
+
+if get(handles.response_show_avg, 'Value')
+    response = response_avg;
+end
+% get(handles.response_show_all, 'Value')
+
+% Let's try a filter, shall we?  This used to filter the raw data, but I
+% think I should not filter until after detrending, if at all.
+%disp('Bandpass-filtering the data...');
+%[B A] = butter(2, 0.07, 'high');
+if get(handles.response_filter, 'Value')
+    [B A] = ellip(2, .5, 40, [200 5000]/(d.fs/2));
+    for i = 1:size(response, 1)
+        response(i,:,:) = filtfilt(B, A, squeeze(response(i,:,:)));
+    end
+end
+
+
+
+cla(handles.axes1);
+colour_index = 1;
+legend_handles = [];
+hold(handles.axes1, 'on');
+for i = d.show
+    foo = plot(handles.axes1, ...
+        times_aligned(u), ...
+        reshape(response(:,u,i), [size(response, 1) length(u)])', ...
+        'Color', colours(colour_index, :));
+    colour_index = colour_index + 1;
+    legend_handles(end+1) = foo(1);
+end
+hold(handles.axes1, 'off');
+legend_names = d.names(d.show);
+legend(handles.axes1, legend_handles, legend_names);
+    
+
+% How about the derivative of the data?
+%deriv = diff(data.data_aligned(:,:,3), 1, 2);
+%[B A] = ellip(2, .5, 40, [300 3000]/(data.fs/2));
+%deriv2 = filtfilt(B, A, deriv);
+%plot(handles.axes2, times_aligned(u), deriv2(:, u));
+%set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv2(:, w)))));
+    
+title(handles.axes1, 'Response');
+xl = get(handles.axes1, 'XLim');
+xl(1) = beforetrigger;
+set(handles.axes1, ...
+    'XLim', [beforetrigger aftertrigger], ...
+    'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
+ylabel(handles.axes1, 'volts');
+grid(handles.axes1, 'on');
+
+
+
+v = find(data.ni.times_aligned >= -0.001 ...
+    & data.ni.times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
+if isempty(v)
+    disp('No data to plot here... quitting...');
+    return;
+end
+yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
+    data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 2), 1)));
+legend(handles.axes3, data.ni.names{1:2});
+xlabel(handles.axes3, 'ms');
+set(get(yy(1),'Ylabel'),'String','V')
+set(get(yy(2),'Ylabel'),'String','\mu A')
+
+xtick = get(handles.axes1, 'XTick');
+set(handles.axes1, 'XTick', xtick(1):0.001:xtick(end));
+%figure(1);
+%plot(times_aligned(u), reshape(data.data_aligned(:,u,data.channels_out), [ length(u) length(data.channels_out)])');
+
+
+
+% Detrend!
+
 
 
 % Try:
@@ -153,9 +160,16 @@ end
 
 
 % Curve-fit: use a slightly longer time period
-roifit = [ 0.003  0.016 ];
+roifit = [ 2*data.halftime_us/1e6+data.interpulse_s+100e-6  0.016 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
+
+roi = [roifit(1) 0.008 ];
+roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
+roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
+roitimes = times_aligned(roii);
+roitimesplus = times_aligned(roiiplus);
+
 len = length(times_aligned);
 lenfit = length(roitimesfit);
 weightsfit = linspace(1, 0, lenfit);
@@ -174,48 +188,51 @@ switch fittype
     otherwise
 end
 
-f = fit(roitimesfit, edata(roiifit, 3), fittype, opts);
-roitrend = f(times_aligned);
+colour_index = 1;
+for channel = d.show
 
-responses_detrended = edata(:, 3) - roitrend;
+    f = fit(roitimesfit', squeeze(response_avg(1, roiifit, channel))', fittype, opts);
+    roitrend(:, channel) = f(times_aligned);
+    responses_detrended(:, channel) = squeeze(response_avg(1, :, channel))' - roitrend(:, channel);
 
-%cftool(roitimesfit,edata(roiifit,3))
+    if false
+        f = fit(roitimesfit,  responses_detrended(roiifit, channel), fittype, opts);
+        roitrend(:, channel) = f(times_aligned);
+        responses_detrended = responses_detrended - roitrend;
+    end
 
-roi = [0.0035 0.008 ];
-roii = find(times_aligned >= roi(1) & times_aligned <= roi(2));
-roiiplus = find(times_aligned > roi(2) & times_aligned <= roifit(2));
-roitimes = times_aligned(roii);
-roitimesplus = times_aligned(roiiplus);
-
-if doplot
+    %cftool(roitimesfit,response_avg(roiifit,3))
+    
+    
     hold(handles.axes1, 'on');
     if get(handles.response_show_trend, 'Value')
-        plot(handles.axes1, roitimesfit, roitrend(roiifit), 'g');
+        plot(handles.axes1, roitimesfit, roitrend(roiifit, channel), 'g');
         axes1legend{end+1} = 'Trend';
     end
     if get(handles.response_show_detrended, 'Value')
-        plot(handles.axes1, roitimes, responses_detrended(roii), 'r');
-        plot(handles.axes1, roitimesplus, responses_detrended(roiiplus), 'k');
-        axes1legend{end+1} = 'Detrended';
+        %plot(handles.axes1, roitimes, responses_detrended(roii, channel), 'r', 'LineWidth', 2);
+        plot(handles.axes1, roitimes, responses_detrended(roii, channel), ...
+            'LineWidth', 2, 'Color', colours(colour_index, :));
+        %plot(handles.axes1, roitimesplus, responses_detrended(roiiplus, channel), 'k', 'LineWidth', 2);
+        %axes1legend{end+1} = 'Detrended';
     end
+    colour_index = colour_index + 1;
     hold(handles.axes1, 'off');
-    if ~isempty(axes1legend)
-        legend(handles.axes1, axes1legend);
-    end
+    %if ~isempty(axes1legend) & false
+    %    legend(handles.axes1, axes1legend);
+    %end
     
-    
+
 end
 
 
 
-
-
-if ~isempty(responses_detrended_prev)
+if ~isempty(responses_detrended_prev) & false
         lastxc = [xcorr(responses_detrended_prev(roii), responses_detrended(roii), 'coeff')']';
 
         corr_range = [min(corr_range(1), min(min(lastxc))) ...
                 max(corr_range(2), max(max(lastxc)))];
-        if doplot & false
+        if false
                 plot(handles.axes2, lastxc);
                 set(handles.axes2, 'XLim', [0 2*length(roii)], 'YLim', corr_range);
                 legend(handles.axes2, 'Prev');
@@ -233,11 +250,11 @@ if ~isempty(responses_detrended_prev)
                 FFT_SIZE = 256;
                 freqs = [300:100:2000];
                 window = hamming(FFT_SIZE);
-                [speck freqs times] = spectrogram(lastxc(:,1), window, [], freqs, data.fs);
+                [speck freqs times] = spectrogram(lastxc(:,1), window, [], freqs, d.fs);
                 %[speck freqs times] = spectrogram(responses_detrended, window, [], freqs, data.fs);
                 [nfreqs, ntimes] = size(speck);
                 speck = speck + eps;
-                if doplot & false
+                if false
                         plot(handles.axes4, freqs, abs(speck));
                         %imagesc(log(abs(speck)), 'Parent', handles.axes4);
                         %axis(handles.axes4, 'xy');
@@ -257,15 +274,14 @@ end
 %        set(handles.response2, 'Value', sim(net, nnsetX(:,file)) > 0.5);
 %end
 
-if doplot
-    w = find(times_aligned >= halftime_us/1e6 - 0.00003 ...
-        & times_aligned < halftime_us/1e6 + interpulse_s + 0.00001);
-    %w = w(1:end-1);
-    min_interpulse_volts = min(abs(edata(w,1)));
-    plot(handles.axes4, times_aligned(w)*1000, edata(w,1));
-    grid(handles.axes4, 'on');
-    xlabel(handles.axes4, 'ms');
-    ylabel(handles.axes4, 'V');
-end
+w = find(times_aligned >= halftime_us/1e6 - 0.00003 ...
+    & times_aligned < halftime_us/1e6 + interpulse_s + 0.00001);
+%w = w(1:end-1);
+stim_avg = mean(data.ni.stim, 1);
+min_interpulse_volts = min(abs(stim_avg(1, w, 1)));
+plot(handles.axes4, times_aligned(w)*1000, squeeze(stim_avg(1, w, 1)));
+grid(handles.axes4, 'on');
+xlabel(handles.axes4, 'ms');
+ylabel(handles.axes4, 'V');
 
 responses_detrended_prev = responses_detrended;
