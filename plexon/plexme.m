@@ -657,7 +657,7 @@ else
     tddata = [];
 end
 
-VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))]
+VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))];
 
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
@@ -1196,15 +1196,15 @@ function currentcurrent_Callback(hObject, eventdata, handles)
 newcurrent = str2double(get(hObject, 'String'));
 global CURRENT_uAMPS;
 if isnan(newcurrent)
-        set(hObject, 'String', sprintf('%.2g', CURRENT_uAMPS));
-elseif newcurrent < handles.START_uAMPS
-        CURRENT_uAMPS = handles.START_uAMPS;
+        set(hObject, 'String', sprintf('%.1f', CURRENT_uAMPS));
+elseif newcurrent < 1 % FIXME could go lower for arbitrary waveforms
+        CURRENT_uAMPS = 1;
 elseif newcurrent > handles.MAX_uAMPS
         CURRENT_uAMPS = handles.MAX_uAMPS;
 else
         CURRENT_uAMPS = newcurrent;
 end
-set(hObject, 'String', sprintf('%.2g', CURRENT_uAMPS));
+set(hObject, 'String', sprintf('%.1f', CURRENT_uAMPS));
 guidata(hObject, handles);
 
 
@@ -1470,10 +1470,11 @@ global vvsi;  % Voltages vs current for each stimulation
 switch increase_type
     case 'current'
         CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * change);
-        set(handles.currentcurrent, 'String', sprintf('%.3g', CURRENT_uAMPS));
+        CURRENT_uAMPS = max(1, CURRENT_uAMPS * change); % FIXME ok for now
+        set(handles.currentcurrent, 'String', sprintf('%.1f', CURRENT_uAMPS));
     case 'time'
         halftime_us = min(default_halftime_us, halftime_us * change);
-        set(handles.halftime, 'String', sprintf('%.3g', halftime_us));
+        set(handles.halftime, 'String', sprintf('%.1f', halftime_us));
 end
        
 
@@ -2008,7 +2009,7 @@ guidata(hObject, handles);
     
 function negfirst_toggle_all_Callback(hObject, eventdata, handles)
 global valid stim NEGFIRST;
-for i = stim
+for i = find(stim)
     % Toggle all valid?  Or just toggle all active?
     h = eval(sprintf('handles.negfirst%d', i));
     NEGFIRST(i) = ~get(h, 'Value');
