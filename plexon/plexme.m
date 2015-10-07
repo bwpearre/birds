@@ -191,9 +191,9 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 recording_channels = [ 0 0 0 0 0 0 1 ];
 tdt_show = zeros(1, 16);
-if false
-    tdt_show(13) = 1; % plexon 2
-    tdt_show(2) = 1; % plexon 16
+if true
+    tdt_show(9) = 1; % plexon 2
+    tdt_show(11) = 1; % plexon 16
 else
     % For the experiment with Win's 4-channel electrodes
     tdt_show([5 7 9 11]) = [1 1 1 1];
@@ -226,11 +226,11 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
                      15 13 11  9  7  5  3  1 16  14  12  10   8   6   4   2 ; ...
                       1  3  5  7  9 11 13 15  2   4   6   8  10  12  14  16];
 
-for i = 1:16
-    eval(sprintf('set(handles.negfirst%d, ''String'', ''%s'');', ...
-        i,...
-        sprintf('%d', handles.PIN_NAMES(3,i))));
-end
+%for i = 1:16
+%    eval(sprintf('set(handles.negfirst%d, ''String'', ''%s'');', ...
+%        i,...
+%        sprintf('%d', handles.PIN_NAMES(3,i))));
+%end
     
 set(handles.startcurrent, 'String', sprintf('%d', round(handles.START_uAMPS)));
 set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
@@ -284,13 +284,16 @@ text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
 axis off;
 
 
-
-
-demo = strcat(homedir, '/r/data/birds/lny84rb-2015-10-05/stim_20151005_163343.013.mat');
-
+%demo = strcat(homedir, '/r/data/birds/lny84rb-2015-10-05/stim_20151005_163343.013.mat');
+%demo = strcat(homedir, '/v/birds/plexon/lny84rb-2015-10-05/stim_20151005_163343.013.mat');
 if exist('demo', 'var')
         load(demo);
         plot_stimulation(data, handles);
+        for i = 1:16
+            handles.tdt_show{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+                'Value',tdt_show(i),'Position', [780 764-22*(i-1) 30 20], ...
+                'Callback',{@tdt_show_channel_Callback});
+        end
 else
         set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
         handles = configure_acquisition_device(hObject, handles);
@@ -308,7 +311,7 @@ guidata(hObject, handles);
 
 
 
-function [] = configure_plexon(hObject, something, handles)
+function [] = configure_plexon(hObject, handles)
 % Open the stimulator
 
 PS_CloseAllStim; % Clean up from last time?  Does no harm...
@@ -835,6 +838,8 @@ global stim_timer;
 global tdt;
 
 disp('Shutting down...');
+
+stop_Callback(hObject, callbackdata, handles);
 
 if ~isempty(stim_timer)
     if isvalid(stim_timer)
@@ -2002,8 +2007,9 @@ guidata(hObject, handles);
 
     
 function negfirst_toggle_all_Callback(hObject, eventdata, handles)
-global NEGFIRST;
-for i = 1:16
+global valid stim NEGFIRST;
+for i = stim
+    % Toggle all valid?  Or just toggle all active?
     h = eval(sprintf('handles.negfirst%d', i));
     NEGFIRST(i) = ~get(h, 'Value');
     set(h, 'Value', NEGFIRST(i));
@@ -2016,6 +2022,10 @@ value = get(hObject, 'Value');
 NEGFIRST(whichone) = value;
 
 
+% I could set the callback in each of the GUI elements to
+% *_universal_callback, but all that clicking in guide would kill me.  I
+% could do it programmatically (at the risk of confusing guide in the
+% future), but apparently writing this comment is marginally easier...
 function negfirst1_Callback(hObject, eventdata, handles)
 negfirst_universal_callback(hObject, handles);
 

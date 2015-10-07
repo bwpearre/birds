@@ -129,14 +129,16 @@ grid(handles.axes1, 'on');
 
 
 
-v = find(data.ni.times_aligned >= -0.001 ...
-    & data.ni.times_aligned < 0.001 + 2 * halftime_us/1e6 + interpulse_s);
+v = find(data.ni.times_aligned >= -0.0002 ...
+    & data.ni.times_aligned < 0.0002 + 2 * halftime_us/1e6 + interpulse_s);
 if isempty(v)
     disp('No data to plot here... quitting...');
     return;
 end
 yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
     data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 2), 1)));
+set(yy(1), 'XLim', data.ni.times_aligned(v([1 end])));
+set(yy(2), 'XLim', data.ni.times_aligned(v([1 end])));
 legend(handles.axes3, data.ni.names{1:2});
 xlabel(handles.axes3, 'ms');
 set(get(yy(1),'Ylabel'),'String','V')

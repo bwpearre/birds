@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 25-Aug-2015 15:42:18
+% Last Modified by GUIDE v2.5 07-Oct-2015 13:44:40
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -53,6 +53,11 @@ global wait_bar;
 global knowngood;
 global heur;
 global nnsetX;
+global tdt_show_now tdt_show_data tdt_show_data_last;
+
+tdt_show_now = zeros(1, 16);
+tdt_show_data = zeros(1, 16);
+tdt_show_data_last = zeros(1, 16);
 
 clear nnsetX;
 
@@ -69,10 +74,42 @@ if ~isempty(wait_bar)
         wait_bar = [];
 end
 
+% Which channels to show?
+for i = 1:16
+    handles.tdt_show{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+                       'Value',0,'Position', [920 570-22*(i-1) 50 20], ...
+                        'Callback',{@tdt_show_channel_Callback});
+end
+
 
 guidata(hObject, handles);
 
 
+
+function tdt_show_channel_Callback(hObject, eventData, handles)
+global tdt_show_now tdt_show_last_chosen tdt_show_data tdt_show_data_last;
+global file;
+tdt_show_now(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
+tdt_show_last_chosen = tdt_show_now;
+handles = guidata(hObject);
+if ~isempty(file)
+    do_file(hObject, handles, file, true);
+end
+
+
+% If I choose what channels to show, but loading a file with a different
+% set of channels tosses my chosen result, pressing this button will
+% restore my chosen ones.
+function restore_show_Callback(hObject, eventdata, handles)
+global tdt_show_now tdt_show_last_chosen tdt_show_data tdt_show_data_last;
+global file;
+tdt_show_now = tdt_show_last_chosen;
+for i = 1:16
+    set(handles.tdt_show{i}, 'Value', tdt_show_now(i));
+end
+if ~isempty(file)
+    do_file(hObject, handles, file, true);
+end
 
 
 function varargout = inspect_OutputFcn(hObject, ~, handles) 
@@ -81,13 +118,29 @@ varargout{1} = handles.output;
 
 % --- Executes on selection change in listbox1.
 function listbox1_Callback(hObject, ~, handles)
+global file;
+
 file = handles.sorted_index(get(hObject,'Value'));
 do_file(hObject, handles, file, true);
 
 
 function do_file(hObject, handles, file, doplot);
+global tdt_show_now tdt_show_data tdt_show_data_last;
 
 load(handles.files{file});
+
+
+if data.version >= 12
+    tdt_show_data = zeros(1, 16);
+    tdt_show_data(data.tdt.show) = ones(1, length(data.tdt.show));
+    if any(tdt_show_data ~= tdt_show_data_last)
+        tdt_show_now = tdt_show_data;
+        for i = 1:16
+            set(handles.tdt_show{i}, 'Value', tdt_show_now(i));
+        end
+        tdt_show_data_last = tdt_show_data;
+    end
+end
 
 
 
@@ -117,6 +170,7 @@ if doplot
         set(handles.table1, 'Data', tabledata);
 end
 
+data.tdt.show = find(tdt_show_now);
 plot_stimulation(data, handles);
 
 
@@ -129,14 +183,9 @@ guidata(hObject, handles);
 
 
 
-% --- Executes during object creation, after setting all properties.
-function listbox1_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to listbox1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: listbox controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
+
+function listbox1_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -144,7 +193,6 @@ end
 
 
 
-% --- Executes on button press in load_all.
 function load_all_Callback(hObject, eventdata, handles)
 global wait_bar;
 global knowngood;
@@ -287,3 +335,5 @@ if get(hObject, 'Value')
     set(handles.response_show_avg, 'Value', 0);
 end
 listbox1_Callback(handles.listbox1, eventdata, handles);
+
+
