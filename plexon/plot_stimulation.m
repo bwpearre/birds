@@ -160,7 +160,7 @@ set(handles.axes1, 'XTick', xtick(1):0.001:xtick(end));
 
 
 % Curve-fit: use a slightly longer time period
-roifit = [ 2*data.halftime_us/1e6+data.interpulse_s+100e-6  0.016 ];
+roifit = [ 2*data.halftime_us/1e6+data.interpulse_s+100e-6 + 100e-6 0.008 ];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 

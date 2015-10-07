@@ -274,8 +274,41 @@ for i = 1:16
     eval(cmd);
 end
 
+axes1 = handles.axes1;
+axes1_yscale = handles.yscale;
+axes2 = handles.axes2;
+axes4 = handles.axes4;
+axes3 = handles.axes3;
+gca = handles.stupidaxis;
+text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
+axis off;
 
 
+
+
+demo = strcat(homedir, '/r/data/birds/lny84rb-2015-10-05/stim_20151005_163343.013.mat');
+
+if exist('demo', 'var')
+        load(demo);
+        plot_stimulation(data, handles);
+else
+        set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
+        handles = configure_acquisition_device(hObject, handles);
+        configure_plexon(hObject, handles);
+end
+
+guidata(hObject, handles);
+
+
+
+
+
+
+
+
+
+
+function [] = configure_plexon(hObject, something, handles)
 % Open the stimulator
 
 PS_CloseAllStim; % Clean up from last time?  Does no harm...
@@ -335,20 +368,9 @@ catch ME
     rethrow(ME);
 end
 
-axes1 = handles.axes1;
-axes1_yscale = handles.yscale;
-axes2 = handles.axes2;
-axes4 = handles.axes4;
-axes3 = handles.axes3;
 
-
-gca = handles.stupidaxis;
-text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
-axis off;
-
-set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
-handles = configure_acquisition_device(hObject, handles);
 guidata(hObject, handles);
+
 
 
 
