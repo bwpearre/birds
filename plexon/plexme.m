@@ -1358,8 +1358,8 @@ if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(stim) > 0
 end
 stim(whichone) = newval;
 
-CURRENT_uAMPS = handles.START_uAMPS;
-set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+%CURRENT_uAMPS = handles.START_uAMPS;
+%set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
 if stim(whichone)
     monitor_electrode = whichone;
 end
@@ -1567,8 +1567,8 @@ try
         end
     end
     
-    disp('stimulating on channels:');
-    stim
+    %disp('stimulating on channels:');
+    %stim
     for channel = find(stim)
         err = PS_SetPatternType(handles.box, channel, arbitrary_pattern);
         if err
