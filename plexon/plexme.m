@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 05-Oct-2015 18:36:58
+% Last Modified by GUIDE v2.5 08-Oct-2015 12:44:52
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -64,9 +64,10 @@ handles.output = hObject;
 handles.START_uAMPS = 10; % Stimulating at this current will not yield enough
                          % voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 1000; % tdt
+handles.MIN_uAMPS = 1; % FIXME when using arbitrary patterns
 handles.INCREASE_STEP = 1.1;
 handles.INTERSPIKE_S = 0.01;
-handles.VoltageLimit = 5;
+handles.VoltageLimit = 10;
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
 
@@ -108,18 +109,20 @@ global recording_channels;
 global stim_trigger;
 global tdt_show;  % Which TDT recording channels to show?
 global currently_reconfiguring;
+global audio_monitor_gain;
 
 currently_reconfiguring = true;
 
 
 
-n_repetitions = 50;
-repetition_Hz = 100;
+n_repetitions = 10;
+repetition_Hz = 10;
 
 % NI control rubbish
 NIsession = [];
 
 valid = zeros(1, 16);
+valid(12:15) = ones(1,4);
 stim = zeros(1, 16);
 
 if ispc
@@ -183,7 +186,8 @@ monitor_electrode = 2;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
-recording_amplifier_gain = 140; % tdt, gain set to "200".  (If that's 200, then I'm well-endowed.)
+recording_amplifier_gain = 1;
+audio_monitor_gain = 200;
 saving_stimulations = true;
 handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
@@ -191,13 +195,11 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 recording_channels = [ 0 0 0 0 0 0 1 ];
 tdt_show = zeros(1, 16);
-if true
-    tdt_show(9) = 1; % plexon 2
-    tdt_show(11) = 1; % plexon 16
-else
-    % For the experiment with Win's 4-channel electrodes
-    tdt_show([5 7 9 11]) = [1 1 1 1];
-end
+
+
+
+tdt_show_default = [6];
+tdt_show(tdt_show_default) = ones(size(tdt_show_default));
 
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
@@ -209,10 +211,6 @@ vvsi = [];
 comments = '';
 
 NEGFIRST = zeros(1,16);
-for i = 1:16
-    cmd = sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, 'off');
-    eval(cmd);
-end
 
 channel_ranges = 2 * [ 1 1 1 1 1 1 1 1 ];
 
@@ -250,6 +248,7 @@ for i = 1:16
     newvals{end+1} = sprintf('%d', i);
 end
 set(handles.monitor_electrode_control, 'String', newvals);
+set(handles.tdt_monitor_channel, 'String', newvals);
 % Also make sure that the monitor spinbox is the right colour
 
 %set(handles.n_repetitions_box, 'Enable', 'off');
@@ -265,12 +264,21 @@ for i = 1:16
     eval(cmd);
 end
 
+
+
 for i = 1:16
-    cmd = sprintf('set(handles.electrode%d, ''Value'', 0);', i);
+    if valid(i)
+        foo = 'on';
+    else
+        foo = 'off';
+    end
+    cmd = sprintf('set(handles.electrode%d, ''Value'', %d);', i, valid(i));
     eval(cmd);
-    cmd = sprintf('set(handles.stim%d, ''Enable'', ''off'');', i);
+    cmd = sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, foo);
     eval(cmd);
-    cmd = sprintf('set(handles.stim%d, ''Value'', false);', i);
+    cmd = sprintf('set(handles.stim%d, ''Value'', 0);', i);
+    eval(cmd);
+    cmd = sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, foo);
     eval(cmd);
 end
 
@@ -349,7 +357,7 @@ try
         ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', handles.box);
         throw(ME);
     else
-        disp(sprintf('Plexon device %d has %d channels.', handles.box, nchan));
+        %disp(sprintf('Plexon device %d has %d channels.', handles.box, nchan));
     end
     if nchan ~= 16
         ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
@@ -407,7 +415,7 @@ daq.reset;
 NIsession = daq.createSession('ni');
 NIsession.Rate = 100000;
 NIsession.IsContinuous = 0;
-recording_time = 1/repetition_Hz * n_repetitions + 0.03
+recording_time = 1/repetition_Hz * n_repetitions + 0.05;
 NIsession.DurationInSeconds = recording_time;
 global channel_ranges;
 % FIXME Add TTL-triggered acquisition?
@@ -471,7 +479,7 @@ handles.NI.listeners{1} = addlistener(NIsession, 'DataAvailable',...
 NIsession.NotifyWhenDataAvailableExceeds = nscans;
 prepare(NIsession);
 
-NIsession
+%NIsession
 
 if response_dummy_channel & sum(recording_channels) <= 1
     disp('Warning: Dummy channel, but no non-dummy channels?');
@@ -496,20 +504,12 @@ global tdt;
 global homedir;
 global tdt_samplerate recording_time tdt_nsamples;
 global tdt_show;
+global stim_timer;
+global audio_monitor_gain;
 
-if true
-    tdtprogram = strrep(strcat(homedir, '/v/birds/plexon/TDT_triggered_recorder.rcx'), ...
-        '/', ...
-        filesep);
-elseif false
-    tdtprogram = strrep(strcat(homedir, '/Desktop/wintdt/RCOCircuits/16ChannelSelect.rcx'), ...
-        '/', ...
-        filesep);
-else
-    tdtprogram = strrep('C:\TDT\ActiveX\ActXExamples/RP_files/Continuous_Acquire.rcx', ...
-        '/', ...
-        filesep);
-end
+tdtprogram = strrep(strcat(homedir, '/v/birds/plexon/TDT_triggered_recorder_m.rcx'), ...
+    '/', ...
+    filesep);
 
 tdt = actxcontrol('RPco.X', [5 5 26 26]);
 if ~tdt.ConnectRZ5('GB', 1)
@@ -517,7 +517,9 @@ if ~tdt.ConnectRZ5('GB', 1)
     return;
 end
 
-tdt.ClearCOF
+if ~tdt.ClearCOF
+    error('tdt:start', 'Can''t clear TDT');
+end
 
 if ~tdt.LoadCOFsf(tdtprogram, 2)
     error('tdt:start', 'Can''t load TDT program ''%s''', tdtprogram);
@@ -532,14 +534,35 @@ elseif ~tdt.SetTagVal('record_time', recording_time * 1e3)
 elseif ~tdt.SetTagVal('down_time', recording_time * 1e3 / 100)
     error('tdt:start', 'Can''t set TDT schmitt down time');
 %elseif ~tdt.SetTagVal('buffer_size', ceil(16 * tdt_nsamples * 1.1));
+     %% The buffer size cannot be set.  It appears to work (returns success, and if you ask it the buffer size it tells you it's correct) but it only actually uses the amount that's hardcoded in their gui.
 %    error('tdt:start', 'Can''t set TDT data buffer size to %d words', ...
 %        ceil(16 * tdt_nsamples * 1.1));
 %elseif ~tdt.SetTagVal('dbuffer_size', ceil(tdt_nsamples * 1.1))
 %    error('tdt:start', 'Can''t set TDT digital buffer size.');
 end
 
-disp(sprintf('TDT running ''%s'' at %g Hz, buffer %d)', tdtprogram, tdt_samplerate, ...
-    tdt.GetTagVal('buffer_size')));
+tdt.SetTagVal('mon_gain', round(audio_monitor_gain));
+set(handles.audio_monitor_gain, 'String', sprintf('%d', round(tdt.GetTagVal('mon_gain'))));
+
+%disp(sprintf('TDT buffer %d, need %d', tdt.GetTagVal('dbuffer_size'), tdt_nsamples));
+tdt_dbuffer_size = tdt.GetTagVal('dbuffer_size');
+
+if ceil(tdt_nsamples*1.1) > tdt_dbuffer_size
+    if ~isempty(stim_timer)
+        if isvalid(stim_timer)
+            %if timer_running(stim_timer)
+            disp('Stopping timer from tdt_configure...');
+            stop(stim_timer); % this also stops and closes the Plexon box
+            %end
+        else
+            disp('*** The timer was invalid!');
+        end
+    end
+    
+    uiwait(msgbox({'The TDT buffer is too small for your chosen recording duration.  Increase Averaging Hz or decrease Averaging Pulses.', ...
+        '', sprintf('Maximum recording duration is %g s.', tdt_dbuffer_size/1.1/tdt_samplerate)}, 'modal'));
+    
+end
 
 for i = 1:16
     handles.tdt_show{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
@@ -586,6 +609,7 @@ persistent rmshist;
 global tdt tdt_nsamples tdt_samplerate;
 global recording_time;
 global tdt_show;
+global axes2;
 
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
@@ -692,6 +716,7 @@ if ~isempty(tdt)
         tdt_TimeStamps, ...
         n_repetitions, ...
         tdt_samplerate);
+    plot(axes2, tdt_TimeStamps - tdt_triggertime, tddata);
 end
 
 if n_repetitions_actual_tdt == 0
@@ -778,7 +803,7 @@ end
 
 
 
-function [data_aligned, triggertime, n_repetitions_actual, d2] ...
+function [data_aligned, triggertime, n_repetitions_actual] ...
     = chop_and_align(data, triggers, timestamps, n_repetitions_sought, fs);
 
 %triggerthreshold = (max(abs(triggers)) + min(abs(triggers)))/2;
@@ -805,7 +830,6 @@ end
 for n = length(trigger_ind):-1:1
     start_ind = trigger_ind(n) - trigger_ind(1) + 1;
     data_aligned(n,:,:) = data(start_ind:start_ind+ceil(0.025*fs),:);
-    d2(n,:,:) = repmat(triggers(start_ind:start_ind+ceil(0.025*fs)), 1, 3);
 end
 
 
@@ -859,8 +883,6 @@ if handles.open
     if err
         msgbox({'ERROR CLOSING STIMULATOR', 'Could not contact Plexon stimulator for shutdown!'});
     end
-else
-     msgbox({'ERROR CLOSING STIMULATOR', 'Could not contact Plexon stimulator for shutdown!'});
 end
 
 
@@ -1197,8 +1219,8 @@ newcurrent = str2double(get(hObject, 'String'));
 global CURRENT_uAMPS;
 if isnan(newcurrent)
         set(hObject, 'String', sprintf('%.1f', CURRENT_uAMPS));
-elseif newcurrent < 1 % FIXME could go lower for arbitrary waveforms
-        CURRENT_uAMPS = 1;
+elseif newcurrent < handles.MIN_uAMPS
+        CURRENT_uAMPS = handles.MIN_uAMPS;
 elseif newcurrent > handles.MAX_uAMPS
         CURRENT_uAMPS = handles.MAX_uAMPS;
 else
@@ -1250,6 +1272,7 @@ global CURRENT_uAMPS;
 global change;
 global stim_timer;
 global stim;
+global patternfiles;
 
 try
     NullPattern.W1 = 0;
@@ -1435,6 +1458,21 @@ guidata(hObject, handles);
 
 
 
+function plexon_write_rectangular_pulse_file(filename, StimParam);
+fid = fopen(filename, 'w');
+fprintf(fid, 'variable\n');
+fprintf(fid, '%d\n%d\n', StimParam.A1*900, StimParam.W1);
+if StimParam.Delay
+    fprintf(fid, '%d\n%d', 0, StimParam.Delay);
+end
+fprintf(fid, '%d\n%d\n', StimParam.A2*900, StimParam.W2);
+fclose(fid);
+
+
+
+
+
+
 
 
 
@@ -1470,7 +1508,7 @@ global vvsi;  % Voltages vs current for each stimulation
 switch increase_type
     case 'current'
         CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * change);
-        CURRENT_uAMPS = max(1, CURRENT_uAMPS * change); % FIXME ok for now
+        CURRENT_uAMPS = max(handles.MIN_uAMPS, CURRENT_uAMPS * change);
         set(handles.currentcurrent, 'String', sprintf('%.1f', CURRENT_uAMPS));
     case 'time'
         halftime_us = min(default_halftime_us, halftime_us * change);
@@ -1492,11 +1530,21 @@ StimParamNeg.W1 = halftime_us;
 StimParamNeg.W2 = halftime_us;
 StimParamNeg.Delay = interpulse_s * 1e6;
 
+
 NullPattern.W1 = 0;
 NullPattern.W2 = 0;
 NullPattern.A1 = 0;
 NullPattern.A2 = 0;
 NullPattern.Delay = 0;
+
+arbitrary_pattern = 0;
+if arbitrary_pattern
+    filenamePos = 'stimPos.pat';
+    filenameNeg = 'stimNeg.pat';
+    plexon_write_rectangular_pulse_file(filenamePos, StimParamPos);
+    plexon_write_rectangular_pulse_file(filenameNeg, StimParamNeg);
+    %filenamePos = 'test.pat';
+end
 
 if false
     % Re-load output signal (for debugging; this must also be enabled where
@@ -1519,25 +1567,41 @@ try
         end
     end
     
-    %disp('stimulating on channels:');
-    %stim
+    disp('stimulating on channels:');
+    stim
     for channel = find(stim)
-        err = PS_SetPatternType(handles.box, channel, 0);
+        err = PS_SetPatternType(handles.box, channel, arbitrary_pattern);
         if err
             ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
             throw(ME);
         end
 
         if NEGFIRST(channel)
-            err = PS_SetRectParam2(handles.box, channel, StimParamNeg);
+            if arbitrary_pattern
+                err = PS_LoadArbPattern(handles.box, channel, filenameNeg);
+            else
+                err = PS_SetRectParam2(handles.box, channel, StimParamNeg);
+            end
         else
-            err = PS_SetRectParam2(handles.box, channel, StimParamPos);
+            if arbitrary_pattern
+                err = PS_LoadArbPattern(handles.box, channel, filenamePos);
+            else
+                err = PS_SetRectParam2(handles.box, channel, StimParamPos);
+            end
         end
         if err
                 ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d', channel);
                 throw(ME);
         end
  
+        if arbitrary_pattern
+            np = PS_GetNPointsArbPattern(handles.box, channel);
+            pat(1,:) = PS_GetArbPatternPointsX(handles.box, channel)
+            pat(2,:) = PS_GetArbPatternPointsY(handles.box, channel)
+            figure(2);
+            plot(pat(1,:), pat(2,:));
+        end
+        
         switch stim_trigger
             case 'master8'
                 err = PS_SetRepetitions(handles.box, channel, 1);
@@ -2115,3 +2179,34 @@ global response_dummy_channel recording_channels;
 response_dummy_channel = get(hObject, 'Value');
 
 
+
+
+function tdt_monitor_channel_Callback(hObject, eventdata, handles)
+global tdt audio_monitor_channel;
+audio_monitor_channel = get(hObject, 'Value');
+if ~tdt.SetTagVal('mon_channel', audio_monitor_channel)
+    disp(sprintf('Can''t change TDT audio monitor'));
+end
+
+
+function tdt_monitor_channel_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function audio_monitor_gain_Callback(hObject, eventdata, handles)
+global tdt audio_monitor_gain;
+audio_monitor_gain = round(str2double(get(hObject, 'String')));
+
+if ~tdt.SetTagVal('mon_gain', audio_monitor_gain)
+    disp(sprintf('Can''t change TDT audio monitor gain'));
+end
+
+
+
+function audio_monitor_gain_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
