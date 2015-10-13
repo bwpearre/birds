@@ -32,7 +32,9 @@ if isfield(handles, 'startcurrent')
     handles.axes4 = axes4;
 end
 
-colours = repmat(get(handles.axes1, 'ColorOrder'), 3, 1);
+%colours = repmat(get(handles.axes1, 'ColorOrder'), 3, 1);
+%colours = parula(16);
+colours = distinguishable_colors(16);
 
 persistent responses_detrended_prev;
 
@@ -79,6 +81,8 @@ response_avg = mean(response, 1);
 if get(handles.response_show_avg, 'Value')
     response = response_avg;
 end
+
+spikes = look_for_spikes(response_avg, times_aligned);
 % get(handles.response_show_all, 'Value')
 
 % Let's try a filter, shall we?  This used to filter the raw data, but I
@@ -93,17 +97,18 @@ if get(handles.response_filter, 'Value')
 end
 
 
+linewidths = ones(1, 16);
+linewidths(spikes > 2) = linewidths(spikes>2) * 3;
+
 
 cla(handles.axes1);
-colour_index = 1;
 legend_handles = [];
 hold(handles.axes1, 'on');
 for i = d.show
     foo = plot(handles.axes1, ...
         times_aligned(u), ...
         reshape(response(:,u,i), [size(response, 1) length(u)])', ...
-        'Color', colours(colour_index, :));
-    colour_index = colour_index + 1;
+        'Color', colours(i, :), 'LineWidth', linewidths(i));
     legend_handles(end+1) = foo(1);
 end
 hold(handles.axes1, 'off');

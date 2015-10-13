@@ -722,7 +722,11 @@ if n_repetitions_actual_tdt == 0
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 13;
+data.version = 14;
+
+if ~isempty(tdt)
+    i_think_i_see_a_spike = look_for_spikes(mean(tdata_aligned, 1));
+end
 
 
 if response_dummy_channel
@@ -771,6 +775,7 @@ if ~isempty(tdt)
         data.tdt.labels{i} = sprintf('tdt %d', i);
         data.tdt.names{i} = sprintf('tdt %d', i);
     end
+    data.tdt.i_think_i_see_a_spike = i_think_i_see_a_spike;
 end
 
 data.repetition_Hz = repetition_Hz;
@@ -794,7 +799,6 @@ if saving_stimulations
 
     save(fullfile(datadir, datafile_name), 'data');
 end
-
 
 
 

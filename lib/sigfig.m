@@ -1,3 +1,5 @@
+%%% BWP -- Not my code.  It's from Teck Por Lim, via Matlab Central File Exchange.
+
 %[strOut2] = sigfig(matNum, nSigFig, strPad)
 %Rounds number to nSigFig number of significant figures and outputs a string
 %'pad' in 3rd argument to have padded zeros, else unpadded
