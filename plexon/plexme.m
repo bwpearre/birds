@@ -50,12 +50,9 @@ end
 
 % --- Executes just before plexme is made visible.
 function plexme_OpeningFcn(hObject, ~, handles, varargin)
-% This function has no output args, see OutputFcn.
-% hObject    handle to figure
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% varargin   command line arguments to plexme (see VARARGIN)
 
+scriptpath = fileparts(mfilename('fullpath'))
+path(sprintf('%s/../lib', scriptpath), path);
 
 
 % Choose default command line output for plexme
@@ -64,10 +61,10 @@ handles.output = hObject;
 handles.START_uAMPS = 10; % Stimulating at this current will not yield enough
                          % voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 1000; % tdt
-handles.MIN_uAMPS = 1; % FIXME when using arbitrary patterns
+handles.MIN_uAMPS = 0.05; % arbitrary patterns
 handles.INCREASE_STEP = 1.1;
 handles.INTERSPIKE_S = 0.01;
-handles.VoltageLimit = 10;
+handles.VoltageLimit = 5;
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
 
@@ -231,7 +228,7 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
 %end
     
 set(handles.startcurrent, 'String', sprintf('%d', round(handles.START_uAMPS)));
-set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+set(handles.currentcurrent, 'String', sigfig(CURRENT_uAMPS, 2));
 set(handles.maxcurrent, 'String', sprintf('%d', round(handles.MAX_uAMPS)));
 set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(halftime_us)));
@@ -928,7 +925,7 @@ function negativefirst_Callback(hObject, eventdata, handles)
 %NEGFIRST = get(hObject, 'Value');
 %global CURRENT_uAMPS;
 %CURRENT_uAMPS = handles.START_uAMPS;
-%set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+%set(handles.currentcurrent, 'String', sigfig(CURRENT_uAMPS, 2));
 %guidata(hObject, handles);
 
 
@@ -1218,7 +1215,7 @@ function currentcurrent_Callback(hObject, eventdata, handles)
 newcurrent = str2double(get(hObject, 'String'));
 global CURRENT_uAMPS;
 if isnan(newcurrent)
-        set(hObject, 'String', sprintf('%.1f', CURRENT_uAMPS));
+        set(hObject, 'String', sigfig(CURRENT_uAMPS, 2));
 elseif newcurrent < handles.MIN_uAMPS
         CURRENT_uAMPS = handles.MIN_uAMPS;
 elseif newcurrent > handles.MAX_uAMPS
@@ -1226,7 +1223,7 @@ elseif newcurrent > handles.MAX_uAMPS
 else
         CURRENT_uAMPS = newcurrent;
 end
-set(hObject, 'String', sprintf('%.1f', CURRENT_uAMPS));
+set(hObject, 'String', sigfig(CURRENT_uAMPS, 2));
 guidata(hObject, handles);
 
 
@@ -1359,7 +1356,7 @@ end
 stim(whichone) = newval;
 
 %CURRENT_uAMPS = handles.START_uAMPS;
-%set(handles.currentcurrent, 'String', sprintf('%.2g', CURRENT_uAMPS));
+%set(handles.currentcurrent, 'String', sigfig(CURRENT_uAMPS, 2));
 if stim(whichone)
     monitor_electrode = whichone;
 end
@@ -1461,11 +1458,11 @@ guidata(hObject, handles);
 function plexon_write_rectangular_pulse_file(filename, StimParam);
 fid = fopen(filename, 'w');
 fprintf(fid, 'variable\n');
-fprintf(fid, '%d\n%d\n', StimParam.A1*900, StimParam.W1);
+fprintf(fid, '%d\n%d\n', round(StimParam.A1*1000), round(StimParam.W1));
 if StimParam.Delay
-    fprintf(fid, '%d\n%d', 0, StimParam.Delay);
+    fprintf(fid, '%d\n%d', 0, round(StimParam.Delay));
 end
-fprintf(fid, '%d\n%d\n', StimParam.A2*900, StimParam.W2);
+fprintf(fid, '%d\n%d\n', round(StimParam.A2*1000), round(StimParam.W2));
 fclose(fid);
 
 
@@ -1509,7 +1506,7 @@ switch increase_type
     case 'current'
         CURRENT_uAMPS = min(handles.MAX_uAMPS, CURRENT_uAMPS * change);
         CURRENT_uAMPS = max(handles.MIN_uAMPS, CURRENT_uAMPS * change);
-        set(handles.currentcurrent, 'String', sprintf('%.1f', CURRENT_uAMPS));
+        set(handles.currentcurrent, 'String', sigfig(CURRENT_uAMPS, 2));
     case 'time'
         halftime_us = min(default_halftime_us, halftime_us * change);
         set(handles.halftime, 'String', sprintf('%.1f', halftime_us));
@@ -1537,21 +1534,20 @@ NullPattern.A1 = 0;
 NullPattern.A2 = 0;
 NullPattern.Delay = 0;
 
-arbitrary_pattern = 0;
+arbitrary_pattern = 1;
 if arbitrary_pattern
     filenamePos = 'stimPos.pat';
     filenameNeg = 'stimNeg.pat';
     plexon_write_rectangular_pulse_file(filenamePos, StimParamPos);
     plexon_write_rectangular_pulse_file(filenameNeg, StimParamNeg);
-    %filenamePos = 'test.pat';
 end
 
 if false
     % Re-load output signal (for debugging; this must also be enabled where
     % the NI device is initialised)
     
-    %global outputSignal;
-    %queueOutputData(NIsession, outputSignal);
+    global outputSignal;
+    queueOutputData(NIsession, outputSignal);
 end
 
 
@@ -1595,11 +1591,17 @@ try
         end
  
         if arbitrary_pattern
+            global axes3 axes3yy;
             np = PS_GetNPointsArbPattern(handles.box, channel);
-            pat(1,:) = PS_GetArbPatternPointsX(handles.box, channel)
-            pat(2,:) = PS_GetArbPatternPointsY(handles.box, channel)
-            figure(2);
-            plot(pat(1,:), pat(2,:));
+            pat(1,:) = PS_GetArbPatternPointsX(handles.box, channel);
+            pat(2,:) = PS_GetArbPatternPointsY(handles.box, channel);
+            pat = [[0; 0] pat [pat(1,end); 0]]; % Add zeros for cleaner look
+            if ~isempty(axes3yy)
+                hold(axes3yy(2), 'on');
+                plot(axes3yy(2), pat(1,:)/1e6, pat(2,:)/1e3, 'g');
+                hold(axes3yy(2), 'off');
+                legend(axes3, 'Voltage', 'Current', 'Next i');
+            end
         end
         
         switch stim_trigger

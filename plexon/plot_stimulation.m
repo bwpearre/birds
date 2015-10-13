@@ -135,14 +135,15 @@ if isempty(v)
     disp('No data to plot here... quitting...');
     return;
 end
-yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
+global axes3yy;
+axes3yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
     data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 2), 1)));
-set(yy(1), 'XLim', data.ni.times_aligned(v([1 end])));
-set(yy(2), 'XLim', data.ni.times_aligned(v([1 end])));
+set(axes3yy(1), 'XLim', data.ni.times_aligned(v([1 end])));
+set(axes3yy(2), 'XLim', data.ni.times_aligned(v([1 end])));
 legend(handles.axes3, data.ni.names{1:2});
 xlabel(handles.axes3, 'ms');
-set(get(yy(1),'Ylabel'),'String','V')
-set(get(yy(2),'Ylabel'),'String','\mu A')
+set(get(axes3yy(1),'Ylabel'),'String','V')
+set(get(axes3yy(2),'Ylabel'),'String','\mu A')
 
 xtick = get(handles.axes1, 'XTick');
 set(handles.axes1, 'XTick', xtick(1):0.001:xtick(end));
