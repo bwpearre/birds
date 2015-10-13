@@ -83,6 +83,10 @@ if get(handles.response_show_avg, 'Value')
 end
 
 spikes = look_for_spikes(response_avg, times_aligned);
+linewidths = 0.5*ones(1, 16);
+linewidths(spikes > 2) = linewidths(spikes>2) * 5;
+
+
 % get(handles.response_show_all, 'Value')
 
 % Let's try a filter, shall we?  This used to filter the raw data, but I
@@ -97,8 +101,6 @@ if get(handles.response_filter, 'Value')
 end
 
 
-linewidths = ones(1, 16);
-linewidths(spikes > 2) = linewidths(spikes>2) * 3;
 
 
 cla(handles.axes1);
