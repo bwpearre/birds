@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 08-Oct-2015 12:44:52
+% Last Modified by GUIDE v2.5 15-Oct-2015 17:06:41
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -58,7 +58,7 @@ path(sprintf('%s/../lib', scriptpath), path);
 % Choose default command line output for plexme
 handles.output = hObject;
 
-handles.START_uAMPS = 10; % Stimulating at this current will not yield enough
+handles.START_uAMPS = 1; % Stimulating at this current will not yield enough
                          % voltage to cause injury even with a bad electrode.
 handles.MAX_uAMPS = 1000; % tdt
 handles.MIN_uAMPS = 0.05; % arbitrary patterns
@@ -92,6 +92,7 @@ global interpulse_s;
 global increase_type;
 global max_halftime;
 global saving_stimulations;
+global intan_gain;
 global recording_amplifier_gain;
 global channel_ranges;
 global bird;
@@ -107,6 +108,8 @@ global stim_trigger;
 global tdt_show;  % Which TDT recording channels to show?
 global currently_reconfiguring;
 global audio_monitor_gain;
+global tdt_show_buttons;
+global show_device;
 
 currently_reconfiguring = true;
 
@@ -183,6 +186,7 @@ monitor_electrode = 2;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
+intan_gain = 515;
 recording_amplifier_gain = 1;
 audio_monitor_gain = 200;
 saving_stimulations = true;
@@ -237,7 +241,6 @@ set(handles.select_all_valid, 'Enable', 'on');
 set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
 set(handles.n_repetitions_hz_box, 'String', sprintf('%d', repetition_Hz));
-set(handles.recording_amplifier_gain_box, 'String', sprintf('%g', recording_amplifier_gain));
 %set(handles.response_dummy, 'Enable', 'off', 'Value', 0);
 
 newvals = {};
@@ -500,7 +503,7 @@ global recording_channels response_dummy_channel;
 global tdt;
 global homedir;
 global tdt_samplerate recording_time tdt_nsamples;
-global tdt_show;
+global tdt_show tdt_show_buttons;
 global stim_timer;
 global audio_monitor_gain;
 
@@ -562,7 +565,7 @@ if ceil(tdt_nsamples*1.1) > tdt_dbuffer_size
 end
 
 for i = 1:16
-    handles.tdt_show{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+    tdt_show_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
                        'Value',tdt_show(i),'Position', [780 764-22*(i-1) 50 20], ...
                         'Callback',{@tdt_show_channel_Callback});
 end
@@ -601,6 +604,7 @@ global response_dummy_channel;
 global comments;
 global stim;
 global n_repetitions repetition_Hz;
+global intan_gain;
 global VOLTAGE_RANGE_LAST_STIM;
 persistent rmshist;
 global tdt tdt_nsamples tdt_samplerate;
@@ -624,7 +628,7 @@ for i = 1:length(channels)
 end
 edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i;
-edata(:,recording_channel_indices) = event.Data(:,recording_channel_indices) / recording_amplifier_gain;
+edata(:,recording_channel_indices) = event.Data(:,recording_channel_indices) / intan_gain;
 
 if ~isempty(tdt)
     %% If recording with TDT, block until the data buffer has enough samples:
@@ -690,7 +694,7 @@ nchannels = length(obj.Channels);
 
 [data_aligned triggertime n_repetitions_actual] = chop_and_align(edata, ...
     edata(:, trigger_index), ...
-    event.TimeStamps, ...
+    event.TimeStamps', ...
     n_repetitions, ...
     obj.Rate);
 % times_aligned is data.time aligned so spike=0
@@ -722,12 +726,20 @@ if n_repetitions_actual_tdt == 0
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 14;
+data.version = 16;
 
-if ~isempty(tdt)
-    i_think_i_see_a_spike = look_for_spikes(mean(tdata_aligned, 1));
-end
 
+
+data.repetition_Hz = repetition_Hz;
+data.halftime_us = halftime_us;
+data.interpulse_s = interpulse_s;
+data.stim_duration = 2*halftime_us + interpulse_s;
+data.current = CURRENT_uAMPS;
+data.negativefirst = NEGFIRST;
+data.stim_electrodes = stim;
+data.monitor_electrode = monitor_electrode;
+data.comments = comments;
+data.bird = bird;
 
 if response_dummy_channel
     if sum(recording_channels) <= 1
@@ -745,10 +757,16 @@ data.ni.response = data_aligned(:, :, data.ni.index_recording);
 data.ni.show = 1:length(data.ni.index_recording); % For now, show everything that there is.
 data.ni.n_repetitions = n_repetitions_actual;
 data.ni.index_trigger = trigger_index;
+data.ni.stim_active = edata(:, trigger_index); % version 15
+d = diff(data.ni.stim_active);
+stim_start_i = find(d > 0.5, 1) + 1;
+stim_stop_i = find(d < -0.5, 1) + 1;
+data.ni.stim_active_indices = stim_start_i:stim_stop_i;
+
 data.ni.n_repetitions = n_repetitions_actual;
-data.ni.times_aligned = event.TimeStamps(1:size(edata,1)) - triggertime;
-data.ni.time = event.TimeStamps;
-data.ni.recording_amplifier_gain = recording_amplifier_gain;
+data.ni.times_aligned = event.TimeStamps(1:size(edata,1))' - triggertime;
+data.ni.time = event.TimeStamps';
+data.ni.recording_amplifier_gain = intan_gain;
 data.ni.fs = obj.Rate;
 data.ni.triggertime = triggertime;
 for i=1:nchannels
@@ -756,13 +774,9 @@ for i=1:nchannels
 	data.ni.names{i} = obj.Channels(i).Name;
 end
 
-
-
 if ~isempty(tdt)
     data.tdt.response = tdata_aligned;
     data.tdt.show = find(tdt_show);
-    %data.tdt.response = d2;
-    %data.tdt.show = 1;
     data.tdt.index_recording = 1:size(data.tdt.response, 3);
     data.tdt.index_trigger = [];
     data.tdt.n_repetitions = n_repetitions_actual_tdt;
@@ -775,18 +789,21 @@ if ~isempty(tdt)
         data.tdt.labels{i} = sprintf('tdt %d', i);
         data.tdt.names{i} = sprintf('tdt %d', i);
     end
-    data.tdt.i_think_i_see_a_spike = i_think_i_see_a_spike;
-end
+    data.tdt.stim_active = tddata; % This is ALL OF IT
+    
+    d = diff(data.tdt.stim_active);
+    stim_start_i = find(d > 0.5, 1) + 1;
+    stim_stop_i = find(d < -0.5, 1) + 1;
+    %data.tdt.stim_active_indices = find(data.tdt.times_aligned >= 0 ...
+    %    & data.tdt.times_aligned <= data.stim_duration);
+    data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
 
-data.repetition_Hz = repetition_Hz;
-data.halftime_us = halftime_us;
-data.interpulse_s = interpulse_s;
-data.current = CURRENT_uAMPS;
-data.negativefirst = NEGFIRST;
-data.stim_electrodes = stim;
-data.monitor_electrode = monitor_electrode;
-data.comments = comments;
-data.bird = bird;
+    
+    data.tdt.i_think_i_see_a_spike = look_for_spikes(mean(tdata_aligned, 1), ...
+        data.tdt.times_aligned, ...
+        data.tdt.stim_active_indices, ...
+        16);
+end
 
 plot_stimulation(data, guihandles(handlefigure));
 
@@ -1597,10 +1614,11 @@ try
         if arbitrary_pattern
             global axes3 axes3yy;
             np = PS_GetNPointsArbPattern(handles.box, channel);
+            pat = [];
             pat(1,:) = PS_GetArbPatternPointsX(handles.box, channel);
             pat(2,:) = PS_GetArbPatternPointsY(handles.box, channel);
             pat = [[0; 0] pat [pat(1,end); 0]]; % Add zeros for cleaner look
-            if ~isempty(axes3yy)
+            if ~isempty(axes3yy) & isvalid(axes3yy)
                 hold(axes3yy(2), 'on');
                 plot(axes3yy(2), pat(1,:)/1e6, pat(2,:)/1e3, 'g');
                 hold(axes3yy(2), 'off');
@@ -1948,7 +1966,17 @@ end
 
 % --- Executes on slider movement.
 function yscale_Callback(hObject, eventdata, handles)
+global show_device;
 global recording_amplifier_gain;
+global intan_gain;
+
+switch lower(show_device)
+    case 'tdt'
+        recording_amplifier_gain = 1;
+    case 'ni'
+        recording_amplifier_gain = intan_gain;
+end
+
 set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/recording_amplifier_gain);
 
 
@@ -2154,14 +2182,6 @@ function debug_Callback(hObject, eventdata, handles)
 a(0)
 
 
-function recording_amplifier_gain_box_Callback(hObject, eventdata, handles)
-global recording_amplifier_gain;
-recording_amplifier_gain = str2num(get(handles.recording_amplifier_gain_box, 'String'));
-
-function recording_amplifier_gain_box_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
 
 %% Controls which NI channels are used for recording.  If "dummy" is true, then
 % the first one will be ignored in the graph.
@@ -2213,6 +2233,39 @@ end
 
 
 function audio_monitor_gain_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+function tdt_show_all_Callback(hObject, eventdata, handles)
+global tdt_show tdt_show_buttons;
+
+if sum(tdt_show) == 16
+    tdt_show = zeros(1,16);
+else
+    tdt_show = ones(1, 16);
+end
+
+for i = 1:16
+    set(tdt_show_buttons{i}, 'Value', tdt_show(i));
+end
+guidata(hObject, handles);
+
+
+
+function device_Callback(hObject, eventdata, handles)
+global show_device;
+foo = cellstr(get(hObject, 'String'));
+show_device = foo{get(hObject, 'Value')};
+
+function device_CreateFcn(hObject, eventdata, handles)
+global show_device;
+
+set(hObject, 'String', {'TDT', 'NI'});
+foo = cellstr(get(hObject, 'String'));
+show_device = foo{get(hObject, 'Value')};
+
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end

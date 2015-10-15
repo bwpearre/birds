@@ -11,6 +11,7 @@ global heur;
 global knowngood;
 global nnsetX;
 global net;
+global show_device;
 global axes1 axes2 axes3 axes4;
 if isempty(corr_range)
         corr_range = [0 eps];
@@ -32,23 +33,44 @@ if isfield(handles, 'startcurrent')
     handles.axes4 = axes4;
 end
 
-%colours = repmat(get(handles.axes1, 'ColorOrder'), 3, 1);
-%colours = parula(16);
-colours = distinguishable_colors(16);
+if isempty(axes2)
+    axes2 = handles.axes2;
+end
+
 
 persistent responses_detrended_prev;
 
 
+if data.version <= 15
+    data.ni.times_aligned = data.ni.times_aligned';
+end
 
 if isfield(data, 'tdt')
-    d = data.tdt;
+    eval(sprintf('d = data.%s;', lower(show_device)));
 else
     d = data.ni;
 end
+nchannels = size(d.response, 3);
 
 n_repetitions = d.n_repetitions;
 aftertrigger = 12e-3;
 beforetrigger = -3e-3;
+
+
+colours = distinguishable_colors(nchannels);
+
+% Generate stimulation alignment information
+if data.version <= 15 | ~isfield(d, 'stim_active_indices')
+    data.stim_duration = 2*data.halftime_us/1e6+data.interpulse_s;
+    d.stim_active_indices = find(d.times_aligned >= 0 ...
+        & d.times_aligned <= data.stim_duration);
+    d.stim_active = 0 * d.response(1, :, 1);    
+    d.stim_active(d.stim_active_indices) = ones(1, length(d.stim_active_indices));
+else
+    d.stim_active = d.stim_active(1:size(d.response, 2));
+end
+stim_times = d.times_aligned(d.stim_active_indices);
+
 
 
 halftime_us = data.halftime_us;
@@ -56,6 +78,7 @@ interpulse_s = data.interpulse_s;
 times_aligned = d.times_aligned;
 beforetrigger = max(times_aligned(1), beforetrigger);
 aftertrigger = min(times_aligned(end), aftertrigger);
+
 
 % u: indices into times_aligned that we want to show, aligned and shit.
 u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
@@ -82,9 +105,9 @@ if get(handles.response_show_avg, 'Value')
     response = response_avg;
 end
 
-spikes = look_for_spikes(response_avg, times_aligned);
-linewidths = 0.5*ones(1, 16);
-linewidths(spikes > 2) = linewidths(spikes>2) * 5;
+[ spikes r ] = look_for_spikes(response_avg, times_aligned, d.stim_active_indices, nchannels);
+linewidths = 0.3*ones(1, nchannels);
+linewidths(find(spikes)) = ones(1, length(linewidths(find(spikes)))) * 3;
 
 
 % get(handles.response_show_all, 'Value')
@@ -106,15 +129,17 @@ end
 cla(handles.axes1);
 legend_handles = [];
 hold(handles.axes1, 'on');
-for i = d.show
+legend_names = {};
+for i = union(d.show, find(spikes))
     foo = plot(handles.axes1, ...
         times_aligned(u), ...
         reshape(response(:,u,i), [size(response, 1) length(u)])', ...
         'Color', colours(i, :), 'LineWidth', linewidths(i));
     legend_handles(end+1) = foo(1);
+    legend_names(end+1) = strcat(d.names(i), '..... ', sigfig(r(i), 2));
 end
 hold(handles.axes1, 'off');
-legend_names = d.names(d.show);
+%legend_names = d.names(d.show);
 legend(handles.axes1, legend_handles, legend_names);
     
 
@@ -170,7 +195,8 @@ set(handles.axes1, 'XTick', xtick(1):0.001:xtick(end));
 
 
 % Curve-fit: use a slightly longer time period
-roifit = [ 2*data.halftime_us/1e6+data.interpulse_s+100e-6 + 100e-6 0.008 ];
+%roifit = [ stim_duration + 100e-6 0.008 ];
+roifit = [-0.002 0.009];
 roiifit = find(times_aligned >= roifit(1) & times_aligned < roifit(2));
 roitimesfit = times_aligned(roiifit);
 
@@ -182,51 +208,46 @@ roitimesplus = times_aligned(roiiplus);
 
 len = length(times_aligned);
 lenfit = length(roitimesfit);
-weightsfit = linspace(1, 0, lenfit);
-weightsfit = ones(1, lenfit);
 
-fittype = 'fourier8';
+
+% Blank the data during stimulation.  FIT can't handle NaN, so just set the
+% fit weights to 0 for that period.
+weights_blanking = roiifit;
+weights_blanking(d.stim_active_indices(1)-roiifit(1)+1 : d.stim_active_indices(end)-roiifit(1)+1) = ...
+    zeros(1, length(d.stim_active_indices));
+weights_blanking = double(weights_blanking ~= 0);
+
+fittype = 'exp2';
 opts = fitoptions;
 opts.Normalize = 'on';
+opts.Weights = weights_blanking;
 
-switch fittype
-    case 'exp2'
-        opts = fitoptions(opts, 'StartPoint', [1 -3000 1 -30], ...
-                'Upper', [Inf -0.01 Inf -0.01] );
-    case 'fourier8'
-    case 'poly8'
-    otherwise
-end
+responses_detrended = zeros(length(d.times_aligned), nchannels);
 
-colour_index = 1;
 for channel = d.show
 
-    f = fit(roitimesfit', squeeze(response_avg(1, roiifit, channel))', fittype, opts);
+    f = fit(roitimesfit', squeeze(response_avg(1, roiifit, channel))', ...
+        fittype, opts);
     roitrend(:, channel) = f(times_aligned);
     responses_detrended(:, channel) = squeeze(response_avg(1, :, channel))' - roitrend(:, channel);
 
-    if false
-        f = fit(roitimesfit,  responses_detrended(roiifit, channel), fittype, opts);
-        roitrend(:, channel) = f(times_aligned);
-        responses_detrended = responses_detrended - roitrend;
-    end
 
     %cftool(roitimesfit,response_avg(roiifit,3))
     
     
     hold(handles.axes1, 'on');
     if get(handles.response_show_trend, 'Value')
-        plot(handles.axes1, roitimesfit, roitrend(roiifit, channel), 'g');
+        plot(handles.axes1, roitimesfit, roitrend(roiifit, channel), ...
+            'Color', colours(channel,:), 'LineStyle', ':');
         axes1legend{end+1} = 'Trend';
     end
     if get(handles.response_show_detrended, 'Value')
         %plot(handles.axes1, roitimes, responses_detrended(roii, channel), 'r', 'LineWidth', 2);
         plot(handles.axes1, roitimes, responses_detrended(roii, channel), ...
-            'LineWidth', 2, 'Color', colours(colour_index, :));
+            'Color', colours(channel, :), 'LineStyle', '--');
         %plot(handles.axes1, roitimesplus, responses_detrended(roiiplus, channel), 'k', 'LineWidth', 2);
         %axes1legend{end+1} = 'Detrended';
     end
-    colour_index = colour_index + 1;
     hold(handles.axes1, 'off');
     %if ~isempty(axes1legend) & false
     %    legend(handles.axes1, axes1legend);

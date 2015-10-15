@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 07-Oct-2015 13:44:40
+% Last Modified by GUIDE v2.5 15-Oct-2015 17:17:26
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -288,6 +288,7 @@ set(handles.train, 'Enable', 'on');
 % --- Executes on slider movement.
 function yscale_Callback(hObject, eventdata, handles)
 set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
+set(handles.axes2, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
 
 
 
@@ -337,3 +338,23 @@ end
 listbox1_Callback(handles.listbox1, eventdata, handles);
 
 
+
+
+% --- Executes on selection change in show_device.
+function show_device_Callback(hObject, eventdata, handles)
+global show_device;
+foo = cellstr(get(hObject, 'String'));
+show_device = foo{get(hObject, 'Value')};
+listbox1_Callback(handles.listbox1, eventdata, handles);
+
+
+% --- Executes during object creation, after setting all properties.
+function show_device_CreateFcn(hObject, eventdata, handles)
+global show_device;
+set(hObject, 'String', {'TDT', 'NI'});
+foo = cellstr(get(hObject, 'String'));
+show_device = foo{get(hObject, 'Value')};
+
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
