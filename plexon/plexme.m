@@ -63,7 +63,7 @@ handles.START_uAMPS = 1; % Stimulating at this current will not yield enough
 handles.MAX_uAMPS = 1000; % tdt
 handles.MIN_uAMPS = 0.05; % arbitrary patterns
 handles.INCREASE_STEP = 1.1;
-handles.INTERSPIKE_S = 0.01;
+handles.INTERSPIKE_S = 0.01; % Additional time between sets; not really used.
 handles.VoltageLimit = 5;
 handles.box = 1;   % Assume (hardcode) 1 Plexon box
 handles.open = false;
@@ -115,8 +115,8 @@ currently_reconfiguring = true;
 
 
 
-n_repetitions = 10;
-repetition_Hz = 10;
+n_repetitions = 4;
+repetition_Hz = 20;
 
 % NI control rubbish
 NIsession = [];
@@ -181,7 +181,7 @@ increase_type = 'current'; % or 'time'
 default_halftime_us = 100; %tdt
 halftime_us = default_halftime_us;
 %interpulse_s = 100e-6;
-interpulse_s = 0; %tdt
+interpulse_s = 0.0001;
 monitor_electrode = 2;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
@@ -199,7 +199,7 @@ tdt_show = zeros(1, 16);
 
 
 
-tdt_show_default = [6];
+tdt_show_default = [1:16];
 tdt_show(tdt_show_default) = ones(size(tdt_show_default));
 
 for i = 2:length(recording_channels)
@@ -236,7 +236,7 @@ set(handles.currentcurrent, 'String', sigfig(CURRENT_uAMPS, 2));
 set(handles.maxcurrent, 'String', sprintf('%d', round(handles.MAX_uAMPS)));
 set(handles.increasefactor, 'String', sprintf('%g', handles.INCREASE_STEP));
 set(handles.halftime, 'String', sprintf('%d', round(halftime_us)));
-set(handles.delaytime, 'String', sprintf('%g', handles.INTERSPIKE_S));
+set(handles.delaytime, 'String', sprintf('%g', interpulse_s*1e6));
 set(handles.select_all_valid, 'Enable', 'on');
 set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
@@ -1008,8 +1008,8 @@ end
 
 
 function delaytime_Callback(hObject, eventdata, handles)
-handles.INTERSPIKE_S = str2double(get(hObject,'String'));
-guidata(hObject, handles);
+global interpulse_s;
+interpulse_s = str2double(get(hObject,'String')) / 1e6;
 
 
 % --- Executes during object creation, after setting all properties.
@@ -1481,7 +1481,7 @@ fid = fopen(filename, 'w');
 fprintf(fid, 'variable\n');
 fprintf(fid, '%d\n%d\n', round(StimParam.A1*1000), round(StimParam.W1));
 if StimParam.Delay
-    fprintf(fid, '%d\n%d', 0, round(StimParam.Delay));
+    fprintf(fid, '%d\n%d\n', 0, round(StimParam.Delay));
 end
 fprintf(fid, '%d\n%d\n', round(StimParam.A2*1000), round(StimParam.W2));
 fclose(fid);

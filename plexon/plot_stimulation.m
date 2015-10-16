@@ -34,6 +34,7 @@ if isfield(handles, 'startcurrent')
 end
 
 if isempty(axes2)
+    axes1 = handles.axes1;
     axes2 = handles.axes2;
 end
 

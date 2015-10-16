@@ -43,7 +43,7 @@ for i = 1:size(data, 2)
 end
 
 if true
-    global axes2;
+    global axes1 axes2;
     set(axes2, 'ColorOrder', distinguishable_colors(nchannels));
     cla(axes2);
     hold(axes2, 'on');
@@ -52,6 +52,7 @@ if true
             times, ...
             data(:, i));
     end
+    set(axes2, 'XLim', get(axes1, 'XLim'));
     hold(axes2, 'off');
 end
 
