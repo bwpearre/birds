@@ -16,6 +16,9 @@ global axes1 axes2 axes3 axes4;
 if isempty(corr_range)
         corr_range = [0 eps];
 end
+if isempty(show_device)
+    show_device = 'tdt';
+end
 
 % Repair my stupidity -- version 12 has unscaled data.
 if data.version == 12
@@ -26,7 +29,9 @@ end
 % If plot_stimulation is called from a timer or DAQ callback, the axes are
 % not present in the handles structure.  You may need a beer for this
 % one...
-if isfield(handles, 'startcurrent')
+%if isfield(handles, 'startcurrent')
+if ~isfield(handles, 'axes1')
+    disp('assigning axes');
     handles.axes1 = axes1;
     handles.axes2 = axes2;
     handles.axes3 = axes3;
@@ -54,7 +59,7 @@ end
 nchannels = size(d.response, 3);
 
 n_repetitions = d.n_repetitions;
-aftertrigger = 12e-3;
+aftertrigger = 25e-3;
 beforetrigger = -3e-3;
 
 
@@ -106,7 +111,8 @@ if get(handles.response_show_avg, 'Value')
     response = response_avg;
 end
 
-[ spikes r ] = look_for_spikes(response_avg, times_aligned, d.stim_active_indices, nchannels);
+%[ spikes r ] = look_for_spikes(response_avg, times_aligned, d.stim_active_indices, nchannels);
+[spikes r] = look_for_spikes(response_avg, data, d);
 linewidths = 0.3*ones(1, nchannels);
 linewidths(find(spikes)) = ones(1, length(linewidths(find(spikes)))) * 3;
 
@@ -118,7 +124,7 @@ linewidths(find(spikes)) = ones(1, length(linewidths(find(spikes)))) * 3;
 %disp('Bandpass-filtering the data...');
 %[B A] = butter(2, 0.07, 'high');
 if get(handles.response_filter, 'Value')
-    [B A] = ellip(2, .5, 40, [200 5000]/(d.fs/2));
+    [B A] = ellip(2, .000001, 30, [100]/(d.fs/2), 'high');
     for i = 1:size(response, 1)
         response(i,:,:) = filtfilt(B, A, squeeze(response(i,:,:)));
     end
@@ -179,7 +185,7 @@ set(get(axes3yy(1),'Ylabel'),'String','V')
 set(get(axes3yy(2),'Ylabel'),'String','\mu A')
 
 xtick = get(handles.axes1, 'XTick');
-set(handles.axes1, 'XTick', xtick(1):0.001:xtick(end));
+set(handles.axes1, 'XTick', xtick(1):0.001:aftertrigger);
 %figure(1);
 %plot(times_aligned(u), reshape(data.data_aligned(:,u,data.channels_out), [ length(u) length(data.channels_out)])');
 
@@ -306,14 +312,17 @@ end
 %        set(handles.response2, 'Value', sim(net, nnsetX(:,file)) > 0.5);
 %end
 
-w = find(times_aligned >= halftime_us/1e6 - 0.00003 ...
-    & times_aligned < halftime_us/1e6 + interpulse_s + 0.00001);
-%w = w(1:end-1);
-stim_avg = mean(data.ni.stim, 1);
-min_interpulse_volts = min(abs(stim_avg(1, w, 1)));
-plot(handles.axes4, times_aligned(w)*1000, squeeze(stim_avg(1, w, 1)));
-grid(handles.axes4, 'on');
-xlabel(handles.axes4, 'ms');
-ylabel(handles.axes4, 'V');
+if false
+    % Plot a close-up of the interpulse interval
+    w = find(times_aligned >= halftime_us/1e6 - 0.00003 ...
+        & times_aligned < halftime_us/1e6 + interpulse_s + 0.00001);
+    %w = w(1:end-1);
+    stim_avg = mean(data.ni.stim, 1);
+    min_interpulse_volts = min(abs(stim_avg(1, w, 1)));
+    plot(handles.axes4, times_aligned(w)*1000, squeeze(stim_avg(1, w, 1)));
+    grid(handles.axes4, 'on');
+    xlabel(handles.axes4, 'ms');
+    ylabel(handles.axes4, 'V');
+end
 
 responses_detrended_prev = responses_detrended;

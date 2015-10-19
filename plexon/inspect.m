@@ -48,6 +48,10 @@ end
 function inspect_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
 
+scriptpath = fileparts(mfilename('fullpath'))
+path(sprintf('%s/../lib', scriptpath), path);
+
+
 global responses_detrended;
 global wait_bar;
 global knowngood;

@@ -115,7 +115,7 @@ currently_reconfiguring = true;
 
 
 
-n_repetitions = 40;
+n_repetitions = 50;
 repetition_Hz = 40;
 
 % NI control rubbish
@@ -178,7 +178,7 @@ bird = 'noname';
 datadir = strcat(homedir, '/v/birds/plexon/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 set(handles.datadir_box, 'String', datadir);
 increase_type = 'current'; % or 'time'
-default_halftime_us = 100; %tdt
+default_halftime_us = 100;
 halftime_us = default_halftime_us;
 %interpulse_s = 100e-6;
 interpulse_s = 0.0001;
@@ -188,7 +188,7 @@ max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
 intan_gain = 515;
 recording_amplifier_gain = 1; % For display only!
-audio_monitor_gain = 200;
+audio_monitor_gain = 200; % For TDT audio monitor output
 saving_stimulations = true;
 handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
@@ -2049,6 +2049,10 @@ function n_repetitions_hz_box_Callback(hObject, eventdata, handles)
 global NIsession n_repetitions repetition_Hz;
 
 repetition_Hz = str2double(get(hObject, 'String'));
+if repetition_Hz > 40
+    repetition_Hz = 40;
+    set(hObject, 'String', sigfig(repetition_Hz, 2));
+end
 if ~isempty(NIsession)
     stop(NIsession);
     release(NIsession);
