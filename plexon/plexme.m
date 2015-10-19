@@ -115,14 +115,14 @@ currently_reconfiguring = true;
 
 
 
-n_repetitions = 4;
-repetition_Hz = 20;
+n_repetitions = 40;
+repetition_Hz = 40;
 
 % NI control rubbish
 NIsession = [];
 
-valid = zeros(1, 16);
-valid(12:15) = ones(1,4);
+valid = ones(1, 16);
+%valid(12:15) = ones(1,4);
 stim = zeros(1, 16);
 
 if ispc
@@ -187,7 +187,7 @@ electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
 intan_gain = 515;
-recording_amplifier_gain = 1;
+recording_amplifier_gain = 1; % For display only!
 audio_monitor_gain = 200;
 saving_stimulations = true;
 handles.TerminalConfig = {'SingleEndedNonReferenced'};
@@ -992,10 +992,18 @@ end
 
 
 function halftime_Callback(hObject, eventdata, handles)
-global default_halftime_us;
-global halftime_us;
+global default_halftime_us halftime_us;
+global NIsession;
+
 default_halftime_us = str2double(get(hObject,'String'));
 halftime_us = default_halftime_us;
+
+if ~isempty(NIsession)
+    stop(NIsession);
+    release(NIsession);
+    NIsession = [];
+end
+handles = configure_acquisition_device(hObject, handles);
 guidata(hObject, handles);
 
 
@@ -1009,7 +1017,18 @@ end
 
 function delaytime_Callback(hObject, eventdata, handles)
 global interpulse_s;
+global NIsession;
+
 interpulse_s = str2double(get(hObject,'String')) / 1e6;
+
+if ~isempty(NIsession)
+    stop(NIsession);
+    release(NIsession);
+    NIsession = [];
+end
+handles = configure_acquisition_device(hObject, handles);
+guidata(hObject, handles);
+
 
 
 % --- Executes during object creation, after setting all properties.
@@ -2016,7 +2035,6 @@ if ~isempty(NIsession)
     release(NIsession);
     NIsession = [];
 end
-
 handles = configure_acquisition_device(hObject, handles);
 guidata(hObject, handles);
 
