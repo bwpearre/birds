@@ -94,11 +94,11 @@ end
 
 
 detector = '';
-%detector = 'rms';
+detector = 'rms';
 %detector = 'range';
 %detector = 'threshold';
 %detector = 'convolve';
-detector = 'spectrogram';
+%detector = 'spectrogram';
 
 switch detector
   
