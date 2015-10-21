@@ -57,9 +57,10 @@ global wait_bar;
 global knowngood;
 global heur;
 global nnsetX;
-global tdt_show_now tdt_show_data tdt_show_data_last;
+global tdt_show_now tdt_show_data tdt_show_data_last tdt_show_last_chosen;
 
 tdt_show_now = zeros(1, 16);
+tdt_show_last_chosen = ones(1, 16);
 tdt_show_data = zeros(1, 16);
 tdt_show_data_last = zeros(1, 16);
 

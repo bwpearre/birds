@@ -38,9 +38,11 @@ if ~isfield(handles, 'axes1')
     handles.axes4 = axes4;
 end
 
-if isempty(axes2)
+if isempty(axes4)
     axes1 = handles.axes1;
     axes2 = handles.axes2;
+    axes3 = handles.axes3;
+    axes4 = handles.axes4;
 end
 
 
@@ -113,11 +115,13 @@ end
 
 
 
-detrend_toi = [0.002 0.019];
-[ detrended detrendotron ] = detrend_resposne(response_avg, d, data, detrend_toi, handles);
+detrend_toi = [ 0.002 d.times_aligned(end) ];
+[ detrended trend ] = detrend_response(response_avg, d, data, detrend_toi);
 
+response_toi = [0.003 0.008];
+response_baseline = [0.012 d.times_aligned(end)];
 
-[spikes r] = look_for_spikes(detrended, data, d);
+[spikes r] = look_for_spikes(detrended, data, d, response_toi, response_baseline);
 linewidths = 0.3*ones(1, nchannels);
 linewidths(find(spikes)) = ones(1, length(linewidths(find(spikes)))) * 3;
 
@@ -151,22 +155,28 @@ cla(handles.axes1);
 hold(handles.axes1, 'on');
 legend_handles = [];
 legend_names = {};
-for i = union(d.show, find(spikes))
+for channel = union(d.show, find(spikes))
     
     % Raw (or filtered) response
     foo = plot(handles.axes1, ...
         times_aligned(u), ...
-        reshape(response(:,u,i), [size(response, 1) length(u)])', ...
-        'Color', colours(i, :), 'LineWidth', linewidths(i));
+        reshape(response(:,u,channel), [size(response, 1) length(u)])', ...
+        'Color', colours(channel, :), 'LineWidth', linewidths(channel));
     
     % Detrended
     if get(handles.response_show_detrended, 'Value')
-        plot(handles.axes1, roitimes, detrended(roii, i), ...
-            'Color', colours(i, :), 'LineStyle', '--');
+        plot(handles.axes1, roitimes, detrended(1, roii, channel), ...
+            'Color', colours(channel, :), 'LineStyle', '--');
+    end
+    if get(handles.response_show_trend, 'Value')
+        plot(handles.axes1, roitimes, trend(1, roii, channel), ...
+            'Color', colours(channel,:), 'LineStyle', ':');
+        axes1legend{end+1} = 'Trend';
     end
 
+    
     legend_handles(end+1) = foo(1);
-    legend_names(end+1) = strcat(d.names(i), '..... ', sigfig(r(i), 2));
+    legend_names(end+1) = strcat(d.names(channel), '..... ', sigfig(r(channel), 2));
 end
 hold(handles.axes1, 'off');
 %legend_names = d.names(d.show);
