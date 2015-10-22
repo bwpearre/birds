@@ -30,12 +30,11 @@ end
 % not present in the handles structure.  You may need a beer for this
 % one...
 %if isfield(handles, 'startcurrent')
-if ~isfield(handles, 'axes1')
-    disp('assigning axes');
-    handles.axes1 = axes1;
-    handles.axes2 = axes2;
-    handles.axes3 = axes3;
-    handles.axes4 = axes4;
+for i = 1:4
+    j = sprintf('axes%d', i);
+    if ~isfield(handles, j)
+        eval(sprintf('handles.%s = %s;', j, j));
+    end
 end
 
 if isempty(axes4)
@@ -99,29 +98,41 @@ end
 
 axes1legend = {};
 
-response = d.response;
-sz = size(response);
+sz = size(d.response);
 
 % Shall we compute the average of time-aligned responses?
-response_avg = mean(response, 1);
+response_avg = mean(d.response, 1);
 %foo = size(response_avg);
 %if length(foo) == 3
 %    response_avg = reshape(response_avg, foo(2:3));
 %end
 
 if get(handles.response_show_avg, 'Value')
-    response = response_avg;
+    response_plot = response_avg;
+else
+    response_plot = d.response;
 end
 
 
-
-detrend_toi = [ 0.002 d.times_aligned(end) ];
-[ detrended trend ] = detrend_response(response_avg, d, data, detrend_toi);
-
+if data.version >= 17
+    detrend_toi = data.detrend_toi;
+else
+    detrend_toi = [ 0.002 0.025 ];
+end
+if get(handles.response_show_detrended, 'Value') | get(handles.response_show_trend, 'Value')
+    [ detrended trend ] = detrend_response(response_avg, d, data, detrend_toi, 'fourier8');
+end
+    
 response_toi = [0.003 0.008];
-response_baseline = [0.012 d.times_aligned(end)];
+response_baseline = [0.012 Inf];
 
-[spikes r] = look_for_spikes(detrended, data, d, response_toi, response_baseline);
+tic
+[ detrended_all trend_all ] = detrend_response(d.response, d, data, detrend_toi, 'fourier8');
+disp(sprintf('Detrending all took %s seconds.', sigfig(toc, 3)));
+tic
+[spikes r] = look_for_spikes(detrended_all, data, d, response_toi, response_baseline, 'fourier8');
+disp(sprintf('Finding spikes took %s seconds.', sigfig(toc, 3)));
+
 linewidths = 0.3*ones(1, nchannels);
 linewidths(find(spikes)) = ones(1, length(linewidths(find(spikes)))) * 3;
 
@@ -134,8 +145,8 @@ linewidths(find(spikes)) = ones(1, length(linewidths(find(spikes)))) * 3;
 %[B A] = butter(2, 0.07, 'high');
 if get(handles.response_filter, 'Value')
     [B A] = ellip(2, .000001, 30, [100]/(d.fs/2), 'high');
-    for i = 1:size(response, 1)
-        response(i,:,:) = filtfilt(B, A, squeeze(response(i,:,:)));
+    for i = 1:size(response_plot, 1)
+        response_plot(i,:,:) = filtfilt(B, A, squeeze(response_plot(i,:,:)));
     end
 end
 
@@ -160,7 +171,7 @@ for channel = union(d.show, find(spikes))
     % Raw (or filtered) response
     foo = plot(handles.axes1, ...
         times_aligned(u), ...
-        reshape(response(:,u,channel), [size(response, 1) length(u)])', ...
+        reshape(response_plot(:,u,channel), [size(response_plot, 1) length(u)])', ...
         'Color', colours(channel, :), 'LineWidth', linewidths(channel));
     
     % Detrended

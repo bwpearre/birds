@@ -115,8 +115,8 @@ currently_reconfiguring = true;
 
 
 
-n_repetitions = 50;
-repetition_Hz = 40;
+n_repetitions = 10;
+repetition_Hz = 30;
 
 % NI control rubbish
 NIsession = [];
@@ -726,7 +726,7 @@ if n_repetitions_actual_tdt == 0
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 16;
+data.version = 17;
 
 
 
@@ -740,6 +740,10 @@ data.stim_electrodes = stim;
 data.monitor_electrode = monitor_electrode;
 data.comments = comments;
 data.bird = bird;
+data.detrend_fittype = 'fourier8';
+data.detrend_toi = [0.002 0.025];
+data.response_toi = [0.003 0.008];
+data.response_baseline = [0.012 Inf];
 
 if response_dummy_channel
     if sum(recording_channels) <= 1
@@ -797,12 +801,17 @@ if ~isempty(tdt)
     %data.tdt.stim_active_indices = find(data.tdt.times_aligned >= 0 ...
     %    & data.tdt.times_aligned <= data.stim_duration);
     data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
-
     
-    data.tdt.i_think_i_see_a_spike = look_for_spikes(mean(tdata_aligned, 1), ...
-        data.tdt.times_aligned, ...
-        data.tdt.stim_active_indices, ...
-        16);
+    [ data.tdt.response_detrended data.tdt.response_trend ] ...
+        = detrend_response([], data.tdt, data, data.detrend_toi, data.detrend_fittype);
+    data.tdt.spikes = look_for_spikes(data.tdt.response_detrended, data, ...
+        data.tdt, data.response_toi, data.response_baseline, ...
+        data.detrend_fittype);
+
+    %look_for_spikes(mean(tdata_aligned, 1), ...
+    %    data.tdt.times_aligned, ...
+    %    data.tdt.stim_active_indices, ...
+    %    16);
 end
 
 plot_stimulation(data, guihandles(handlefigure));

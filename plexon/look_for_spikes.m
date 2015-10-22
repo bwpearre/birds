@@ -1,10 +1,14 @@
-function [ spikes r ] = look_for_spikes(response, data, d, roi, baseline);
+function [ spikes r ] = look_for_spikes(response, data, d, toi, baseline, detrend_fittype);
+
+% if response is [], we can recompute it as needed for any given fittype
+% (detrend or whatnot).  If d.response_detrended doesn't exist or is the
+% wrong type, use response, WHICH HAD BETTER BE DETRENDED!
 
 [ nstims nsamples nchannels ] = size(d.response);
 s = size(response);
-if length(s) == 3
-    response = reshape(response, s(2:3));
-end
+%if length(s) == 3 & nstims == 1
+%    response = reshape(response, s(2:3));
+%end
 
 times = d.times_aligned;
 
@@ -12,16 +16,29 @@ minstarttime = 0.001 + times(d.stim_active_indices(end));
 maxendtime = -0.0005 + 1/data.repetition_Hz;
 maxendtime = min(maxendtime, d.times_aligned(nsamples));
 
-roi(1) = max(roi(1), minstarttime);
+toi(1) = max(toi(1), minstarttime);
 baseline(2) = min(baseline(2), maxendtime);
 
-roiregion = find(times > roi(1) & times < roi(2));
+roiregion = find(times > toi(1) & times < toi(2));
 baseregion = find(times > baseline(1) & times < baseline(2));
-validregion = find(times > roi(1) & times < baseline(2));
+validregion = find(times > toi(1) & times < baseline(2));
 
-disp(sprintf('Look for spikes: roi[%g %g]ms, baseline [%g %g]ms', ...
-    roi(1)*1000, roi(2)*1000, baseline(1)*1000, baseline(2)*1000));
 
+
+disp(sprintf('Look for spikes: toi [%g %g] ms, baseline [%g %g] ms', ...
+    toi(1)*1000, toi(2)*1000, baseline(1)*1000, baseline(2)*1000));
+if length(baseregion) < 10
+    disp('   ...the baseline region is too short!');
+    r = zeros(1, nchannels);
+    spikes = zeros(1, nchannels);
+    return;
+end    
+if length(roiregion) < 10
+    disp('   ...the ROI region is too short!');
+    r = zeros(1, nchannels);
+    spikes = zeros(1, nchannels);
+    return;
+end    
 
 %figure(1);
 %plot(response(1:200,9),'b');
@@ -32,28 +49,16 @@ disp(sprintf('Look for spikes: roi[%g %g]ms, baseline [%g %g]ms', ...
 %%% silent trailing dimension 1 is dropped from indexing.  BUT since I've
 %%% averaged response, I can flip it and pretend that the multistim index is
 %%% the channel index.
-if nchannels == 1
+if nchannels == 1 && ndims(response) == 2
     response = response';
 end
 
-%stim_active_indices = (0:length(stim_active_indices)+3)+stim_active_indices(1);
-%for i = 1:nchannels
-%    response(stim_active_indices(1)-1:stim_active_indices(end)+1, i) ...
-%        = linspace(response(stim_active_indices(1)-1, i), response(stim_active_indices(end)+1, i), length(stim_active_indices)+2);
-%end
-
-%figure(1);
-%hold on;
-%plot(response(1:200,9),'r');
-%hold off;
-
-
 
 %[B A] = ellip(2, .5, 40, [300 10000]/((d.fs))/2));
-[B A]= ellip(2, .5, 40, 300/(d.fs/2), 'high');
-for i = 1:nchannels
-    response(:, i) = filtfilt(B, A, squeeze(response(:, i)));
-end
+%[B A]= ellip(2, .5, 40, 300/(d.fs/2), 'high');
+%for i = 1:nchannels
+%    response(:, i) = filtfilt(B, A, squeeze(response(:, i)));
+%end
 
 
 
@@ -75,26 +80,37 @@ end
 
 
 detector = '';
+detector = 'xcorr';
 %detector = 'rms';
 %detector = 'range';
 %detector = 'std';
 %detector = 'threshold';
 %detector = 'convolve';
 %detector = 'spectrogram';
-detector = 'xcorr';
 
 switch detector
     
     case 'xcorr'
-        tic
-        resp = detrend_response(d.response, d, data, []);
-        %resp = d.response;
-        toc
-        parfor channel = 1:nchannels
-            foo(channel,:,:) = xcorr(resp(:, roiregion, channel)', 30, 'none');
-            cow(channel,:,:) = xcorr(resp(:, baseregion, channel)', 30, 'none');
+        if isfield(data, 'detrend_fittype') ...
+                & strcmp(detrend_fittype, data.detrend_fittype) ...
+                & isfield(d, 'response_detrended')
+            % & ROI?
+            disp('Using cached detrend with the same parameters.');
+            response = d.response_detrended;
+        elseif ndims(response) == 3 & nstims > 1
+            disp('Using response passed in as first argument.  I hope it''s detrended!');
+        else
+            disp('Detrending...');
+            [ response trend ] = detrend_response(d.response, data.tdt, data, ...
+                [0.002 0.025], 'fourier8');
         end
-        toc
+        
+        xcorr_nsamples = round(0.001 * d.fs);
+        parfor channel = 1:nchannels
+            foo(channel,:,:) = xcorr(response(:, roiregion, channel)', xcorr_nsamples, 'none');
+            cow(channel,:,:) = xcorr(response(:, baseregion, channel)', xcorr_nsamples, 'none');
+        end
+        
         a = 1:nstims+1:nstims^2;
         foo(:, :, a) = zeros(nchannels, size(foo,2), nstims);
         cow(:, :, a) = zeros(nchannels, size(cow,2), nstims);
@@ -102,7 +118,6 @@ switch detector
         imagesc(squeeze(cow(4,:,:)), 'Parent', axes4);
         colorbar('Peer', axes2);
         colorbar('Peer', axes4);
-        toc
         
         xcfoo = max(foo, [], 2);
         xccow = max(cow, [], 2);
