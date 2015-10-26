@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 15-Oct-2015 17:06:41
+% Last Modified by GUIDE v2.5 26-Oct-2015 15:38:06
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -52,24 +52,22 @@ end
 function plexme_OpeningFcn(hObject, ~, handles, varargin)
 
 global scriptdir;
-scriptdir = fileparts(mfilename('fullpath'))
+scriptdir = fileparts(mfilename('fullpath'));
 path(sprintf('%s/../lib', scriptdir), path);
 
 
 % Choose default command line output for plexme
 handles.output = hObject;
 
-
 global NIsession;
 global homedir datadir intandir;
 global change;
-global NEGFIRST;
+global negfirst;
 global axes1;
 global axes1_yscale;
 global axes2;
 global axes3;
 global axes4;
-global rmsbox;
 global vvsi;
 global comments;
 global monitor_electrode;
@@ -102,8 +100,10 @@ global show_device;
 global start_uAmps min_uAmps max_uAmps current_uAmps increase_step;
 global interspike_s;
 global voltage_limit;
+global save_exclude;
 global plexon_id plexon_open;
-global global_handles;
+
+%myPool = parpool();
 
 currently_reconfiguring = true;
 
@@ -120,7 +120,7 @@ plexon_open = false;
 change = increase_step;
 
 
-n_repetitions = 8;
+n_repetitions = 3;
 repetition_Hz = 30;
 
 % NI control rubbish
@@ -129,6 +129,7 @@ NIsession = [];
 valid = ones(1, 16);
 %valid(12:15) = ones(1,4);
 stim = zeros(1, 16);
+
 
 if ispc
     homedir = getenv('USERPROFILE');
@@ -180,7 +181,7 @@ end
 
 
 bird = 'noname';
-datadir = strcat(homedir, '/v/birds/plexon/', bird, '-', datestr(now, 'yyyy-mm-dd'));
+datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 increase_type = 'current'; % or 'time'
 default_halftime_us = 100;
 halftime_us = default_halftime_us;
@@ -202,20 +203,15 @@ recording_channels = [ 0 0 0 0 0 0 1 ];
 tdt_show = zeros(1, 16);
 
 
-
 tdt_show_default = [1:16];
 tdt_show(tdt_show_default) = ones(size(tdt_show_default));
-
-for i = 2:length(recording_channels)
-    eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
-end
 
 
 %handles.TerminalConfig = 'SingleEnded';
 vvsi = [];
 comments = '';
 
-NEGFIRST = zeros(1,16);
+negfirst = zeros(1,16);
 
 channel_ranges = 2 * [ 1 1 1 1 1 1 1 1 ];
 
@@ -234,26 +230,8 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
 %        i,...
 %        sprintf('%d', handles.PIN_NAMES(3,i))));
 %end
-set(handles.datadir_box, 'String', datadir);
-set(handles.startcurrent, 'String', sprintf('%d', round(start_uAmps)));
-set(handles.currentcurrent, 'String', sigfig(current_uAmps, 2));
-set(handles.maxcurrent, 'String', sprintf('%d', round(max_uAmps)));
-set(handles.increasefactor, 'String', sprintf('%g', increase_step));
-set(handles.halftime, 'String', sprintf('%d', round(halftime_us)));
-set(handles.delaytime, 'String', sprintf('%g', interpulse_s*1e6));
-set(handles.select_all_valid, 'Enable', 'on');
-set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
-set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
-set(handles.n_repetitions_hz_box, 'String', sprintf('%d', repetition_Hz));
-%set(handles.response_dummy, 'Enable', 'off', 'Value', 0);
 
-newvals = {};
-for i = 1:16
-    newvals{end+1} = sprintf('%d', i);
-end
-set(handles.monitor_electrode_control, 'String', newvals);
-set(handles.tdt_monitor_channel, 'String', newvals);
-% Also make sure that the monitor spinbox is the right colour
+
 
 %set(handles.n_repetitions_box, 'Enable', 'off');
 
@@ -262,29 +240,11 @@ handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.vvsi_auto_safe, handles.response_dummy handles.n_repetitions_box ...
         handles.n_repetitions_hz_box};
 for i = 1:16
-    cmd = sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i);
-    eval(cmd);
-    cmd = sprintf('handles.disable_on_run{end+1} = handles.stim%d;', i);
-    eval(cmd);
+    eval(sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i));
+    eval(sprintf('handles.disable_on_run{end+1} = handles.stim%d;', i));
 end
 
 
-
-for i = 1:16
-    if valid(i)
-        foo = 'on';
-    else
-        foo = 'off';
-    end
-    cmd = sprintf('set(handles.electrode%d, ''Value'', %d);', i, valid(i));
-    eval(cmd);
-    cmd = sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, foo);
-    eval(cmd);
-    cmd = sprintf('set(handles.stim%d, ''Value'', 0);', i);
-    eval(cmd);
-    cmd = sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, foo);
-    eval(cmd);
-end
 
 axes1 = handles.axes1;
 axes1_yscale = handles.yscale;
@@ -307,25 +267,21 @@ if exist('demo', 'var')
                 'Callback',{@tdt_show_channel_Callback});
         end
 else
-        set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
-        handles = configure_acquisition_device(hObject, handles);
-        configure_plexon(hObject, handles);
+    set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
+    handles = configure_acquisition_device(hObject, handles);
+    MFileLineNr
+    configure_plexon(hObject, handles);
+    MFileLineNr
 end
+
+
 
 guidata(hObject, handles);
+disp('a11');
+update_gui_values(hObject, handles);
 
 
 
-
-
-function [] = save_globals;
-
-exclude_list = {'NIsession'};
-
-globalVars = who('global');
-for iVar = 1:numel(globalVars)
-  eval(sprintf('global %s', globalVars{iVar}));
-end
 
 
 
@@ -333,7 +289,15 @@ function [] = configure_plexon(hObject, handles)
 global plexon_id plexon_open;
 % Open the stimulator
 
-PS_CloseAllStim; % Clean up from last time?  Does no harm...
+MFileLineNr
+
+if plexon_open
+    MFileLineNr
+    PS_CloseAllStim;
+end
+
+
+MFileLineNr
 
 err = PS_InitAllStim;
 switch err
@@ -349,9 +313,10 @@ switch err
         plexon_open = true;
 end
 
+
 nstim = PS_GetNStim;
 if nstim > 1
-    PS_CloseAllStim;
+    err = PS_CloseAllStim;
     error('plexon:init', 'Plexon: %d devices available, but that dolt Ben assumed only 1!', nstim);
     return;
 end
@@ -386,15 +351,16 @@ catch ME
     disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME);
     err = PS_CloseAllStim;
-    plexon_open = false;
+    if err
+        disp('ERROR closing Plexon stim');
+    else
+        plexon_open = false;
+    end
     rethrow(ME);
 end
 
 
 guidata(hObject, handles);
-
-
-
 
 
 
@@ -599,7 +565,7 @@ guidata(hObject, handles);
 function NIsession_callback(obj, event, handlefigure)
 global NIsession;
 global current_uAmps;
-global NEGFIRST;
+global negfirst;
 global monitor_electrode;
 global channel_ranges;
 global recording_amplifier_gain;
@@ -746,7 +712,7 @@ data.halftime_us = halftime_us;
 data.interpulse_s = interpulse_s;
 data.stim_duration = 2*halftime_us + interpulse_s;
 data.current = current_uAmps;
-data.negativefirst = NEGFIRST;
+data.negativefirst = negfirst;
 data.stim_electrodes = stim;
 data.monitor_electrode = monitor_electrode;
 data.comments = comments;
@@ -891,7 +857,6 @@ tdt_show(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
 
 
 
-
 function gui_close_callback(hObject, callbackdata, handles)
 global NIsession;
 global tdt;
@@ -921,6 +886,8 @@ if plexon_open
     err = PS_CloseAllStim;
     if err
         msgbox({'ERROR CLOSING STIMULATOR', 'Could not contact Plexon stimulator for shutdown!'});
+    else
+        plexon_open = false;
     end
 end
 
@@ -963,13 +930,12 @@ plexon_pin = handles.PIN_NAMES(1, find(handles.PIN_NAMES(2,:) == intan_pin));
 
 % --- Executes on button press in negativefirst.
 function negativefirst_Callback(hObject, eventdata, handles)
-
+% This is empty: read them as needed?
 
 
 function startcurrent_Callback(hObject, eventdata, handles)
 global start_uAmps;
 start_uAmps = str2double(get(hObject,'String'));
-guidata(hObject, handles);
 
 
 % --- Executes during object creation, after setting all properties.
@@ -984,7 +950,6 @@ function maxcurrent_Callback(hObject, eventdata, handles)
 global max_uAmps;
 max_uAmps = str2double(get(hObject,'String'));
 
-
 % --- Executes during object creation, after setting all properties.
 function maxcurrent_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -997,7 +962,6 @@ end
 function increasefactor_Callback(hObject, eventdata, handles)
 global increase_step;
 increase_step = str2double(get(hObject,'String'));
-
 
 % --- Executes during object creation, after setting all properties.
 function increasefactor_CreateFcn(hObject, eventdata, handles)
@@ -1022,7 +986,6 @@ end
 handles = configure_acquisition_device(hObject, handles);
 guidata(hObject, handles);
 
-
 % --- Executes during object creation, after setting all properties.
 function halftime_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -1046,7 +1009,6 @@ handles = configure_acquisition_device(hObject, handles);
 guidata(hObject, handles);
 
 
-
 % --- Executes during object creation, after setting all properties.
 function delaytime_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -1068,16 +1030,12 @@ end
 % "stimulate this electrode" should be enabled or disabled according to the
 % state of this button
 stim(whichone) = 0;
-cmd = sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate);
-eval(cmd);
-cmd = sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate);
-eval(cmd);
+eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate));
+eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate));
 % "stimulate this electrode" should default to 0...
-cmd = sprintf('set(handles.stim%d, ''Value'', 0);', whichone);
-eval(cmd);
+eval(sprintf('set(handles.stim%d, ''Value'', 0);', whichone));
 update_monitor_electrodes(hObject, handles);
 guidata(hObject, handles);
-
 
 
 % --- Executes on button press in electrode1.
@@ -1297,6 +1255,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 function disable_controls(hObject, handles)
+
 for i = 1:length(handles.disable_on_run)
         set(handles.disable_on_run{i}, 'Enable', 'off');
 end
@@ -1319,21 +1278,18 @@ for i = 1:16
     else
             status = 'off';
     end
-    cmd = sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, status);
-    eval(cmd);
+    eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, status));
 end
 
 
 % When any of the "start sequence" buttons is pressed, open the Plexon box
 % and do some basic error checking.  Set all channels to nil.
 function plexon_start_timer_callback(obj, event, hObject, handles)
+save_globals;
 
-global current_uAmps;
-global change;
 global stim_timer;
 global stim;
 global plexon_id;
-global patternfiles;
 
 try
     NullPattern.W1 = 0;
@@ -1386,9 +1342,11 @@ guidata(hObject, handles);
 
 function plexon_stop_timer_callback(obj, event, hObject, handles)
 enable_controls(handles);
+save_globals;
 
 function plexon_error_timer_callback(obj, event, hObject, handles)
 stop_everything(handles);
+save_globals;
 
 function stim_universal_callback(hObject, eventdata, handles)
 global monitor_electrode;
@@ -1399,8 +1357,7 @@ whichone = str2num(hObject.String);
 newval = get(hObject, 'Value');
 if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(stim) > 0
     for i = find(stim)
-        cmd = sprintf('set(handles.stim%d, ''Value'', 0);', i);
-        eval(cmd);
+        eval(sprintf('set(handles.stim%d, ''Value'', 0);', i));
         stim(i) = 0;
     end
 end
@@ -1413,12 +1370,13 @@ update_monitor_electrodes(hObject, handles);
 guidata(hObject, handles);
 
 
+
 function update_monitor_electrodes(hObject, handles)
 global monitor_electrode;
 global stim;
 
 set(handles.monitor_electrode_control, 'Value', monitor_electrode);
-if stim(monitor_electrode)  
+if stim(monitor_electrode)
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
 else
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.2 0.1]);
@@ -1494,8 +1452,7 @@ global valid stim;
 
 for i = find(valid)
     stim(i) = 1;
-    cmd = sprintf('set(handles.stim%d, ''Value'', 1);', i);
-    eval(cmd);
+    eval(sprintf('set(handles.stim%d, ''Value'', 1);', i));
 end
 update_monitor_electrodes(hObject, handles);
 guidata(hObject, handles);
@@ -1529,7 +1486,7 @@ global interpulse_s;
 global max_current;
 global max_halftime;
 global change;
-global NEGFIRST;
+global negfirst;
 global VOLTAGE_RANGE_LAST_STIM;
 global electrode_last_stim;
 global monitor_electrode;
@@ -1621,7 +1578,7 @@ try
             throw(ME);
         end
 
-        if NEGFIRST(channel)
+        if negfirst(channel)
             if arbitrary_pattern
                 err = PS_LoadArbPattern(plexon_id, channel, filenameNeg);
             else
@@ -1735,7 +1692,7 @@ try
 
     
      
-    %vvsi(end+1, :) = [ monitor_electrode current_uAmps NEGFIRST VOLTAGE_RANGE_LAST_STIM halftime_us];
+    %vvsi(end+1, :) = [ monitor_electrode current_uAmps negfirst VOLTAGE_RANGE_LAST_STIM halftime_us];
     if max(abs(VOLTAGE_RANGE_LAST_STIM)) < voltage_limit
         % We can safely stimulate with these parameters
         if monitor_electrode == electrode_last_stim
@@ -1835,8 +1792,7 @@ if ~val & sum(stim) > 1
     % Turn off stimulation to all electrodes
     stim = zeros(1, 16);
     for i = 1:16
-        cmd = sprintf('set(handles.stim%d, ''Value'', false);', i);
-        eval(cmd);
+        eval(sprintf('set(handles.stim%d, ''Value'', false);', i));
     end
     update_monitor_electrodes(hObject, handles)
 end
@@ -2140,19 +2096,19 @@ guidata(hObject, handles);
 
     
 function negfirst_toggle_all_Callback(hObject, eventdata, handles)
-global valid stim NEGFIRST;
+global valid stim negfirst;
 for i = find(stim)
     % Toggle all valid?  Or just toggle all active?
     h = eval(sprintf('handles.negfirst%d', i));
-    NEGFIRST(i) = ~get(h, 'Value');
-    set(h, 'Value', NEGFIRST(i));
+    negfirst(i) = ~get(h, 'Value');
+    set(h, 'Value', negfirst(i));
 end
 
 function negfirst_universal_callback(hObject, handles)
-global NEGFIRST;
+global negfirst;
 whichone = str2num(hObject.String);
 value = get(hObject, 'Value');
-NEGFIRST(whichone) = value;
+negfirst(whichone) = value;
 
 
 % I could set the callback in each of the GUI elements to
@@ -2293,6 +2249,7 @@ global show_device;
 foo = cellstr(get(hObject, 'String'));
 show_device = foo{get(hObject, 'Value')};
 
+
 function device_CreateFcn(hObject, eventdata, handles)
 global show_device;
 
@@ -2303,3 +2260,138 @@ show_device = foo{get(hObject, 'Value')};
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+
+function [] = save_globals;
+disp('saving...');
+[save_vars savename] = get_save_vars();
+
+for i = save_vars
+    eval(sprintf('global %s;', char(i)));
+    eval(sprintf('saved.%s = %s;', char(i), char(i)));
+end
+
+save(savename, 'saved');
+
+
+function restore_globals_Callback(hObject, eventdata, handles)
+[save_vars savename] = get_save_vars();
+
+load(savename);
+
+for i = save_vars
+    j = char(i);
+    %disp(sprintf('restoring %s', j));
+    eval(sprintf('global %s;', j));
+    eval(sprintf('%s = saved.%s;', j, j));
+end
+update_gui_values(hObject, handles);
+handles = configure_acquisition_device(hObject, handles);
+configure_plexon(hObject, handles);
+guidata(hObject, handles);
+
+
+function [save_vars savename] = get_save_vars();
+global scriptdir;
+save_vars = {'negfirst', 'audio_monitor_gain', 'bird', 'comments', ...
+    'current_uAmps', 'halftime_us', 'increase_step', 'interpulse_s', ...
+    'interspike_s', 'max_uAmps', 'min_uAmps', 'monitor_electrode', ...
+    'n_repetitions', 'negfirst', 'repetition_Hz', 'show_device', ...
+    'start_uAmps', 'stim', 'tdt_show', 'valid', 'voltage_limit', ...
+    'recording_channels'};
+% Which ones are in the list but don't have GUI elements (yet?)?
+unused = {'min_uAmps', ...
+     'show_device', ...
+     'voltage_limit'};
+savename = strcat(scriptdir, '/saved.mat');
+
+
+function update_gui_values(hObject, handles);
+global tdt scriptdir;
+
+MFileLineNr
+
+[save_vars savename] = get_save_vars(); % Just for the list!
+
+for i = save_vars
+    eval(sprintf('global %s;', char(i)));
+end
+
+
+%%%%% Initialise some elements %%%%%
+set(handles.select_all_valid, 'Enable', 'on');
+newvals = {};
+for i = 1:16
+    newvals{end+1} = sprintf('%d', i);
+end
+set(handles.monitor_electrode_control, 'String', newvals);
+set(handles.tdt_monitor_channel, 'String', newvals);
+datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
+
+
+%%%%% From save_vars %%%%%
+
+set(handles.datadir_box, 'String', datadir);
+set(handles.startcurrent, 'String', sprintf('%d', round(start_uAmps)));
+set(handles.currentcurrent, 'String', sigfig(current_uAmps, 2));
+set(handles.maxcurrent, 'String', sprintf('%d', round(max_uAmps)));
+set(handles.increasefactor, 'String', sprintf('%g', increase_step));
+set(handles.halftime, 'String', sprintf('%d', round(halftime_us)));
+set(handles.delaytime, 'String', sprintf('%g', interpulse_s*1e6));
+set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
+set(handles.n_repetitions_hz_box, 'String', sprintf('%d', repetition_Hz));
+set(handles.comments, 'String', comments);
+for i = 2:length(recording_channels)
+    eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
+end
+for i = 1:16
+    if valid(i)
+        foo = 'on';
+    else
+        foo = 'off';
+    end
+    eval(sprintf('set(handles.electrode%d, ''Value'', %d);', i, valid(i)));
+    eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, foo));
+    eval(sprintf('set(handles.stim%d, ''Value'', %d);', i, stim(i)));
+    eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, foo));
+    eval(sprintf('set(handles.negfirst%d, ''Value'', %d);', i, negfirst(i)));
+end
+set(handles.datadir_box, 'String', datadir);
+set(handles.birdname, 'String', bird, 'BackgroundColor', [0 0.8 0]);
+update_monitor_electrodes(hObject, handles);
+
+
+if ~isempty(tdt)
+    global tdt_show_buttons;
+    for i = 1:16
+        set(tdt_show_buttons{i}, 'Value', tdt_show(i));
+    end
+    %tdt.SetTagVal('mon_gain', round(audio_monitor_gain));
+    %set(handles.audio_monitor_gain, 'String', sprintf('%d', round(tdt.GetTagVal('mon_gain'))));
+end
+
+%%%%% From hardware %%%%%
+%if ~isempty(tdt)
+%    set(handles.audio_monitor_gain, 'String', sprintf('%d', round(tdt.GetTagVal('mon_gain'))));
+%end
+
+
+
+%%%%% From handles or hardcoded; currently not saved. %%%%%
+set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
+global recording_amplifier_gain;
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/recording_amplifier_gain);
+
+
+
+%%%%% From nothing! This resets things... %%%%%
+set(handles.response_dummy, 'Enable', 'off', 'Value', 0);
+
+
+if ~exist(datadir, 'dir')
+    mkdir(datadir);
+end
+
+
+
