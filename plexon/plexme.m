@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 26-Oct-2015 15:38:06
+% Last Modified by GUIDE v2.5 26-Oct-2015 19:40:54
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -102,6 +102,12 @@ global interspike_s;
 global voltage_limit;
 global save_exclude;
 global plexon_id plexon_open;
+global detrend_model detrend_range spike_roi spike_baseline;
+
+detrend_model = 'fourier8';
+detrend_range = [0.001 0.025];
+spike_roi = [0.003 0.008];
+spike_baseline = [0.012 Inf];
 
 %myPool = parpool();
 
@@ -201,7 +207,7 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 recording_channels = [ 0 0 0 0 0 0 1 ];
 tdt_show = zeros(1, 16);
-
+detrend_model = 'fourier8';
 
 tdt_show_default = [1:16];
 tdt_show(tdt_show_default) = ones(size(tdt_show_default));
@@ -269,15 +275,12 @@ if exist('demo', 'var')
 else
     set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
     handles = configure_acquisition_device(hObject, handles);
-    MFileLineNr
     configure_plexon(hObject, handles);
-    MFileLineNr
 end
 
 
 
 guidata(hObject, handles);
-disp('a11');
 update_gui_values(hObject, handles);
 
 
@@ -289,15 +292,12 @@ function [] = configure_plexon(hObject, handles)
 global plexon_id plexon_open;
 % Open the stimulator
 
-MFileLineNr
 
 if plexon_open
-    MFileLineNr
     PS_CloseAllStim;
 end
 
 
-MFileLineNr
 
 err = PS_InitAllStim;
 switch err
@@ -588,6 +588,7 @@ global tdt tdt_nsamples tdt_samplerate;
 global recording_time;
 global tdt_show;
 global axes2;
+global detrend_model detrend_range spike_roi spike_baseline;
 
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
@@ -717,10 +718,10 @@ data.stim_electrodes = stim;
 data.monitor_electrode = monitor_electrode;
 data.comments = comments;
 data.bird = bird;
-data.detrend_fittype = 'fourier8';
-data.detrend_toi = [0.002 0.025];
-data.response_toi = [0.003 0.008];
-data.response_baseline = [0.012 Inf];
+data.detrend_fittype = detrend_model;
+data.detrend_toi = detrend_range;
+data.response_toi = spike_roi;
+data.response_baseline = spike_baseline;
 
 if response_dummy_channel
     if sum(recording_channels) <= 1
@@ -779,11 +780,12 @@ if ~isempty(tdt)
     %    & data.tdt.times_aligned <= data.stim_duration);
     data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
     
-    [ data.tdt.response_detrended data.tdt.response_trend ] ...
+    [ data.tdt.response_detrended data.tdt.response_trend maxendtime] ...
         = detrend_response([], data.tdt, data, data.detrend_toi, data.detrend_fittype);
     data.tdt.spikes = look_for_spikes(data.tdt.response_detrended, data, ...
         data.tdt, data.response_toi, data.response_baseline, ...
         data.detrend_fittype);
+    
 
     %look_for_spikes(mean(tdata_aligned, 1), ...
     %    data.tdt.times_aligned, ...
@@ -791,7 +793,9 @@ if ~isempty(tdt)
     %    16);
 end
 
-plot_stimulation(data, guihandles(handlefigure));
+handles = guihandles(handlefigure);
+set(handles.baseline1, 'String', sprintf('%.2g', maxendtime*1000));
+plot_stimulation(data, handles);
 
 
 if saving_stimulations
@@ -2169,6 +2173,10 @@ negfirst_universal_callback(hObject, handles);
 
 % --- Executes on button press in debug.
 function debug_Callback(hObject, eventdata, handles)
+globalVars = who('global');
+for iVar = 1:numel(globalVars)
+  eval(sprintf('global %s', globalVars{iVar}));  % [EDITED]
+end
 a(0)
 
 
@@ -2299,18 +2307,19 @@ save_vars = {'negfirst', 'audio_monitor_gain', 'bird', 'comments', ...
     'interspike_s', 'max_uAmps', 'min_uAmps', 'monitor_electrode', ...
     'n_repetitions', 'negfirst', 'repetition_Hz', 'show_device', ...
     'start_uAmps', 'stim', 'tdt_show', 'valid', 'voltage_limit', ...
-    'recording_channels'};
+    'recording_channels', ...
+    'detrend_model', 'detrend_range', 'spike_roi', 'spike_baseline'};
 % Which ones are in the list but don't have GUI elements (yet?)?
 unused = {'min_uAmps', ...
      'show_device', ...
-     'voltage_limit'};
+     'voltage_limit'...
+     'detrend_model', 'detrend_range', 'spike_roi', 'spike_baseline'};
 savename = strcat(scriptdir, '/saved.mat');
 
 
 function update_gui_values(hObject, handles);
 global tdt scriptdir;
 
-MFileLineNr
 
 [save_vars savename] = get_save_vars(); % Just for the list!
 
@@ -2342,6 +2351,13 @@ set(handles.delaytime, 'String', sprintf('%g', interpulse_s*1e6));
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
 set(handles.n_repetitions_hz_box, 'String', sprintf('%d', repetition_Hz));
 set(handles.comments, 'String', comments);
+set(handles.detrend_model, 'String', detrend_model);
+set(handles.fit0, 'String', sprintf('%g', detrend_range(1)*1000));
+set(handles.fit1, 'String', sprintf('%g', detrend_range(2)*1000));
+set(handles.roi0, 'String', sprintf('%g', spike_roi(1)*1000));
+set(handles.roi1, 'String', sprintf('%g', spike_roi(2)*1000));
+set(handles.baseline0, 'String', sprintf('%g', spike_baseline(1)*1000));
+set(handles.baseline1, 'String', sprintf('%g', spike_baseline(2)*1000));
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
 end
@@ -2395,3 +2411,87 @@ end
 
 
 
+
+
+function fit0_Callback(hObject, eventdata, handles)
+global detrend_range;
+detrend_range(1) = str2double(get(hObject,'String'))/1000;
+
+function fit0_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function fit1_Callback(hObject, eventdata, handles)
+global detrend_range;
+detrend_range(2) = str2double(get(hObject,'String'))/1000;
+
+
+function fit1_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function roi0_Callback(hObject, eventdata, handles)
+global spike_roi;
+spike_roi(1) = str2double(get(hObject,'String'))/1000;
+
+
+% --- Executes during object creation, after setting all properties.
+function roi0_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function roi1_Callback(hObject, eventdata, handles)
+global spike_roi;
+spike_roi(2) = str2double(get(hObject,'String'))/1000;
+
+
+% --- Executes during object creation, after setting all properties.
+function roi1_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+function baseline0_Callback(hObject, eventdata, handles)
+global spike_baseline;
+spike_baseline(1) = str2double(get(hObject,'String'))/1000;
+
+
+% --- Executes during object creation, after setting all properties.
+function baseline0_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function baseline1_Callback(hObject, eventdata, handles)
+global spike_baseline;
+spike_baseline(2) = str2double(get(hObject,'String'))/1000;
+
+
+% --- Executes during object creation, after setting all properties.
+function baseline1_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+function detrend_model_Callback(hObject, eventdata, handles)
+global detrend_model;
+detrend_model = get(hObject, 'String');
+
+
+function detrend_model_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

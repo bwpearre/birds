@@ -1,4 +1,4 @@
-function [ detrended trend ] = detrend_response(response, d, data, toi, fittype);
+function [ detrended trend maxendtime ] = detrend_response(response, d, data, toi, fittype);
 
 persistent last_toi;
 if isempty(toi)

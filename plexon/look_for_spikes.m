@@ -1,4 +1,4 @@
-function [ spikes r ] = look_for_spikes(response, data, d, toi, baseline, detrend_fittype);
+function [ spikes r validregion] = look_for_spikes(response, data, d, toi, baseline, detrend_fittype);
 
 % if response is [], we can recompute it as needed for any given fittype
 % (detrend or whatnot).  If d.response_detrended doesn't exist or is the
