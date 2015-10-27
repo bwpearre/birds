@@ -1,4 +1,5 @@
-function [ spikes r validregion] = look_for_spikes(response, data, d, toi, baseline, detrend_fittype);
+function [ spikes r ] = look_for_spikes(response, data, d, detrend, handles);
+
 
 % if response is [], we can recompute it as needed for any given fittype
 % (detrend or whatnot).  If d.response_detrended doesn't exist or is the
@@ -16,24 +17,26 @@ minstarttime = 0.001 + times(d.stim_active_indices(end));
 maxendtime = -0.0005 + 1/data.repetition_Hz;
 maxendtime = min(maxendtime, d.times_aligned(nsamples));
 
-toi(1) = max(toi(1), minstarttime);
+roi = detrend.response_roi;
+baseline = detrend.response_baseline;
+roi(1) = max(roi(1), minstarttime);
 baseline(2) = min(baseline(2), maxendtime);
 
-roiregion = find(times > toi(1) & times < toi(2));
-baseregion = find(times > baseline(1) & times < baseline(2));
-validregion = find(times > toi(1) & times < baseline(2));
+roii = find(times > roi(1) & times < roi(2));
+baselinei = find(times > baseline(1) & times < baseline(2));
+validi = find(times > roi(1) & times < baseline(2));
 
 
 
 disp(sprintf('Look for spikes: toi [%g %g] ms, baseline [%g %g] ms', ...
-    toi(1)*1000, toi(2)*1000, baseline(1)*1000, baseline(2)*1000));
-if length(baseregion) < 10
+    roi(1)*1000, roi(2)*1000, baseline(1)*1000, baseline(2)*1000));
+if length(baselinei) < 10
     disp('   ...the baseline region is too short!');
     r = zeros(1, nchannels);
     spikes = zeros(1, nchannels);
     return;
 end    
-if length(roiregion) < 10
+if length(roii) < 10
     disp('   ...the ROI region is too short!');
     r = zeros(1, nchannels);
     spikes = zeros(1, nchannels);
@@ -63,18 +66,17 @@ end
 
 
 
-global axes1 axes2 axes3 axes4;
-if false
-    set(axes2, 'ColorOrder', distinguishable_colors(nchannels));
-    cla(axes2);
-    hold(axes2, 'on');
+if exist('handles') & false
+    set(handles.axes2, 'ColorOrder', distinguishable_colors(nchannels));
+    cla(handles.axes2);
+    hold(handles.axes2, 'on');
     for i = 1:nchannels
-        plot(axes2, ...
+        plot(handles.axes2, ...
             times, ...
             response(:, i));
     end
-    set(axes2, 'XLim', get(axes1, 'XLim'));
-    hold(axes2, 'off');
+    set(handles.axes2, 'XLim', get(handles.axes1, 'XLim'));
+    hold(handles.axes2, 'off');
 end
 
 
@@ -91,33 +93,30 @@ detector = 'xcorr';
 switch detector
     
     case 'xcorr'
-        if isfield(data, 'detrend_fittype') ...
-                & strcmp(detrend_fittype, data.detrend_fittype) ...
-                & isfield(d, 'response_detrended')
-            % & ROI?
-            disp('Using cached detrend with the same parameters.');
+        if isfield(data, 'detrend') & isequal(detrend, data.detrend)
             response = d.response_detrended;
         elseif ndims(response) == 3 & nstims > 1
             disp('Using response passed in as first argument.  I hope it''s detrended!');
         else
-            disp('Detrending...');
-            [ response trend ] = detrend_response(d.response, data.tdt, data, ...
-                [0.002 0.025], 'fourier8');
+            disp('look_for_spikes: Detrending...');
+            [ response trend ] = detrend_response(d.response, data.tdt, data, detrend);
         end
         
         xcorr_nsamples = round(0.001 * d.fs);
         parfor channel = 1:nchannels
-            foo(channel,:,:) = xcorr(response(:, roiregion, channel)', xcorr_nsamples, 'none');
-            cow(channel,:,:) = xcorr(response(:, baseregion, channel)', xcorr_nsamples, 'none');
+            foo(channel,:,:) = xcorr(response(:, roii, channel)', xcorr_nsamples, 'none');
+            cow(channel,:,:) = xcorr(response(:, baselinei, channel)', xcorr_nsamples, 'none');
         end
         
         a = 1:nstims+1:nstims^2;
         foo(:, :, a) = zeros(nchannels, size(foo,2), nstims);
         cow(:, :, a) = zeros(nchannels, size(cow,2), nstims);
-        imagesc(squeeze(foo(4,:,:)), 'Parent', axes2);
-        imagesc(squeeze(cow(4,:,:)), 'Parent', axes4);
-        colorbar('Peer', axes2);
-        colorbar('Peer', axes4);
+        if exist('handles')
+            imagesc(squeeze(foo(4,:,:)), 'Parent', handles.axes2);
+            imagesc(squeeze(cow(4,:,:)), 'Parent', handles.axes4);
+            colorbar('Peer', handles.axes2);
+            colorbar('Peer', handles.axes4);
+        end
         
         xcfoo = max(foo, [], 2);
         xccow = max(cow, [], 2);
@@ -127,30 +126,30 @@ switch detector
 
   
     case 'rms'
-        roirms1 = sqrt(mean(response(roiregion, :).^2, 1))
+        roirms1 = sqrt(mean(response(roii, :).^2, 1))
 
-        roirms = rms(response(roiregion, :), 1)
-        baserms = rms(response(baseregion, :), 1)
+        roirms = rms(response(roii, :), 1)
+        baserms = rms(response(baselinei, :), 1)
         r = (roirms ./ baserms);
         spikes =  r > 2;
         
     case 'std'
-        roirms = std(response(roiregion, :), 0, 1)
-        baserms = std(response(baseregion, :), 0, 1)
+        roirms = std(response(roii, :), 0, 1)
+        baserms = std(response(baselinei, :), 0, 1)
         r = (roirms ./ baserms)
         spikes =  r > 200
         
         
     case 'range'
-        roipkpk = max(response(roiregion,:)) - min(response(roiregion,:));
-        basepkpk = max(response(baseregion,:)) - min(response(baseregion,:));
+        roipkpk = max(response(roii,:)) - min(response(roii,:));
+        basepkpk = max(response(baselinei,:)) - min(response(baselinei,:));
         r = (roipkpk ./ basepkpk);
         spikes = r > 3;
         
         
     case 'threshold'
-        roipkpk = (max(response(roiregion,:)) - min(response(roiregion,:)));
-        basepkpk = (max(response(baseregion,:)) - min(response(baseregion,:)));
+        roipkpk = (max(response(roii,:)) - min(response(roii,:)));
+        basepkpk = (max(response(baselinei,:)) - min(response(baselinei,:)));
         r = (roipkpk - basepkpk);
         spikes = r > 0.00005;
         
@@ -162,9 +161,9 @@ switch detector
         y = find(c.data.tdt.times_aligned>0.0005 & c.data.tdt.times_aligned<0.002);
         b = x(y(end):-1:y(1));
 
-        foo = zeros(length(validregion), nchannels);
+        foo = zeros(length(validi), nchannels);
         for i = 1:nchannels
-            foo(:,i) = conv(response(validregion,i)', b, 'same');
+            foo(:,i) = conv(response(validi,i)', b, 'same');
         end
         
         [val pos] = max(foo, [], 1);
@@ -196,17 +195,17 @@ switch detector
         response_spec_baseline = squeeze(sum(sum(spectrograms(response_freq_indices, response_time_indices_baseline, :), 1), 2)) ...
             / (length(response_freq_indices) * length(response_time_indices_baseline));
 
-        if true
+        if exist('handles') & true
             imagesc([fftimes(1) fftimes(end)]*1000, ...
                 [ffreqs(1) ffreqs(end)]/1000, ...
                 squeeze(log(spectrograms(:,:,1))), ...
-                'Parent', axes2);
+                'Parent', handles.axes2);
             %imagesc(squeeze(log(spectrograms(:,:,4))), ...
-            %    'Parent', axes2);
-            axis(axes2, 'xy');
-            xlabel(axes2, 'Time (ms)');
-            ylabel(axes2, 'Frequency (kHz)');
-            colorbar('Peer', axes2);
+            %    'Parent', handles.axes2);
+            axis(handles.axes2, 'xy');
+            xlabel(handles.axes2, 'Time (ms)');
+            ylabel(handles.axes2, 'Frequency (kHz)');
+            colorbar('Peer', handles.axes2);
         end
         
         

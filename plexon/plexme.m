@@ -102,23 +102,25 @@ global interspike_s;
 global voltage_limit;
 global save_exclude;
 global plexon_id plexon_open;
-global detrend_model detrend_range spike_roi spike_baseline;
+global detrend_param;
 
-detrend_model = 'fourier8';
-detrend_range = [0.001 0.025];
-spike_roi = [0.003 0.008];
-spike_baseline = [0.012 Inf];
+%% Defaults cater to my experiment. Should add controls for multiple defaults...
+detrend_param.model = 'fourier8';
+detrend_param.range = [0.001 0.025];
+detrend_param.response_roi = [0.003 0.008];
+detrend_param.response_baseline = [0.012 Inf];
+
+detrend_param
 
 %myPool = parpool();
 
 currently_reconfiguring = true;
 
-max_uAmps = 1000; % tdt
-min_uAmps = 0.05; % arbitrary patterns
+max_uAmps = 1000;
+min_uAmps = 0.05;
 increase_step = 1.1;
-start_uAmps = 1; % Stimulating at this current will not yield enough
+start_uAmps = 1;
 current_uAmps = start_uAmps;
-                         % voltage to cause injury even with a bad electrode.
 interspike_s = 0.01; % Additional time between sets; not really used.
 voltage_limit = 5;
 plexon_id = 1;   % Assume (hardcode) 1 Plexon box
@@ -126,7 +128,7 @@ plexon_open = false;
 change = increase_step;
 
 
-n_repetitions = 3;
+n_repetitions = 8;
 repetition_Hz = 30;
 
 % NI control rubbish
@@ -207,7 +209,6 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 recording_channels = [ 0 0 0 0 0 0 1 ];
 tdt_show = zeros(1, 16);
-detrend_model = 'fourier8';
 
 tdt_show_default = [1:16];
 tdt_show(tdt_show_default) = ones(size(tdt_show_default));
@@ -588,7 +589,7 @@ global tdt tdt_nsamples tdt_samplerate;
 global recording_time;
 global tdt_show;
 global axes2;
-global detrend_model detrend_range spike_roi spike_baseline;
+global detrend_param;
 
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
@@ -704,7 +705,7 @@ if n_repetitions_actual_tdt == 0
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 17;
+data.version = 18;
 
 
 
@@ -718,10 +719,7 @@ data.stim_electrodes = stim;
 data.monitor_electrode = monitor_electrode;
 data.comments = comments;
 data.bird = bird;
-data.detrend_fittype = detrend_model;
-data.detrend_toi = detrend_range;
-data.response_toi = spike_roi;
-data.response_baseline = spike_baseline;
+data.detrend_param = detrend_param;
 
 if response_dummy_channel
     if sum(recording_channels) <= 1
@@ -780,11 +778,10 @@ if ~isempty(tdt)
     %    & data.tdt.times_aligned <= data.stim_duration);
     data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
     
-    [ data.tdt.response_detrended data.tdt.response_trend maxendtime] ...
-        = detrend_response([], data.tdt, data, data.detrend_toi, data.detrend_fittype);
-    data.tdt.spikes = look_for_spikes(data.tdt.response_detrended, data, ...
-        data.tdt, data.response_toi, data.response_baseline, ...
-        data.detrend_fittype);
+    [ data.tdt.response_detrended data.tdt.response_trend data.tdt.detrend_maxendtime] ...
+        = detrend_response([], data.tdt, data, data.detrend_param);
+    [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes(data.tdt.response_detrended, data, ...
+        data.tdt, data.detrend_param);
     
 
     %look_for_spikes(mean(tdata_aligned, 1), ...
@@ -794,7 +791,7 @@ if ~isempty(tdt)
 end
 
 handles = guihandles(handlefigure);
-set(handles.baseline1, 'String', sprintf('%.2g', maxendtime*1000));
+set(handles.baseline1, 'String', sprintf('%.2g', data.tdt.detrend_maxendtime*1000));
 plot_stimulation(data, handles);
 
 
@@ -2308,17 +2305,17 @@ save_vars = {'negfirst', 'audio_monitor_gain', 'bird', 'comments', ...
     'n_repetitions', 'negfirst', 'repetition_Hz', 'show_device', ...
     'start_uAmps', 'stim', 'tdt_show', 'valid', 'voltage_limit', ...
     'recording_channels', ...
-    'detrend_model', 'detrend_range', 'spike_roi', 'spike_baseline'};
+    'detrend_param'};
 % Which ones are in the list but don't have GUI elements (yet?)?
 unused = {'min_uAmps', ...
      'show_device', ...
-     'voltage_limit'...
-     'detrend_model', 'detrend_range', 'spike_roi', 'spike_baseline'};
+     'voltage_limit'};
 savename = strcat(scriptdir, '/saved.mat');
 
 
 function update_gui_values(hObject, handles);
 global tdt scriptdir;
+
 
 
 [save_vars savename] = get_save_vars(); % Just for the list!
@@ -2351,13 +2348,13 @@ set(handles.delaytime, 'String', sprintf('%g', interpulse_s*1e6));
 set(handles.n_repetitions_box, 'String', sprintf('%d', n_repetitions));
 set(handles.n_repetitions_hz_box, 'String', sprintf('%d', repetition_Hz));
 set(handles.comments, 'String', comments);
-set(handles.detrend_model, 'String', detrend_model);
-set(handles.fit0, 'String', sprintf('%g', detrend_range(1)*1000));
-set(handles.fit1, 'String', sprintf('%g', detrend_range(2)*1000));
-set(handles.roi0, 'String', sprintf('%g', spike_roi(1)*1000));
-set(handles.roi1, 'String', sprintf('%g', spike_roi(2)*1000));
-set(handles.baseline0, 'String', sprintf('%g', spike_baseline(1)*1000));
-set(handles.baseline1, 'String', sprintf('%g', spike_baseline(2)*1000));
+set(handles.detrend_model, 'String', detrend_param.model);
+set(handles.fit0, 'String', sprintf('%g', detrend_param.range(1)*1000));
+set(handles.fit1, 'String', sprintf('%g', detrend_param.range(2)*1000));
+set(handles.roi0, 'String', sprintf('%g', detrend_param.response_roi(1)*1000));
+set(handles.roi1, 'String', sprintf('%g', detrend_param.response_roi(2)*1000));
+set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1)*1000));
+set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
 end
@@ -2412,10 +2409,9 @@ end
 
 
 
-
 function fit0_Callback(hObject, eventdata, handles)
-global detrend_range;
-detrend_range(1) = str2double(get(hObject,'String'))/1000;
+global detrend_param;
+detrend_param.range(1) = str2double(get(hObject,'String'))/1000;
 
 function fit0_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -2425,8 +2421,8 @@ end
 
 
 function fit1_Callback(hObject, eventdata, handles)
-global detrend_range;
-detrend_range(2) = str2double(get(hObject,'String'))/1000;
+global detrend_param;
+detrend_param.range(2) = str2double(get(hObject,'String'))/1000;
 
 
 function fit1_CreateFcn(hObject, eventdata, handles)
@@ -2437,8 +2433,8 @@ end
 
 
 function roi0_Callback(hObject, eventdata, handles)
-global spike_roi;
-spike_roi(1) = str2double(get(hObject,'String'))/1000;
+global detrend_param;
+detrend_param.response_roi(1) = str2double(get(hObject,'String'))/1000;
 
 
 % --- Executes during object creation, after setting all properties.
@@ -2450,8 +2446,8 @@ end
 
 
 function roi1_Callback(hObject, eventdata, handles)
-global spike_roi;
-spike_roi(2) = str2double(get(hObject,'String'))/1000;
+global detrend_param;
+detrend_param.response_roi(2) = str2double(get(hObject,'String'))/1000;
 
 
 % --- Executes during object creation, after setting all properties.
@@ -2462,8 +2458,8 @@ end
 
 
 function baseline0_Callback(hObject, eventdata, handles)
-global spike_baseline;
-spike_baseline(1) = str2double(get(hObject,'String'))/1000;
+global detrend_param;
+detrend_param.response_baseline(1) = str2double(get(hObject,'String'))/1000;
 
 
 % --- Executes during object creation, after setting all properties.
@@ -2475,8 +2471,8 @@ end
 
 
 function baseline1_Callback(hObject, eventdata, handles)
-global spike_baseline;
-spike_baseline(2) = str2double(get(hObject,'String'))/1000;
+global detrend_param;
+detrend_param.response_baseline(2) = str2double(get(hObject,'String'))/1000;
 
 
 % --- Executes during object creation, after setting all properties.
@@ -2487,8 +2483,8 @@ end
 
 
 function detrend_model_Callback(hObject, eventdata, handles)
-global detrend_model;
-detrend_model = get(hObject, 'String');
+global detrend_param;
+detrend_param.model = get(hObject, 'String');
 
 
 function detrend_model_CreateFcn(hObject, eventdata, handles)

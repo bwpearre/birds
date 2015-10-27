@@ -6,16 +6,14 @@ if data.version < 12
 end
 
 global responses_detrended;
-persistent corr_range;
 global heur;
 global knowngood;
 global nnsetX;
 global net;
 global show_device;
 global axes1 axes2 axes3 axes4;
-if isempty(corr_range)
-        corr_range = [0 eps];
-end
+global detrend_param;
+
 if isempty(show_device)
     show_device = 'tdt';
 end
@@ -45,9 +43,6 @@ if isempty(axes4)
 end
 
 
-persistent responses_detrended_prev;
-
-
 if data.version <= 15
     data.ni.times_aligned = data.ni.times_aligned';
 end
@@ -60,6 +55,8 @@ end
 nchannels = size(d.response, 3);
 
 n_repetitions = d.n_repetitions;
+
+% For the graph
 aftertrigger = 25e-3;
 beforetrigger = -3e-3;
 
@@ -113,28 +110,13 @@ else
     response_plot = d.response;
 end
 
-
-if data.version >= 17
-    detrend_toi = data.detrend_toi;
-else
-    detrend_toi = [ 0.002 0.025 ];
-end
-if get(handles.response_show_detrended, 'Value') | get(handles.response_show_trend, 'Value')
-    [ detrended trend ] = detrend_response(response_avg, d, data, detrend_toi, 'fourier8');
-end
     
-response_toi = [0.003 0.008];
-response_baseline = [0.012 Inf];
 
-tic
-[ detrended_all trend_all ] = detrend_response(d.response, d, data, detrend_toi, 'fourier8');
-disp(sprintf('Detrending all took %s seconds.', sigfig(toc, 3)));
-tic
-[spikes r] = look_for_spikes(detrended_all, data, d, response_toi, response_baseline, 'fourier8');
-disp(sprintf('Finding spikes took %s seconds.', sigfig(toc, 3)));
+%[ detrended_all trend_all ] = detrend_response(d.response, d, data, detrend_param);
+%[spikes r] = look_for_spikes(detrended_all, data, d, detrend_param);
 
 linewidths = 0.3*ones(1, nchannels);
-linewidths(find(spikes)) = ones(1, length(linewidths(find(spikes)))) * 3;
+linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes)))) * 3;
 
 
 % get(handles.response_show_all, 'Value')
@@ -157,16 +139,16 @@ end
 %%% Plot axes1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-roii = find(d.times_aligned >= detrend_toi(1) & d.times_aligned < detrend_toi(2));
+roii = find(d.times_aligned >= detrend_param.range(1) & d.times_aligned < detrend_param.range(2));
 roitimes = d.times_aligned(roii);
 
-
+detrend_param
 
 cla(handles.axes1);
 hold(handles.axes1, 'on');
 legend_handles = [];
 legend_names = {};
-for channel = union(d.show, find(spikes))
+for channel = union(d.show, find(d.spikes))
     
     % Raw (or filtered) response
     foo = plot(handles.axes1, ...
@@ -176,18 +158,18 @@ for channel = union(d.show, find(spikes))
     
     % Detrended
     if get(handles.response_show_detrended, 'Value')
-        plot(handles.axes1, roitimes, detrended(1, roii, channel), ...
+        plot(handles.axes1, roitimes, d.response_detrended(1, roii, channel), ...
             'Color', colours(channel, :), 'LineStyle', '--');
     end
     if get(handles.response_show_trend, 'Value')
-        plot(handles.axes1, roitimes, trend(1, roii, channel), ...
+        plot(handles.axes1, roitimes, d.response_trend(1, roii, channel), ...
             'Color', colours(channel,:), 'LineStyle', ':');
         axes1legend{end+1} = 'Trend';
     end
 
     
     legend_handles(end+1) = foo(1);
-    legend_names(end+1) = strcat(d.names(channel), '..... ', sigfig(r(channel), 2));
+    legend_names(end+1) = strcat(d.names(channel), '..... ', sigfig(d.spikes_r(channel), 2));
 end
 hold(handles.axes1, 'off');
 %legend_names = d.names(d.show);
@@ -253,5 +235,3 @@ if false
     xlabel(handles.axes4, 'ms');
     ylabel(handles.axes4, 'V');
 end
-
-responses_detrended_prev = responses_detrended;
