@@ -107,7 +107,7 @@ global detrend_param;
 detrend_param.model = 'fourier8';
 detrend_param.range = [0.001 0.025];
 detrend_param.response_roi = [0.003 0.008];
-detrend_param.response_baseline = [0.012 Inf];
+detrend_param.response_baseline = [0.012 0.025];
 
 
 currently_reconfiguring = true;
@@ -475,13 +475,13 @@ currently_reconfiguring = false;
 function [] = tdt_init(hObject, handles)
 global recording_channels response_dummy_channel;
 global tdt;
-global homedir;
+global scriptdir;
 global tdt_samplerate recording_time tdt_nsamples;
 global tdt_show tdt_show_buttons;
 global stim_timer;
 global audio_monitor_gain;
 
-tdtprogram = strrep(strcat(homedir, '/v/birds/plexon/TDT_triggered_recorder_m.rcx'), ...
+tdtprogram = strrep(strcat(scriptdir, '/TDT_triggered_recorder_m.rcx'), ...
     '/', ...
     filesep);
 
@@ -1913,11 +1913,11 @@ saving_stimulations = get(hObject, 'Value');
 
 
 function birdname_Callback(hObject, eventdata, handles)
-global homedir datadir;
+global scriptdir datadir;
 global bird;
 
 bird = get(hObject,'String');
-datadir = strcat(homedir, '/v/birds/plexon/', bird, '-', datestr(now, 'yyyy-mm-dd'));
+datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 if ~exist(datadir, 'dir')
     mkdir(datadir);
 end

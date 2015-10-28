@@ -58,7 +58,7 @@ n_repetitions = d.n_repetitions;
 
 % For the graph
 beforetrigger = -1e-3;
-aftertrigger = 22e-3;
+aftertrigger = 6e-3;
 
 
 colours = distinguishable_colors(nchannels);
