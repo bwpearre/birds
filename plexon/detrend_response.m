@@ -49,8 +49,8 @@ end
 
 times = d.times_aligned;
 
-minstarttime = 0.001 + times(d.stim_active_indices(end));
-maxendtime = -0.0005 + 1/data.repetition_Hz;
+minstarttime = 0.0001 + times(d.stim_active_indices(end));
+maxendtime = -0.0003 + 1/data.repetition_Hz;
 maxendtime = min(maxendtime, d.times_aligned(nsamples));
 
 roi(1) = max(detrend.range(1), minstarttime);

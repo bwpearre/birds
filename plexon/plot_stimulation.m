@@ -57,8 +57,8 @@ nchannels = size(d.response, 3);
 n_repetitions = d.n_repetitions;
 
 % For the graph
-aftertrigger = 25e-3;
-beforetrigger = -3e-3;
+beforetrigger = -1e-3;
+aftertrigger = 22e-3;
 
 
 colours = distinguishable_colors(nchannels);
@@ -113,7 +113,7 @@ end
     
 
 %[ detrended_all trend_all ] = detrend_response(d.response, d, data, detrend_param);
-%[spikes r] = look_for_spikes(detrended_all, data, d, detrend_param);
+%[spikes r] = look_for_spikes_xcorr(d, data, detrend_param);
 
 linewidths = 0.3*ones(1, nchannels);
 linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes)))) * 3;
@@ -142,24 +142,31 @@ end
 roii = find(d.times_aligned >= detrend_param.range(1) & d.times_aligned < detrend_param.range(2));
 roitimes = d.times_aligned(roii);
 
-detrend_param
-
 cla(handles.axes1);
 hold(handles.axes1, 'on');
 legend_handles = [];
 legend_names = {};
+
+if sum(d.spikes)
+    set(handles.response_indicator, 'BackgroundColor', [ 1 1 0 ], 'String', 'Response!');
+else
+    set(handles.response_indicator, 'BackgroundColor', 0.94 * [1 1 1], 'String', 'Response?');
+end
+
 for channel = union(d.show, find(d.spikes))
     
     % Raw (or filtered) response
-    foo = plot(handles.axes1, ...
-        times_aligned(u), ...
-        reshape(response_plot(:,u,channel), [size(response_plot, 1) length(u)])', ...
-        'Color', colours(channel, :), 'LineWidth', linewidths(channel));
-    
+    if get(handles.response_show_all, 'Value') | get(handles.response_show_avg, 'Value')
+        foo = plot(handles.axes1, ...
+            times_aligned(u), ...
+            reshape(response_plot(:,u,channel), [size(response_plot, 1) length(u)])', ...
+            'Color', colours(channel, :), 'LineWidth', linewidths(channel));
+    end
     % Detrended
     if get(handles.response_show_detrended, 'Value')
-        plot(handles.axes1, roitimes, d.response_detrended(1, roii, channel), ...
-            'Color', colours(channel, :), 'LineStyle', '--');
+        foo = plot(handles.axes1, roitimes, ...
+            reshape(d.response_detrended(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
+            'Color', colours(channel, :), 'LineStyle', '--', 'LineWidth', linewidths(channel));
     end
     if get(handles.response_show_trend, 'Value')
         plot(handles.axes1, roitimes, d.response_trend(1, roii, channel), ...
@@ -167,21 +174,15 @@ for channel = union(d.show, find(d.spikes))
         axes1legend{end+1} = 'Trend';
     end
 
-    
-    legend_handles(end+1) = foo(1);
-    legend_names(end+1) = strcat(d.names(channel), '..... ', sigfig(d.spikes_r(channel), 2));
+    if exist('foo')
+        legend_handles(end+1) = foo(1);
+        legend_names(end+1) = strcat(d.names(channel), ' (', sigfig(d.spikes_r(channel), 2), ')');
+    end
 end
 hold(handles.axes1, 'off');
 %legend_names = d.names(d.show);
 legend(handles.axes1, legend_handles, legend_names);
-    
 
-% How about the derivative of the data?
-%deriv = diff(data.data_aligned(:,:,3), 1, 2);
-%[B A] = ellip(2, .5, 40, [300 3000]/(data.fs/2));
-%deriv2 = filtfilt(B, A, deriv);
-%plot(handles.axes2, times_aligned(u), deriv2(:, u));
-%set(handles.axes2, 'YLim', [-1 1] * max(max(abs(deriv2(:, w)))));
     
 title(handles.axes1, 'Response');
 xl = get(handles.axes1, 'XLim');

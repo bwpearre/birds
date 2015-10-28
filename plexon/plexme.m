@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 26-Oct-2015 19:40:54
+% Last Modified by GUIDE v2.5 28-Oct-2015 13:38:19
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -100,7 +100,6 @@ global show_device;
 global start_uAmps min_uAmps max_uAmps current_uAmps increase_step;
 global interspike_s;
 global voltage_limit;
-global save_exclude;
 global plexon_id plexon_open;
 global detrend_param;
 
@@ -110,9 +109,6 @@ detrend_param.range = [0.001 0.025];
 detrend_param.response_roi = [0.003 0.008];
 detrend_param.response_baseline = [0.012 Inf];
 
-detrend_param
-
-%myPool = parpool();
 
 currently_reconfiguring = true;
 
@@ -780,8 +776,7 @@ if ~isempty(tdt)
     
     [ data.tdt.response_detrended data.tdt.response_trend data.tdt.detrend_maxendtime] ...
         = detrend_response([], data.tdt, data, data.detrend_param);
-    [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes(data.tdt.response_detrended, data, ...
-        data.tdt, data.detrend_param);
+    [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
     
 
     %look_for_spikes(mean(tdata_aligned, 1), ...
@@ -2282,6 +2277,7 @@ save(savename, 'saved');
 
 function restore_globals_Callback(hObject, eventdata, handles)
 [save_vars savename] = get_save_vars();
+global datadir scriptdir;
 
 load(savename);
 
@@ -2291,6 +2287,7 @@ for i = save_vars
     eval(sprintf('global %s;', j));
     eval(sprintf('%s = saved.%s;', j, j));
 end
+datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 update_gui_values(hObject, handles);
 handles = configure_acquisition_device(hObject, handles);
 configure_plexon(hObject, handles);
@@ -2491,3 +2488,7 @@ function detrend_model_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+function response_indicator_Callback(hObject, eventdata, handles)
+

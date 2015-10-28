@@ -1,9 +1,9 @@
 function [ spikes r ] = look_for_spikes(response, data, d, detrend, handles);
 
+%% This is obsolete, for now. Change to look_for_spikes_xcorr(d,data,detrend_param,...)
+a(0)
 
-% if response is [], we can recompute it as needed for any given fittype
-% (detrend or whatnot).  If d.response_detrended doesn't exist or is the
-% wrong type, use response, WHICH HAD BETTER BE DETRENDED!
+% If response_detrended is [], 
 
 [ nstims nsamples nchannels ] = size(d.response);
 s = size(response);
