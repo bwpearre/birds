@@ -104,11 +104,17 @@ global plexon_id plexon_open;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-detrend_param.model = 'fourier8';
-detrend_param.range = [0.001 0.025];
-detrend_param.response_roi = [0.003 0.008];
-detrend_param.response_baseline = [0.012 0.025];
-
+if false
+    detrend_param.model = 'fourier8';
+    detrend_param.range = [0.001 0.025];
+    detrend_param.response_roi = [0.003 0.008];
+    detrend_param.response_baseline = [0.012 0.025];
+else
+    detrend_param.model = 'fourier8';
+    detrend_param.range = [0.0007 0.02];
+    detrend_param.response_roi = [0.0007 0.002];
+    detrend_param.response_baseline = [0.005 0.02];
+end
 
 currently_reconfiguring = true;
 
@@ -118,13 +124,13 @@ increase_step = 1.1;
 start_uAmps = 1;
 current_uAmps = start_uAmps;
 interspike_s = 0.01; % Additional time between sets; not really used.
-voltage_limit = 5;
+voltage_limit = 10;
 plexon_id = 1;   % Assume (hardcode) 1 Plexon box
 plexon_open = false;
 change = increase_step;
 
 
-n_repetitions = 8;
+n_repetitions = 10;
 repetition_Hz = 30;
 
 % NI control rubbish
@@ -1491,7 +1497,7 @@ global n_repetitions repetition_Hz;
 global stim_timer;
 global stim_trigger;
 global stim;
-global tdt tdt_nsamples;
+global tdt tdt_nsamples audio_monitor_gain;
 global currently_reconfiguring;
 global voltage_limit;
 global plexon_id;
@@ -1666,6 +1672,11 @@ try
                 
 
     
+    if ~isempty(tdt)
+        tdt.SetTagVal('mon_gain', round(audio_monitor_gain/5));
+    end
+    
+
     switch stim_trigger
         case 'master8'
             NIsession.startForeground;
@@ -1685,7 +1696,9 @@ try
     end
     
     
-
+    if ~isempty(tdt)
+        tdt.SetTagVal('mon_gain', audio_monitor_gain);
+    end
     
      
     %vvsi(end+1, :) = [ monitor_electrode current_uAmps negfirst VOLTAGE_RANGE_LAST_STIM halftime_us];
@@ -2291,6 +2304,7 @@ datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 update_gui_values(hObject, handles);
 handles = configure_acquisition_device(hObject, handles);
 configure_plexon(hObject, handles);
+voltage_limit = 10;
 guidata(hObject, handles);
 
 

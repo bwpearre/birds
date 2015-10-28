@@ -82,8 +82,8 @@ end
 
 xcorr_nsamples = round(0.001 * d.fs);
 parfor channel = 1:nchannels
-    foo(channel,:,:) = xcorr(response_detrended(:, roii, channel)', xcorr_nsamples, 'unbiased');
-    cow(channel,:,:) = xcorr(response_detrended(:, baselinei, channel)', xcorr_nsamples, 'unbiased');
+    foo(channel,:,:) = xcorr(response_detrended(:, roii, channel)', xcorr_nsamples, 'coeff');
+    cow(channel,:,:) = xcorr(response_detrended(:, baselinei, channel)', xcorr_nsamples, 'coeff');
 end
 
 %% Remove the autocorrelation of each to self
@@ -106,4 +106,4 @@ xccow = max(cow, [], 2);
 %spikes = r > 2;
 
 r = mean(xcfoo, 3)';
-spikes = r > 2e-10;
+spikes = r > 10;
