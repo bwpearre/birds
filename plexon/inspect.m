@@ -141,6 +141,8 @@ set(handles.thinking, 'BackgroundColor', [1 0 0]);
 drawnow;
 
 load(handles.files{file});
+data = update_data_struct(data, detrend_param, handles);
+
 
 
 if data.version >= 12
@@ -156,25 +158,10 @@ if data.version >= 12
 end
 
 
-% If there is no 'detrend_param' field, or if we've made changes through the GUI,
-% re-detrend.
+% If we've made changes through the GUI, re-detrend.
 if isempty(detrend_param)
-    if data.version >= 18
-        detrend_param = data.detrend_param;
-        if data.version < 19
-            detrend_param.response_detection_threshold = 2e-10;
-        end
-    else
-        detrend_param.model = 'fourier8';
-        detrend_param.range = [0.0014 0.025];
-        detrend_param.response_roi = [0.003 0.008];
-        detrend_param.response_baseline = [0.011 Inf];
-        detrend_param.response_detection_threshold = 2e-10;
-    end
+    detrend_param = data.detrend_param;
 end
-
-
-data = update_data_struct(data, detrend_param, handles);
 
 
 
