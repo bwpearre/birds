@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 28-Oct-2015 13:38:19
+% Last Modified by GUIDE v2.5 30-Oct-2015 16:53:13
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -104,16 +104,18 @@ global plexon_id plexon_open;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if false
+if false % For my X--HVC experiment
     detrend_param.model = 'fourier8';
-    detrend_param.range = [0.001 0.025];
+    detrend_param.range = [0.003 0.025];
     detrend_param.response_roi = [0.003 0.008];
     detrend_param.response_baseline = [0.012 0.025];
+    detrend_param.response_detection_threshold = 2e-10;
 else
-    detrend_param.model = 'fourier8';
+    detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
     detrend_param.range = [0.0007 0.02];
     detrend_param.response_roi = [0.0007 0.002];
     detrend_param.response_baseline = [0.005 0.02];
+    detrend_param.response_detection_threshold = 3e-9;
 end
 
 currently_reconfiguring = true;
@@ -707,14 +709,14 @@ if n_repetitions_actual_tdt == 0
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 18;
+data.version = 19;
 
 
 
 data.repetition_Hz = repetition_Hz;
 data.halftime_us = halftime_us;
 data.interpulse_s = interpulse_s;
-data.stim_duration = 2*halftime_us + interpulse_s;
+data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
 data.current = current_uAmps;
 data.negativefirst = negfirst;
 data.stim_electrodes = stim;
@@ -722,6 +724,8 @@ data.monitor_electrode = monitor_electrode;
 data.comments = comments;
 data.bird = bird;
 data.detrend_param = detrend_param;
+data.goodtimes = [ 0.0002 + data.stim_duration ...
+    -0.0003 + 1/repetition_Hz ];
 
 if response_dummy_channel
     if sum(recording_channels) <= 1
@@ -743,8 +747,8 @@ data.ni.stim_active = edata(:, trigger_index); % version 15
 d = diff(data.ni.stim_active);
 stim_start_i = find(d > 0.5, 1) + 1;
 stim_stop_i = find(d < -0.5, 1) + 1;
-data.ni.stim_active_indices = stim_start_i:stim_stop_i;
 
+data.ni.stim_active_indices = stim_start_i:stim_stop_i;
 data.ni.n_repetitions = n_repetitions_actual;
 data.ni.times_aligned = event.TimeStamps(1:size(edata,1))' - triggertime;
 data.ni.time = event.TimeStamps';
@@ -780,7 +784,7 @@ if ~isempty(tdt)
     %    & data.tdt.times_aligned <= data.stim_duration);
     data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
     
-    [ data.tdt.response_detrended data.tdt.response_trend data.tdt.detrend_maxendtime] ...
+    [ data.tdt.response_detrended data.tdt.response_trend ] ...
         = detrend_response([], data.tdt, data, data.detrend_param);
     [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
     
@@ -807,45 +811,6 @@ end
 
 
 
-
-
-function [data_aligned, triggertime, n_repetitions_actual] ...
-    = chop_and_align(data, triggers, timestamps, n_repetitions_sought, fs);
-
-%triggerthreshold = (max(abs(triggers)) + min(abs(triggers)))/2;
-triggerthreshold = 0.5;
-trigger_ind = triggers >= triggerthreshold;
-trigger_ind = find(diff(trigger_ind) == 1) + 1;
-triggertimes = timestamps(trigger_ind);
-
-if n_repetitions_sought ~= length(trigger_ind)
-    disp(sprintf('NOTE: looking for %d triggers, but found %d (threshold %d)', ...
-        n_repetitions_sought, length(trigger_ind), triggerthreshold));
-end
-
-
-n_repetitions_actual = length(trigger_ind);
-if n_repetitions_actual == 0
-    data_aligned = [];
-    triggertime = NaN;
-    d2 = 0;
-    return
-end
-
-
-for n = length(trigger_ind):-1:1
-    start_ind = trigger_ind(n) - trigger_ind(1) + 1;
-    data_aligned(n,:,:) = data(start_ind:start_ind+ceil(0.025*fs),:);
-end
-
-
-triggertime = timestamps(find(triggers >= triggerthreshold, 1));
-if isempty(triggertime)
-    disp('No trigger!');
-    data_aligned = [];
-    triggertime = NaN;
-    return;
-end
 
 
 
@@ -1670,7 +1635,6 @@ try
         throw(ME);
     end
                 
-    saflkgslfkg
     
     if ~isempty(tdt)
         tdt.SetTagVal('mon_gain', round(audio_monitor_gain/5));
@@ -2366,6 +2330,8 @@ set(handles.roi0, 'String', sprintf('%g', detrend_param.response_roi(1)*1000));
 set(handles.roi1, 'String', sprintf('%g', detrend_param.response_roi(2)*1000));
 set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1)*1000));
 set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
+set(handles.response_detection_threshold, 'String', sprintf('%g', ...
+    detrend_param.response_detection_threshold));
 for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
 end
@@ -2506,3 +2472,14 @@ end
 
 function response_indicator_Callback(hObject, eventdata, handles)
 
+
+
+
+function response_detection_threshold_Callback(hObject, eventdata, handles)
+global detrend_param;
+detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
+
+function response_detection_threshold_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

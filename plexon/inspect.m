@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 28-Oct-2015 13:37:52
+% Last Modified by GUIDE v2.5 30-Oct-2015 17:46:26
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -48,7 +48,7 @@ end
 function inspect_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
 
-scriptpath = fileparts(mfilename('fullpath'))
+scriptpath = fileparts(mfilename('fullpath'));
 path(sprintf('%s/../lib', scriptpath), path);
 
 
@@ -132,9 +132,13 @@ file = handles.sorted_index(get(hObject,'Value'));
 do_file(hObject, handles, file, true);
 
 
-function do_file(hObject, handles, file, doplot);
+function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
 global detrend_param;
+
+default_colour = get(handles.thinking, 'BackgroundColor');
+set(handles.thinking, 'BackgroundColor', [1 0 0]);
+drawnow;
 
 load(handles.files{file});
 
@@ -157,23 +161,39 @@ end
 if isempty(detrend_param)
     if data.version >= 18
         detrend_param = data.detrend_param;
+        if data.version < 19
+            detrend_param.response_detection_threshold = 2e-10;
+        end
     else
         detrend_param.model = 'fourier8';
         detrend_param.range = [0.0014 0.025];
         detrend_param.response_roi = [0.003 0.008];
         detrend_param.response_baseline = [0.011 Inf];
+        detrend_param.response_detection_threshold = 2e-10;
     end
 end
 
 
-if data.version <= 12
-    data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
-    stim_start_i = find(data.tdt.times_aligned >= 0, 1) - 1;
-    stim_stop_i = find(data.tdt.times_aligned >= data.stim_duration, 1) + 1;
-    data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
-    data.tdt.stim_active = 0 * data.tdt.times_aligned;
-    data.tdt.stim_active(data.tdt.stim_active_indices) = ones(size(data.tdt.stim_active_indices));
+data = update_data_struct(data, detrend_param, handles);
+
+
+
+if ~isequal(detrend_param, data.detrend_param)
+    data.detrend_param = detrend_param;
+    if isfield(data, 'tdt')
+        [ data.tdt.response_detrended data.tdt.response_trend ] ...
+            = detrend_response([], data.tdt, data, detrend_param);
+        [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
+            data, detrend_param, [], handles);
+    else
+        [ data.ni.response_detrended data.ni.response_trend ] ...
+            = detrend_response([], data.ni, data, detrend_param);
+        [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
+            data, detrend_param, [], handles);
+    end
 end
+
+
 
 set(handles.detrend_model, 'String', detrend_param.model);
 set(handles.fit0, 'String', sprintf('%g', detrend_param.range(1)*1000));
@@ -182,13 +202,10 @@ set(handles.roi0, 'String', sprintf('%g', detrend_param.response_roi(1)*1000));
 set(handles.roi1, 'String', sprintf('%g', detrend_param.response_roi(2)*1000));
 set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1)*1000));
 set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
+set(handles.response_detection_threshold, 'String', sprintf('%g', ...
+    detrend_param.response_detection_threshold));
 
-if data.version < 18 | ~isequal(detrend_param, data.detrend_param)
-    data.detrend_param = detrend_param;
-    [ data.tdt.response_detrended data.tdt.response_trend maxendtime] ...
-        = detrend_response([], data.tdt, data, detrend_param);
-    [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, data, detrend_param, []);
-end
+
 
 
 
@@ -226,8 +243,11 @@ plot_stimulation(data, handles);
 knowngood(file) = sum(data.stim_electrodes) == 16 && data.current >= 2;
 set(handles.response1, 'Value', knowngood(file));
 
+set(handles.thinking, 'BackgroundColor', 0.94 * [1 1 1]);
 
 guidata(hObject, handles);
+
+
 
 
 
@@ -495,3 +515,18 @@ end
 
 function response_indicator_Callback(hObject, eventdata, handles)
 
+
+
+
+function response_detection_threshold_Callback(hObject, eventdata, handles)
+global detrend_param;
+detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
+
+function response_detection_threshold_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in thinking.
+function thinking_Callback(hObject, eventdata, handles)

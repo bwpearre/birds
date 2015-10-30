@@ -1,9 +1,9 @@
 function plot_stimulation(data, handles);
 
-if data.version < 12
-    plot_stimulation_pre12(data, handles);
-    return;
-end
+%if data.version < 7
+%    plot_stimulation_pre12(data, handles);
+%    return;
+%end
 
 global responses_detrended;
 global heur;
@@ -57,15 +57,15 @@ nchannels = size(d.response, 3);
 n_repetitions = d.n_repetitions;
 
 % For the graph
-beforetrigger = -1e-3;
-aftertrigger = 6e-3;
+beforetrigger = -3e-3;
+aftertrigger = 20e-3;
 
 
 colours = distinguishable_colors(nchannels);
 
 % Generate stimulation alignment information
 if data.version <= 15 | ~isfield(d, 'stim_active_indices')
-    data.stim_duration = 2*data.halftime_us/1e6+data.interpulse_s;
+    data.stim_duration = 2*data.halftime_us/1e6 + data.interpulse_s;
     d.stim_active_indices = find(d.times_aligned >= 0 ...
         & d.times_aligned <= data.stim_duration);
     d.stim_active = 0 * d.response(1, :, 1);    
@@ -139,7 +139,9 @@ end
 %%% Plot axes1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-roii = find(d.times_aligned >= detrend_param.range(1) & d.times_aligned < detrend_param.range(2));
+roi = [ max(detrend_param.range(1), data.goodtimes(1)) ...
+    min(detrend_param.range(2), data.goodtimes(2))];
+roii = find(d.times_aligned >= roi(1) & d.times_aligned < roi(2));
 roitimes = d.times_aligned(roii);
 
 cla(handles.axes1);
@@ -147,8 +149,8 @@ hold(handles.axes1, 'on');
 legend_handles = [];
 legend_names = {};
 
-if sum(d.spikes)
-    set(handles.response_indicator, 'BackgroundColor', [ 1 1 0 ], 'String', 'Response!');
+if any(d.spikes)
+    set(handles.response_indicator, 'BackgroundColor', [ 1 0 1 ], 'String', 'Response!');
 else
     set(handles.response_indicator, 'BackgroundColor', 0.94 * [1 1 1], 'String', 'Response?');
 end
@@ -169,7 +171,8 @@ for channel = union(d.show, find(d.spikes))
             'Color', colours(channel, :), 'LineStyle', '--', 'LineWidth', linewidths(channel));
     end
     if get(handles.response_show_trend, 'Value')
-        plot(handles.axes1, roitimes, d.response_trend(1, roii, channel), ...
+        plot(handles.axes1, roitimes, ...
+            reshape(d.response_trend(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
             'Color', colours(channel,:), 'LineStyle', ':');
         axes1legend{end+1} = 'Trend';
     end
