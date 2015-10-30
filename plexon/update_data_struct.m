@@ -53,6 +53,10 @@ if data.version < 13
     end
 end
 
+if data.version < 14
+    data.current = floor(data.current);
+end
+
 
 if data.version < 18
     data.detrend_param = detrend_param;
@@ -61,9 +65,7 @@ end
 
 
 if data.version < 19
-    data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
-    data.goodtimes = [ 0.0002 + data.stim_duration ...
-         -0.0003 + 1/data.repetition_Hz ];
+    data.goodtimes = [ 0.0002 + data.stim_duration,      -0.0003 + 1/data.repetition_Hz ];
      
      if isfield(data, 'tdt')
         [ data.tdt.response_detrended data.tdt.response_trend ] ...

@@ -116,15 +116,11 @@ end
 %[spikes r] = look_for_spikes_xcorr(d, data, detrend_param);
 
 linewidths = 0.3*ones(1, nchannels);
-linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes)))) * 3;
+linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes)))) * 2;
 
 
 % get(handles.response_show_all, 'Value')
 
-% Let's try a filter, shall we?  This used to filter the raw data, but I
-% think I should not filter until after detrending, if at all.
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(2, 0.07, 'high');
 if get(handles.response_filter, 'Value')
     [B A] = ellip(2, .000001, 30, [100]/(d.fs/2), 'high');
     for i = 1:size(response_plot, 1)
