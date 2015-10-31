@@ -14,15 +14,6 @@ global show_device;
 global axes1 axes2 axes3 axes4;
 global detrend_param;
 
-if isempty(show_device)
-    show_device = 'tdt';
-end
-
-% Repair my stupidity -- version 12 has unscaled data.
-if data.version == 12
-    data.ni.stim(:,:,1) = data.ni.stim(:,:,1) * 4;
-    data.ni.stim(:,:,2) = data.ni.stim(:,:,2) * 400;
-end
 
 % If plot_stimulation is called from a timer or DAQ callback, the axes are
 % not present in the handles structure.  You may need a beer for this
@@ -43,17 +34,13 @@ if isempty(axes4)
 end
 
 
-if data.version <= 15
-    data.ni.times_aligned = data.ni.times_aligned';
-end
 
-if isfield(data, 'tdt')
-    eval(sprintf('d = data.%s;', lower(show_device)));
-else
-    d = data.ni;
-end
+
+index_selected = get(handles.show_device,'Value');
+list = get(handles.show_device,'String');
+eval(sprintf('d = data.%s;', char(list(index_selected))));
+
 nchannels = size(d.response, 3);
-
 n_repetitions = d.n_repetitions;
 
 % For the graph

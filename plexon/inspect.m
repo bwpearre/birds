@@ -144,6 +144,15 @@ load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
 
 
+devices = {};
+devices_perhaps = {'tdt', 'ni'};
+for i = devices_perhaps
+    if isfield(data, i)
+        devices(end+1) = i;
+    end
+end
+set(handles.show_device, 'String', devices);
+
 
 if data.version >= 12
     tdt_show_data = zeros(1, 16);

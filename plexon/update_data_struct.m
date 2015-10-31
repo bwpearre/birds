@@ -42,6 +42,17 @@ if data.version < 9
 end    
 
 
+
+
+if data.version == 12
+    % Repair my stupidity -- version 12 has unscaled data.
+    data.ni.stim(:,:,1) = data.ni.stim(:,:,1) * 4;
+    data.ni.stim(:,:,2) = data.ni.stim(:,:,2) * 400;
+end
+
+
+
+
 if data.version < 13
     data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
     if isfield(data, 'tdt')
@@ -53,30 +64,47 @@ if data.version < 13
     end
 end
 
+
+
 if data.version < 14
     data.current = floor(data.current);
 end
 
 
+
+if data.version < 16
+    data.ni.times_aligned = data.ni.times_aligned';
+end
+
+
+
 if data.version < 18
-    data.detrend_param = detrend_param;
+    % data.stim_duration appears earlier!  But it was mis-calculated.
+    data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
+
+    data.detrend_param.model = 'fourier8';
+    data.detrend_param.range = [0.003 0.025];
+    data.detrend_param.response_roi = [0.003 0.008];
+    data.detrend_param.response_baseline = [0.012 0.025];
 end
 
 
 
 if data.version < 19
+    data.detrend_param.response_detection_threshold = 2e-10;
+
     data.goodtimes = [ 0.0002 + data.stim_duration,      -0.0003 + 1/data.repetition_Hz ];
      
      if isfield(data, 'tdt')
         [ data.tdt.response_detrended data.tdt.response_trend ] ...
-            = detrend_response([], data.tdt, data, detrend_param);
+            = detrend_response([], data.tdt, data, []);
         [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
-            data, detrend_param, [], handles);
+            data, [], [], handles);
      elseif isfield(data, 'ni')
         [ data.ni.response_detrended data.ni.response_trend ] ...
-            = detrend_response([], data.ni, data, detrend_param);
+            = detrend_response([], data.ni, data, []);
         [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
-            data, detrend_param, [], handles);
+            data, [], [], handles);
      end
 end
 

@@ -1,20 +1,18 @@
-function [ detrended trend ] = detrend_response(response, d, data, detrend);
+function [ detrended trend ] = detrend_response(response, d, data, detrend_param);
 
 persistent last_detrend;
-if isempty(detrend)
-    if isfield(data, 'detrend')
-        detrend = data.detrend;
+if isempty(detrend_param)
+    if isfield(data, 'detrend_param')
+        detrend_param = data.detrend_param;
     else
-        detrend = last_detrend;
+        detrend_param = last_detrend;
     end
 end
 if isempty(response)
     response = d.response;
 end
 
-if data.version >= 18 ...
-        & isfield(data, 'detrend') ...
-        & isequal(detrend, data.detrend) ...
+if isequal(detrend_param, data.detrend_param) ...
         & isfield(d, 'response_detrended') ...
         & all(size(response) == size(d.response))
     disp('detrend_response: Using cached detrend with the same parameters.');
@@ -53,8 +51,8 @@ minstarttime = data.goodtimes(1);
 maxendtime = data.goodtimes(2);
 %maxendtime = min(maxendtime, d.times_aligned(nsamples));
 
-roi(1) = max(detrend.range(1), minstarttime);
-roi(2) = min(detrend.range(2), maxendtime);
+roi(1) = max(detrend_param.range(1), minstarttime);
+roi(2) = min(detrend_param.range(2), maxendtime);
 %disp(sprintf('detrend_response using range [%g %g] ms', roi(1)*1000, roi(2)*1000));
 
 roii = find(d.times_aligned >= roi(1) & d.times_aligned < roi(2));
@@ -74,11 +72,11 @@ parfor stim = 1:nstims_m
     for channel = 1:nchannels
         f = fit(reshape(roitimes', [length(roii) 1]), ...
             reshape(response(stim, roii, channel), [length(roii) 1]), ...
-            detrend.model, 'Normalize', 'on');
+            detrend_param.model, 'Normalize', 'on');
         trend(stim, :, channel) = f(d.times_aligned);
         detrended(stim, :, channel) = squeeze(response(stim, :, channel)) - trend(stim, :, channel);
         %detrendotron{channel} = f;
     end
 end
 
-last_detrend = detrend;
+last_detrend = detrend_param;
