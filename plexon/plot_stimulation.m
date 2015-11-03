@@ -36,8 +36,8 @@ end
 
 
 
-index_selected = get(handles.show_device,'Value');
-list = get(handles.show_device,'String');
+index_selected = get(handles.show_device, 'Value');
+list = get(handles.show_device, 'String');
 eval(sprintf('d = data.%s;', char(list(index_selected))));
 
 nchannels = size(d.response, 3);
