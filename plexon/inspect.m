@@ -175,7 +175,7 @@ end
 
 
 if ~isequal(detrend_param, data.detrend_param)
-    data.detrend_param = detrend_param;
+    %data.detrend_param = detrend_param;
     if isfield(data, 'tdt')
         [ data.tdt.response_detrended data.tdt.response_trend ] ...
             = detrend_response([], data.tdt, data, detrend_param);

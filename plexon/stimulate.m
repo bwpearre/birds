@@ -158,11 +158,11 @@ try
 
     switch stim_trigger
         case 'master8'
-            hardware.NIsession.startForeground;
+            [ event.Data event.TimeStamps ] = hardware.NIsession.startForeground;
         case 'arduino'
-            hardware.NIsession.startForeground;
+            [ event.Data event.TimeStamps ] = hardware.NIsession.startForeground;
         case 'ni'
-            hardware.NIsession.startForeground;
+            [ event.Data event.TimeStamps ] = hardware.NIsession.startForeground;
         case 'plexon'
             hardware.NIsession.startBackground;
             err = PS_StartStimAllChannels(hardware.plexon_id);
@@ -179,7 +179,8 @@ try
         hardware.tdt.SetTagVal('mon_gain', audio_monitor_gain);
     end
     
-    
+    [ data response_detected voltage ] = reorganise_data(hardware.NIsession, event, handles);
+
 
 catch ME
     
@@ -188,8 +189,5 @@ catch ME
     report = getReport(ME)
     rethrow(ME);
 end
-
-% guidata(hObject, handles) does no good here!!!
-  guidata(hObject, handles);
 
 

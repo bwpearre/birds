@@ -1,6 +1,6 @@
 function [ detrended trend ] = detrend_response(response, d, data, detrend_param);
 
-persistent last_detrend;
+%persistent last_detrend;
 if isempty(detrend_param)
     if isfield(data, 'detrend_param')
         detrend_param = data.detrend_param;
@@ -70,7 +70,7 @@ detrended = zeros(nstims_m, nsamples, nchannels);
 
 parfor stim = 1:nstims_m
     for channel = 1:nchannels
-        f = fit(reshape(roitimes', [length(roii) 1]), ...
+        f = fit(reshape(roitimes, [length(roii) 1]), ...
             reshape(response(stim, roii, channel), [length(roii) 1]), ...
             detrend_param.model, 'Normalize', 'on');
         trend(stim, :, channel) = f(d.times_aligned);

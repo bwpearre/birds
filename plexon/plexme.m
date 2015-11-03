@@ -561,13 +561,17 @@ guidata(hObject, handles);
 
 
 
-
-
-
-
-
-%% Called by NI data acquisition background process at end of acquisition
+%% Called by NI data acquisition process at end of acquisition
 function NIsession_callback(obj, event, handlefigure)
+disp('Called the callback...');
+reorganise_data(obj, event, handlefigure);
+
+
+
+
+
+function [ data response_detected voltage] = reorganise_data(obj, event, handlefigure)
+
 global NIsession;
 global current_uAmps;
 global negfirst;
@@ -631,6 +635,7 @@ if ~isempty(tdt)
     end
     curidx2 = tdt.GetTagVal('DDataIdx');
     
+    % These should be the same. But TDT!
     goodlength = min(curidx/16, curidx2);
 
     tdata = tdt.ReadTagVEX('Data', 0, curidx, 'F32', 'F64', 16)';
@@ -711,8 +716,6 @@ end
 %%%%% Increment the version whenever adding anything to the savefile format!
 data.version = 19;
 
-
-
 data.repetition_Hz = repetition_Hz;
 data.halftime_us = halftime_us;
 data.interpulse_s = interpulse_s;
@@ -775,7 +778,7 @@ if ~isempty(tdt)
         data.tdt.labels{i} = sprintf('tdt %d', i);
         data.tdt.names{i} = sprintf('tdt %d', i);
     end
-    data.tdt.stim_active = tddata; % This is ALL OF IT
+    data.tdt.stim_active = tddata;
     
     d = diff(data.tdt.stim_active);
     stim_start_i = find(d > 0.5, 1) + 1;
@@ -803,6 +806,8 @@ if saving_stimulations
     save(fullfile(datadir, datafile_name), 'data');
 end
 
+response_detected = any(data.tdt.spikes);
+voltage = max(abs(VOLTAGE_RANGE_LAST_STIM));
 
 
 
@@ -2363,7 +2368,7 @@ end
 
 
 %%%%% From handles or hardcoded; currently not saved. %%%%%
-set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
+%set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
 global recording_amplifier_gain;
 set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/recording_amplifier_gain);
 
@@ -2477,3 +2482,7 @@ function response_detection_threshold_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+
+function [] = find_minimum_current()
