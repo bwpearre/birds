@@ -86,8 +86,8 @@ global bird;
 global channels;
 global response_dummy_channel;
 global n_repetitions repetition_Hz;
-global valid; % which electrodes seem valid for stimulation?
-global stim; % which electrodes will we stimulate?
+global valid_electrodes; % which electrodes seem valid for stimulation?
+global active_electrodes;
 global impedances_x;
 global stim_timer;
 global recording_channels;
@@ -138,9 +138,9 @@ repetition_Hz = 30;
 % NI control rubbish
 NIsession = [];
 
-valid = ones(1, 16);
-%valid(12:15) = ones(1,4);
-stim = zeros(1, 16);
+valid_electrodes = ones(1, 16);
+%valid_electrodes(12:15) = ones(1,4);
+active_electrodes = zeros(1, 16);
 
 
 if ispc
@@ -588,7 +588,7 @@ global trigger_index;
 global recording_channels recording_channel_indices;
 global response_dummy_channel;
 global comments;
-global stim;
+global active_electrodes;
 global n_repetitions repetition_Hz;
 global intan_gain;
 global VOLTAGE_RANGE_LAST_STIM;
@@ -722,7 +722,7 @@ data.interpulse_s = interpulse_s;
 data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
 data.current = current_uAmps;
 data.negativefirst = negfirst;
-data.stim_electrodes = stim;
+data.stim_electrodes = active_electrodes;
 data.monitor_electrode = monitor_electrode;
 data.comments = comments;
 data.bird = bird;
@@ -983,19 +983,19 @@ end
 
 
 function electrode_universal_callback(hObject, eventdata, handles)
-global valid stim;
+global valid_electrodes active_electrodes;
 
 whichone = str2num(hObject.String);
 value = get(hObject, 'Value');
-valid(whichone) = value;
-if valid(whichone)
+valid_electrodes(whichone) = value;
+if valid_electrodes(whichone)
         newstate = 'on';
 else
         newstate = 'off';
 end
 % "stimulate this electrode" should be enabled or disabled according to the
 % state of this button
-stim(whichone) = 0;
+active_electrodes(whichone) = 0;
 eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate));
 eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate));
 % "stimulate this electrode" should default to 0...
@@ -1229,7 +1229,7 @@ end
 
 
 function enable_controls(handles);
-global valid;
+global valid_electrodes;
 
 for i = 1:length(handles.disable_on_run)
         set(handles.disable_on_run{i}, 'Enable', 'on');
@@ -1239,7 +1239,7 @@ end
 % interface on start-stim, and re-enabled on stop-stim, so now let's update
 % them as a special case.
 for i = 1:16
-    if valid(i)
+    if valid_electrodes(i)
             status = 'on';
     else
             status = 'off';
@@ -1254,7 +1254,7 @@ function plexon_start_timer_callback(obj, event, hObject, handles)
 save_globals;
 
 global stim_timer;
-global stim;
+global active_electrodes;
 global plexon_id;
 
 try
@@ -1265,7 +1265,7 @@ try
     NullPattern.Delay = 0;
 
     % Set up all non-stimulating channels to nil
-    for channel = find(~stim)
+    for channel = find(~active_electrodes)
         % We will be using the rectangular pattern
         err = PS_SetPatternType(plexon_id, channel, 0);
         if err
@@ -1316,20 +1316,20 @@ save_globals;
 
 function stim_universal_callback(hObject, eventdata, handles)
 global monitor_electrode;
-global stim;
+global active_electrodes;
 global current_uAmps;
 
 whichone = str2num(hObject.String);
 newval = get(hObject, 'Value');
-if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(stim) > 0
-    for i = find(stim)
+if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(active_electrodes) > 0
+    for i = find(active_electrodes)
         eval(sprintf('set(handles.stim%d, ''Value'', 0);', i));
-        stim(i) = 0;
+        active_electrodes(i) = 0;
     end
 end
-stim(whichone) = newval;
+active_electrodes(whichone) = newval;
 
-if stim(whichone)
+if active_electrodes(whichone)
     monitor_electrode = whichone;
 end
 update_monitor_electrodes(hObject, handles);
@@ -1339,10 +1339,10 @@ guidata(hObject, handles);
 
 function update_monitor_electrodes(hObject, handles)
 global monitor_electrode;
-global stim;
+global active_electrodes;
 
 set(handles.monitor_electrode_control, 'Value', monitor_electrode);
-if stim(monitor_electrode)
+if active_electrodes(monitor_electrode)
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
 else
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.2 0.1]);
@@ -1414,10 +1414,10 @@ stim_universal_callback(hObject, eventdata, handles)
 
 % --- Executes on button press in stim_all.
 function select_all_valid_Callback(hObject, eventdata, handles)
-global valid stim;
+global valid_electrodes active_electrodes;
 
-for i = find(valid)
-    stim(i) = 1;
+for i = find(valid_electrodes)
+    active_electrodes(i) = 1;
     eval(sprintf('set(handles.stim%d, ''Value'', 1);', i));
 end
 update_monitor_electrodes(hObject, handles);
@@ -1443,28 +1443,44 @@ fclose(fid);
 
 
 function plexon_control_timer_callback_2(obj, event, hObject, handles)
-global NIsession;
-global increase_type;
-global current_uAmps max_uAmps min_uAmps;
-global default_halftime_us;
-global halftime_us;
+global monitor_electrode;
+global tdt
+global plexon_id;
+global NIsession
+global current_uAmps
+global halftime_us
 global interpulse_s;
+
+hardware.NIsession = NIsession;
+hardware.tdt = tdt;
+hardware.plexon_id = plexon_id;
+hardware.plexon_monitor_channel = monitor_electrode;
+
+stim.current_uA = current_uAmps;
+stim.halftime_us = halftime_us;
+stim.interpulse_s = interpulse_s;
+stim.active_channels = active_electrodes;
+
+global increase_type;
+ max_uAmps min_uAmps;
+global default_halftime_us;
+;
+
 global max_current;
 global max_halftime;
 global change;
 global negfirst;
 global VOLTAGE_RANGE_LAST_STIM;
 global electrode_last_stim;
-global monitor_electrode;
 global axes1;
 global n_repetitions repetition_Hz;
 global stim_timer;
 global stim_trigger;
-global stim;
-global tdt tdt_nsamples audio_monitor_gain;
+global active_electrodes;
+ tdt_nsamples audio_monitor_gain;
 global currently_reconfiguring;
 global voltage_limit;
-global plexon_id;
+
 global scriptdir;
 
 if currently_reconfiguring
@@ -1523,227 +1539,77 @@ if false
 end
 
 
-try
-
-    % If no monitor_electrode is selected, just fail silently and let the user figure
-    % out what's going on :)
-    if monitor_electrode > 0 & monitor_electrode <= 16
-        err = PS_SetMonitorChannel(plexon_id, monitor_electrode);
-        if err
-            ME = MException('plexon:monitor', 'Could not set monitor channel to %d', monitor_electrode);
-            throw(ME);
-        end
-    end
-    
-    %disp('stimulating on channels:');
-    %stim
-    for channel = find(stim)
-        err = PS_SetPatternType(plexon_id, channel, arbitrary_pattern);
-        if err
-            ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
-            throw(ME);
-        end
-
-        if negfirst(channel)
-            if arbitrary_pattern
-                err = PS_LoadArbPattern(plexon_id, channel, filenameNeg);
-            else
-                err = PS_SetRectParam2(plexon_id, channel, StimParamNeg);
-            end
-        else
-            if arbitrary_pattern
-                err = PS_LoadArbPattern(plexon_id, channel, filenamePos);
-            else
-                err = PS_SetRectParam2(plexon_id, channel, StimParamPos);
-            end
-        end
-        if err
-            ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d, because %d (%s)', ...
-                channel, err, PS_GetExtendedErrorInfo(err));
-            throw(ME);
-        end
- 
-        if arbitrary_pattern
-            global axes3 axes3yy;
-            np = PS_GetNPointsArbPattern(plexon_id, channel);
-            pat = [];
-            pat(1,:) = PS_GetArbPatternPointsX(plexon_id, channel);
-            pat(2,:) = PS_GetArbPatternPointsY(plexon_id, channel);
-            pat = [[0; 0] pat [pat(1,end); 0]]; % Add zeros for cleaner look
-            if ~isempty(axes3yy) & isvalid(axes3yy)
-                hold(axes3yy(2), 'on');
-                plot(axes3yy(2), pat(1,:)/1e6, pat(2,:)/1e3, 'g');
-                hold(axes3yy(2), 'off');
-                legend(axes3, 'Voltage', 'Current', 'Next i');
-            end
-        end
-        
-        switch stim_trigger
-            case 'master8'
-                err = PS_SetRepetitions(plexon_id, channel, 1);
-            case 'arduino'
-                err = PS_SetRepetitions(plexon_id, channel, 1);
-            case 'ni'
-                err = PS_SetRepetitions(plexon_id, channel, n_repetitions);
-            case 'plexon'
-                err = PS_SetRepetitions(plexon_id, channel, n_repetitions);
-            otherwise
-                disp(sprintf('You must set a valid value for stim_trigger! ''%s'' is invalid.', stim_trigger));
-        end       
-        if err
-            ME = MException('plexon:pattern', 'Could not set repetitions on channel %d', channel);
-            throw(ME);
-        end
-        
-        err = PS_SetRate(plexon_id, channel, repetition_Hz);
-        if err
-            ME = MException('plexon:pattern', 'Could not set repetition rate on channel %d', channel);
-            throw(ME);
-        end
-
-        [v, err] = PS_IsWaveformBalanced(plexon_id, channel);
-        if err
-            ME = MException('plexon:stimulate', 'Bad parameter for stimbox %d channel %d', plexon_id, channel);
-            throw(ME);
-        end
-        if ~v
-            ME = MException('plexon:stimulate:unbalanced', 'Waveform is not balanced for stimbox %d channel %d', plexon_id, channel);
-            throw(ME);
-        end
-
-
-        err = PS_LoadChannel(plexon_id, channel);
-        if err
-            ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', plexon_id, channel, PS_GetExtendedErrorInfo(err));    
-            throw(ME);
-        end
-    end
-    
-    switch stim_trigger
-        case 'master8'
-            err = PS_SetTriggerMode(plexon_id, 1);
-        case 'arduino'
-            err = PS_SetTriggerMode(plexon_id, 1);
-        case 'ni'
-            err = PS_SetTriggerMode(plexon_id, 1);
-        case 'plexon'
-            err = PS_SetTriggerMode(plexon_id, 0);
-    end
-    if err
-        ME = MException('plexon:trigger', 'Could not set trigger mode on channel %d', channel);
-        throw(ME);
-    end
-                
-    
-    if ~isempty(tdt)
-        tdt.SetTagVal('mon_gain', round(audio_monitor_gain/5));
-    end
-    
-
-    switch stim_trigger
-        case 'master8'
-            NIsession.startForeground;
-        case 'arduino'
-            NIsession.startForeground;
-        case 'ni'
-            NIsession.startForeground;
-        case 'plexon'
-            NIsession.startBackground;
-            err = PS_StartStimAllChannels(plexon_id);
-            if err
-                NIsession.stop;
-                ME = MException('plexon:stimulate', 'Could not stimulate on box %d: %s', plexon_id, PS_GetExtendedErrorInfo(err));
-                throw(ME);
-            end
-            NIsession.wait;  % This callback needs to be interruptible!  Apparently it is??
-    end
-    
-    
-    if ~isempty(tdt)
-        tdt.SetTagVal('mon_gain', audio_monitor_gain);
-    end
     
      
-    %vvsi(end+1, :) = [ monitor_electrode current_uAmps negfirst VOLTAGE_RANGE_LAST_STIM halftime_us];
-    if max(abs(VOLTAGE_RANGE_LAST_STIM)) < voltage_limit
-        % We can safely stimulate with these parameters
-        if monitor_electrode == electrode_last_stim
-            max_current(monitor_electrode) = current_uAmps;
-            max_halftime(monitor_electrode) = halftime_us;
-        end
-    else
-        % Dangerous voltage detected!
-        %ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d (Intan %d) is pulling [ %.2g %.2g ] volts.  Stopping.', ...
-            %channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), VOLTAGE_RANGE_LAST_STIM(2));    
-        %throw(ME);
-        
-        disp(sprintf('WARNING: Channel %d (Intan %d) is pulling [ %.3g %.3g ] V @ %.3g uA, %dx2 us.', ...
-            channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), ...
-            VOLTAGE_RANGE_LAST_STIM(2), current_uAmps, round(halftime_us)));
-        if timer_running(stim_timer)
-            stop(stim_timer);
-        end
-
-        % Find the maximum current at which voltage was < voltage_limit
-        %handles.voltage_at_max_current(1:2, monitor_electrode) = VOLTAGE_RANGE_LAST_STIM;
-        prevstring = eval(sprintf('get(handles.maxi%d, ''String'');', monitor_electrode));
-        switch increase_type
-            case 'current'
-                if isnan(max_current(monitor_electrode))
-                    maxistring = '***';
-                else
-                    maxistring = sprintf('%.3g uA', max_current(monitor_electrode));
-                end
-                eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
-                    monitor_electrode, prevstring, maxistring));
-            case 'time'
-                if isnan(max_halftime(monitor_electrode))
-                    maxistring = '***';
-                else
-                    maxistring = sprintf('%.3g us', max_halftime(monitor_electrode));
-                end
-                eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
-                    monitor_electrode, prevstring, maxistring));
-        end
-                
+%vvsi(end+1, :) = [ monitor_electrode current_uAmps negfirst VOLTAGE_RANGE_LAST_STIM halftime_us];
+if max(abs(VOLTAGE_RANGE_LAST_STIM)) < voltage_limit
+    % We can safely stimulate with these parameters
+    if monitor_electrode == electrode_last_stim
+        max_current(monitor_electrode) = current_uAmps;
+        max_halftime(monitor_electrode) = halftime_us;
+    end
+else
+    % Dangerous voltage detected!
+    %ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d (Intan %d) is pulling [ %.2g %.2g ] volts.  Stopping.', ...
+    %channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), VOLTAGE_RANGE_LAST_STIM(2));
+    %throw(ME);
+    
+    disp(sprintf('WARNING: Channel %d (Intan %d) is pulling [ %.3g %.3g ] V @ %.3g uA, %dx2 us.', ...
+        channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), ...
+        VOLTAGE_RANGE_LAST_STIM(2), current_uAmps, round(halftime_us)));
+    if timer_running(stim_timer)
+        stop(stim_timer);
     end
     
-    
-    % We've maxed out... what to do?  We can inform the user that
-    % we could perhaps go higher...
+    % Find the maximum current at which voltage was < voltage_limit
+    %handles.voltage_at_max_current(1:2, monitor_electrode) = VOLTAGE_RANGE_LAST_STIM;
     prevstring = eval(sprintf('get(handles.maxi%d, ''String'');', monitor_electrode));
-
     switch increase_type
         case 'current'
-            if current_uAmps == max_uAmps
-                if timer_running(stim_timer)
-                    stop(stim_timer);
-                end
-                maxistring = sprintf('> %.3g uA', max_current(monitor_electrode));
-                eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s +)'');', ...
-                    monitor_electrode, prevstring, maxistring));
+            if isnan(max_current(monitor_electrode))
+                maxistring = '***';
+            else
+                maxistring = sprintf('%.3g uA', max_current(monitor_electrode));
             end
+            eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
+                monitor_electrode, prevstring, maxistring));
         case 'time'
-            if halftime_us == default_halftime_us
-                if timer_running(stim_timer)
-                    stop(stim_timer);
-                end
-                maxistring = sprintf('> %.3g us', max_halftime(monitor_electrode));
-                eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
-                    monitor_electrode, prevstring, maxistring));
+            if isnan(max_halftime(monitor_electrode))
+                maxistring = '***';
+            else
+                maxistring = sprintf('%.3g us', max_halftime(monitor_electrode));
             end
+            eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
+                monitor_electrode, prevstring, maxistring));
     end
-
-catch ME
     
-    errordlg(ME.message, 'Error', 'modal');
-    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
-    report = getReport(ME)
-    rethrow(ME);
 end
 
-% guidata(hObject, handles) does no good here!!!
-  guidata(hObject, handles);
+    
+% We've maxed out... what to do?  We can inform the user that
+% we could perhaps go higher...
+prevstring = eval(sprintf('get(handles.maxi%d, ''String'');', monitor_electrode));
+
+switch increase_type
+    case 'current'
+        if current_uAmps == max_uAmps
+            if timer_running(stim_timer)
+                stop(stim_timer);
+            end
+            maxistring = sprintf('> %.3g uA', max_current(monitor_electrode));
+            eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s +)'');', ...
+                monitor_electrode, prevstring, maxistring));
+        end
+    case 'time'
+        if halftime_us == default_halftime_us
+            if timer_running(stim_timer)
+                stop(stim_timer);
+            end
+            maxistring = sprintf('> %.3g us', max_halftime(monitor_electrode));
+            eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
+                monitor_electrode, prevstring, maxistring));
+        end
+end
 
 
   
@@ -1752,7 +1618,7 @@ end
   
 % --- Executes on button press in stimMultiple.
 function stimMultiple_Callback(hObject, eventdata, handles)
-global valid stim;
+global valid_electrodes active_electrodes;
 
 val = get(hObject, 'Value');
 if val
@@ -1760,9 +1626,9 @@ if val
 else
     set(handles.select_all_valid, 'Enable', 'off');
 end
-if ~val & sum(stim) > 1
+if ~val & sum(active_electrodes) > 1
     % Turn off stimulation to all electrodes
-    stim = zeros(1, 16);
+    active_electrodes = zeros(1, 16);
     for i = 1:16
         eval(sprintf('set(handles.stim%d, ''Value'', false);', i));
     end
@@ -1780,7 +1646,7 @@ global halftime_us;
 global change;
 global monitor_electrode;
 global max_halftime;
-global valid stim;
+global valid_electrodes active_electrodes;
 global stim_timer;
 global start_uAmps current_uAmps;
 global interspike_s;
@@ -1793,11 +1659,11 @@ interspike_s = 0.01;
 
 increase_type = 'time';
 
-for i = find(valid)
+for i = find(valid_electrodes)
     halftime_us = 50;
     current_uAmps = start_uAmps;
-    stim = zeros(1, 16);
-    stim(i) = 1;
+    active_electrodes = zeros(1, 16);
+    active_electrodes(i) = 1;
     monitor_electrode = i;
     set(handles.monitor_electrode_control, 'Value', i);
         
@@ -1809,11 +1675,11 @@ end
 
 halftime_us = default_halftime_us;
 
-valid = valid & ~(~isnan(max_halftime) & max_halftime < default_halftime_us)
+valid_electrodes = valid_electrodes & ~(~isnan(max_halftime) & max_halftime < default_halftime_us)
 
-for i = find(~valid)
+for i = find(~valid_electrodes)
     eval(sprintf('set(handles.electrode%d, ''Value'', 0, ''Enable'', ''off'');', i));
-    stim(i) = 0;
+    active_electrodes(i) = 0;
     eval(sprintf('set(handles.stim%d, ''Value'', 0, ''Enable'', ''off'');', i));
 end
 
@@ -1822,16 +1688,16 @@ end
 
 % --- Executes on button press in mark_all.
 function mark_all_Callback(hObject, eventdata, handles)
-global valid;
+global valid_electrodes;
 
-valid = ones(1, 16);
+valid_electrodes = ones(1, 16);
 update_valid_checkboxes(hObject, handles);
 
 
 function update_valid_checkboxes(hObject, handles)
-global valid;
+global valid_electrodes;
 
-for whichone = find(valid)
+for whichone = find(valid_electrodes)
     newstate = 'on';
     % "stimulate this electrode" should be enabled or disabled according to the
     % state of this button
@@ -1854,7 +1720,7 @@ global current_uAmps start_uAmps;
 global change;
 global monitor_electrode;
 global max_current;
-global valid stim;
+global valid_electrodes active_electrodes;
 global stim_timer;
 global interspike_s;
 
@@ -1866,10 +1732,10 @@ interspike_s = 0.01;
 
 increase_type = 'current';
 
-for i = find(valid)
+for i = find(valid_electrodes)
     current_uAmps = start_uAmps;
-    stim = zeros(1, 16);
-    stim(i) = 1;
+    active_electrodes = zeros(1, 16);
+    active_electrodes(i) = 1;
     monitor_electrode = i;
     set(handles.monitor_electrode_control, 'Value', i);
         
@@ -2015,7 +1881,7 @@ function load_impedances_Callback(hObject, eventdata, handles)
 global intandir;
 global datadir;
 global impedances_x;
-global valid;
+global valid_electrodes;
 
 
 if ~exist(datadir, 'dir')
@@ -2056,7 +1922,7 @@ if exist(strcat(datadir, '\impedances-x.csv'), 'file')
         impedances_x(pchan) = b{5}(i);
         h = eval(sprintf('handles.maxi%d', pchan));
         set(h, 'String', sprintf('%g', impedances_x(pchan)/1e6));
-        valid(pchan) = impedances_x(pchan)/1e6 >= 0.1 & impedances_x(pchan)/1e6 <= 5;
+        valid_electrodes(pchan) = impedances_x(pchan)/1e6 >= 0.1 & impedances_x(pchan)/1e6 <= 5;
     end
     
     update_valid_checkboxes(handles.mark_all, handles);
@@ -2068,8 +1934,8 @@ guidata(hObject, handles);
 
     
 function negfirst_toggle_all_Callback(hObject, eventdata, handles)
-global valid stim negfirst;
-for i = find(stim)
+global valid_electrodes active_electrodes negfirst;
+for i = find(active_electrodes)
     % Toggle all valid?  Or just toggle all active?
     h = eval(sprintf('handles.negfirst%d', i));
     negfirst(i) = ~get(h, 'Value');
@@ -2277,7 +2143,7 @@ save_vars = {'negfirst', 'audio_monitor_gain', 'bird', 'comments', ...
     'current_uAmps', 'halftime_us', 'increase_step', 'interpulse_s', ...
     'interspike_s', 'max_uAmps', 'min_uAmps', 'monitor_electrode', ...
     'n_repetitions', 'negfirst', 'repetition_Hz', 'show_device', ...
-    'start_uAmps', 'stim', 'tdt_show', 'valid', 'voltage_limit', ...
+    'start_uAmps', 'active_electrodes', 'tdt_show', 'valid_electrodes', 'voltage_limit', ...
     'recording_channels', ...
     'detrend_param'};
 % Which ones are in the list but don't have GUI elements (yet?)?
@@ -2335,14 +2201,14 @@ for i = 2:length(recording_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, recording_channels(i)));
 end
 for i = 1:16
-    if valid(i)
+    if valid_electrodes(i)
         foo = 'on';
     else
         foo = 'off';
     end
-    eval(sprintf('set(handles.electrode%d, ''Value'', %d);', i, valid(i)));
+    eval(sprintf('set(handles.electrode%d, ''Value'', %d);', i, valid_electrodes(i)));
     eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, foo));
-    eval(sprintf('set(handles.stim%d, ''Value'', %d);', i, stim(i)));
+    eval(sprintf('set(handles.stim%d, ''Value'', %d);', i, active_electrodes(i)));
     eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, foo));
     eval(sprintf('set(handles.negfirst%d, ''Value'', %d);', i, negfirst(i)));
 end
