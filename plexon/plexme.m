@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 03-Nov-2015 12:40:23
+% Last Modified by GUIDE v2.5 04-Nov-2015 15:43:31
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -89,7 +89,7 @@ global currently_reconfiguring;
 global tdt_show_buttons;
 global show_device;
 global start_uAmps min_uAmps max_uAmps increase_step;
-global interspike_s;
+global inter_trial_s;
 global voltage_limit;
 global detrend_param;
 
@@ -115,8 +115,8 @@ min_uAmps = 0.05;
 increase_step = 1.1;
 start_uAmps = 1;
 stim.current_uA = start_uAmps;
-interspike_s = 0.01; % Additional time between sets; not really used.
-voltage_limit = 10;
+inter_trial_s = 0.01; % Additional time between sets; not really used.
+voltage_limit = 8;
 hardware.plexon.id = 1;   % Assume (hardcode) 1 Plexon box
 hardware.plexon.open = false;
 change = increase_step;
@@ -237,7 +237,7 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
 
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
-        handles.n_repetitions_box ...
+        handles.n_repetitions_box, handles.voltage_limit, ...
         handles.n_repetitions_hz_box};
 for i = 1:16
     eval(sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i));
@@ -285,11 +285,12 @@ global currently_reconfiguring;
 
 currently_reconfiguring = true;
 
-handles = init_NI(hObject, handles);
-tdt_init(hObject, handles);
-configure_plexon(hObject, handles);
+init_ni(hObject, handles);
+init_tdt(hObject, handles);
+init_plexon(hObject, handles);
 
 guidata(hObject, handles);
+
 currently_reconfiguring = false;
 
 
@@ -297,7 +298,7 @@ currently_reconfiguring = false;
 
 
 
-function [] = configure_plexon(hObject, handles)
+function [] = init_plexon(hObject, handles)
 global hardware;
 % Open the stimulator
 
@@ -378,12 +379,19 @@ guidata(hObject, handles);
 
 
 
-function [handles] = init_NI(hObject, handles);
+function [handles] = init_ni(hObject, handles);
 
 global hardware stim;
 global ni_response_channels;
 global ni_trigger_index;
 global recording_time;
+
+
+if ~isempty(hardware.ni.session)
+    stop(hardware.ni.session);
+    release(hardware.ni.session);
+    hardware.ni.session = [];
+end
 
 
 %% Open NI acquisition board
@@ -457,15 +465,15 @@ if false
     queueOutputData(hardware.ni.session, outputSignal);
 end
 
-if isfield(handles, 'NI') & isfield(handles.NI, 'listeners')
-    delete(handles.NI.listeners{1});
+if isfield(hardware, 'ni') & isfield(hardware.ni, 'listeners')
+    delete(hardware.ni.listeners{1});
 end
 
 % When stim_trigger is 'plexon', stimulate() uses startBackground, so need
 % the callback. Otherwise, we use startForeground().
 switch hardware.stim_trigger 
     case 'plexon'
-        handles.NI.listeners{1} = addlistener(hardware.ni.session, 'DataAvailable',...
+        hardware.ni.listeners{1} = addlistener(hardware.ni.session, 'DataAvailable',...
             @(obj,event) NIsession_callback(obj, event, handles));
         hardware.ni.session.NotifyWhenDataAvailableExceeds = nscans;
     case { 'master8', 'arduino', 'ni' }
@@ -482,7 +490,7 @@ prepare(hardware.ni.session);
 
 
 
-function [] = tdt_init(hObject, handles)
+function [] = init_tdt(hObject, handles)
 global hardware stim;
 global scriptdir;
 global recording_time;
@@ -701,11 +709,6 @@ global default_halftime_s;
 default_halftime_s = str2double(get(hObject,'String')) / 1e6;
 stim.halftime_s = default_halftime_s;
 
-if ~isempty(hardware.ni.session)
-    stop(hardware.ni.session);
-    release(hardware.ni.session);
-    hardware.ni.session = [];
-end
 handles = configure_acquisition_devices(hObject, handles);
 guidata(hObject, handles);
 
@@ -722,11 +725,6 @@ global hardware stim;
 
 stim.interpulse_s = str2double(get(hObject,'String'))/1e6;
 
-if ~isempty(hardware.ni.session)
-    stop(hardware.ni.session);
-    release(hardware.ni.session);
-    hardware.ni.session = [];
-end
 handles = configure_acquisition_devices(hObject, handles);
 guidata(hObject, handles);
 
@@ -829,17 +827,17 @@ set(hObject, 'BackgroundColor', [0.8 0.2 0.1]);
 
 
 function start_timer(hObject, handles)
-global stim_timer interspike_s;
+global stim_timer inter_trial_s;
 
 % Clean up any stopped timers
 if isempty(stim_timer)
-    stim_timer = timer('Period', interspike_s, 'ExecutionMode', 'fixedSpacing');
+    stim_timer = timer('Period', inter_trial_s, 'ExecutionMode', 'fixedSpacing');
     stim_timer.TimerFcn = {@plexon_control_timer_callback_2, hObject, handles};
     stim_timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
     stim_timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
     stim_timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
 else
-    stim_timer.Period = interspike_s;
+    stim_timer.Period = inter_trial_s;
 end
 
 if ~timer_running(stim_timer)
@@ -902,6 +900,8 @@ guidata(hObject, handles);
 
 % --- Executes on button press in stop.
 function stop_Callback(hObject, eventdata, handles)
+global stop_button_pressed;
+stop_button_pressed = true; % Used to abort long sequences...
 stop_everything(handles);
 
 
@@ -1096,6 +1096,10 @@ if stim.active_electrodes(stim.plexon_monitor_electrode)
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
 else
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.2 0.1]);
+end
+
+if isempty(hObject)
+    hObject = handles.restore_globals;
 end
 guidata(hObject, handles);
 
@@ -1305,13 +1309,13 @@ global max_halftime;
 global valid_electrodes;
 global stim_timer;
 global start_uAmps;
-global interspike_s;
+global inter_trial_s;
 
 change = 1.1;
 
 max_halftime = NaN * ones(1, 16);
 
-interspike_s = 0.01;
+inter_trial_s = 0.01;
 
 increase_type = 'time';
 
@@ -1377,13 +1381,13 @@ global change;
 global max_current;
 global valid_electrodes;
 global stim_timer;
-global interspike_s;
+global inter_trial_s;
 
 max_current = NaN * ones(1, 16);
 
 change = increase_step;
 stim.halftime_s = default_halftime_s;
-interspike_s = 0.01;
+inter_trial_s = 0.01;
 
 increase_type = 'current';
 
@@ -1489,11 +1493,6 @@ global hardware stim;
 
 stim.n_repetitions = str2double(get(hObject, 'String'));
 
-if ~isempty(hardware.ni.session)
-    stop(hardware.ni.session);
-    release(hardware.ni.session);
-    hardware.ni.session = [];
-end
 handles = configure_acquisition_devices(hObject, handles);
 guidata(hObject, handles);
 
@@ -1511,11 +1510,6 @@ stim.repetition_Hz = str2double(get(hObject, 'String'));
 if stim.repetition_Hz > 40
     stim.repetition_Hz = 40;
     set(hObject, 'String', sigfig(stim.repetition_Hz, 2));
-end
-if ~isempty(hardware.ni.session)
-    stop(hardware.ni.session);
-    release(hardware.ni.session);
-    hardware.ni.session = [];
 end
 handles = configure_acquisition_devices(hObject, handles);
 guidata(hObject, handles);
@@ -1776,8 +1770,6 @@ end
 datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 update_gui_values(hObject, handles);
 handles = configure_acquisition_devices(hObject, handles);
-configure_plexon(hObject, handles);
-voltage_limit = 10;
 guidata(hObject, handles);
 
 
@@ -1788,12 +1780,11 @@ save_vars = {'stim', 'bird', 'comments', ...
     'max_uAmps', 'min_uAmps', ...
     'show_device', ...
     'start_uAmps', 'tdt_show', 'valid_electrodes', 'voltage_limit', ...
-    'ni_response_channels', ...
+    'ni_response_channels', 'voltage_limit', ...
     'detrend_param'};
 % Which ones are in the list but don't have GUI elements (yet?)?
 unused = {'min_uAmps', ...
-     'show_device', ...
-     'voltage_limit'};
+     'show_device'};
 savename = strcat(scriptdir, '/saved.mat');
 
 
@@ -1841,6 +1832,7 @@ set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1
 set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
 set(handles.response_detection_threshold, 'String', sprintf('%g', ...
     detrend_param.response_detection_threshold));
+set(handles.voltage_limit, 'String', sigfig(voltage_limit, 2));
 for i = 2:length(ni_response_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, ni_response_channels(i)));
 end
@@ -1998,5 +1990,121 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
+function [min_current min_current_voltage] = find_threshold(handles)
+global stim hardware detrend_param;
+global start_uAmps min_uAmps max_uAmps voltage_limit;
+global stop_button_pressed;
 
-function [] = find_minimum_current()
+response = false;
+factor = 2;
+final_factor = 1.1;
+min_current = Inf;
+min_current_voltage = NaN;
+stim.current_uA = start_uAmps;
+
+while factor > final_factor
+    update_gui_values([], handles);
+    
+    if stop_button_pressed
+        disp('stop button pressed');
+        return;
+    end
+
+    
+    [ data, response, voltage ] = stimulate(stim, hardware, detrend_param, handles);
+    
+    switch response
+        case 1
+            factor = factor ^ 0.8
+            min_current = min(min_current, stim.current_uA);
+            min_current_voltage = voltage; 
+            stim.current_uA = stim.current_uA / factor;
+            if stim.current_uA < min_uAmps
+                stim.current_uA = min_uAmps; % unused--just safety
+                factor = 1.1 + eps % try min, then terminate
+            end
+        case 0
+            stim.current_uA = stim.current_uA * factor;
+            if stim.current_uA > max_uAmps
+                stim.current_uA = max_uAmps; % unused--just safety
+                factor = 1; % terminate
+            end
+            if voltage >= voltage_limit
+                factor = 1; % No response, but overvoltage: terminate
+            end
+
+        case NaN
+            % That quirk in which the first stim sometimes doesn't register
+            % on the NI will result in NaN. Do nothing; await the next
+            % stim.
+    end
+end
+
+
+function full_threshold_scan_Callback(hObject, eventdata, handles)
+global stim hardware detrend_param;
+global stop_button_pressed;
+global current_thresholds;
+global datadir;
+
+DEBUG = true;
+
+disable_controls(hObject, handles);
+stop_button_pressed = false;
+
+frequencies = 30 * 1.1.^[-3:3];
+durations = 100e-6 * 2.^[-2:0.5:2];
+polarities = 0:(2^sum(stim.active_electrodes)-1);
+
+if DEBUG
+    frequencies = 30;
+    durations = 100e-6;
+    polarities = 0;
+end
+
+if ~exist(datadir, 'dir')
+    mkdir(datadir);
+end
+
+
+current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
+disp(sprintf('Doing %d threshold searches. This might take around %s minutes.', ...
+    prod(size(current_thresholds)), sigfig(prod(size(current_thresholds))/2, 2)));
+
+for frequency = 1:length(frequencies)
+    for dur = 1:length(durations)
+        for polarity = 1:length(polarities)
+            if stop_button_pressed
+                stop_button_pressed = false;
+                return;
+            end
+            stim.current_uA = 1;
+            stim.repetition_Hz = frequencies(frequency);
+            stim.halftime_s = durations(dur);
+            electrode_bit = 0;
+            stim.negativefirst = zeros(size(stim.active_electrodes));
+            for electrode = find(stim.active_electrodes)
+                electrode_bit = electrode_bit + 1;
+                stim.negativefirst(electrode) = bitget(polarities(polarity), electrode_bit);
+            end
+            
+            current_thresholds(frequency, dur, polarity) = find_threshold(handles);
+        end
+        
+        save(fullfile(datadir, 'current_thresholds'), 'current_thresholds');
+    end
+end
+
+enable_controls(handles);
+
+
+
+function voltage_limit_Callback(hObject, eventdata, handles)
+global voltage_limit;
+voltage_limit = str2double(get(hObject,'String'));
+
+
+function voltage_limit_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
