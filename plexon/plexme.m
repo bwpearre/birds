@@ -74,7 +74,7 @@ global vvsi;
 global comments;
 global electrode_last_stim;
 global max_current;
-global default_halftime_us;
+global default_halftime_s;
 global increase_type;
 global max_halftime;
 global saving_stimulations;
@@ -124,6 +124,7 @@ change = increase_step;
 
 stim.n_repetitions = 10;
 stim.repetition_Hz = 30;
+
 
 % NI control rubbish
 hardware.ni.session = [];
@@ -185,11 +186,10 @@ end
 bird = 'noname';
 datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 increase_type = 'current'; % or 'time'
-default_halftime_us = 100;
-stim.halftime_us = default_halftime_us;
-%stim.interpulse_s = 100e-6;
-stim.interpulse_s = 0.0001;
-stim.plexon_monitor_electrode = 2;
+default_halftime_s = 100e-6;
+stim.halftime_s = default_halftime_s;
+stim.interpulse_s = 0;
+stim.plexon_monitor_electrode = 1;
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
@@ -460,9 +460,20 @@ end
 if isfield(handles, 'NI') & isfield(handles.NI, 'listeners')
     delete(handles.NI.listeners{1});
 end
-handles.NI.listeners{1} = addlistener(hardware.ni.session, 'DataAvailable',...
-	@(obj,event) NIsession_callback(obj, event, handles.figure1));
-hardware.ni.session.NotifyWhenDataAvailableExceeds = nscans;
+
+% When stim_trigger is 'plexon', stimulate() uses startBackground, so need
+% the callback. Otherwise, we use startForeground().
+switch hardware.stim_trigger 
+    case 'plexon'
+        handles.NI.listeners{1} = addlistener(hardware.ni.session, 'DataAvailable',...
+            @(obj,event) NIsession_callback(obj, event, handles));
+        hardware.ni.session.NotifyWhenDataAvailableExceeds = nscans;
+    case { 'master8', 'arduino', 'ni' }
+        % No listener/callback
+    otherwise
+        disp(sprintf('You must set a valid value for hardware.stim_trigger. ''%s'' is invalid.', hardware.stim_trigger));
+end
+
 prepare(hardware.ni.session);
 
 
@@ -684,11 +695,11 @@ end
 
 
 function halftime_Callback(hObject, eventdata, handles)
-global default_halftime_us;
 global hardware stim;
+global default_halftime_s;
 
-default_halftime_us = str2double(get(hObject,'String'));
-stim.halftime_us = default_halftime_us;
+default_halftime_s = str2double(get(hObject,'String')) / 1e6;
+stim.halftime_s = default_halftime_s;
 
 if ~isempty(hardware.ni.session)
     stop(hardware.ni.session);
@@ -709,7 +720,7 @@ end
 function delaytime_Callback(hObject, eventdata, handles)
 global hardware stim;
 
-stim.interpulse_s = str2double(get(hObject,'String')) / 1e6;
+stim.interpulse_s = str2double(get(hObject,'String'))/1e6;
 
 if ~isempty(hardware.ni.session)
     stop(hardware.ni.session);
@@ -849,9 +860,9 @@ function increase_Callback(hObject, eventdata, handles)
 global change;
 global increase_type increase_step;
 global stim;
-global default_halftime_us;
+global default_halftime_s;
 
-stim.halftime_us = default_halftime_us;
+stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = increase_step;
 start_timer(hObject, handles);
@@ -864,9 +875,9 @@ function decrease_Callback(hObject, eventdata, handles)
 global change increase_step;
 global increase_type;
 global stim;
-global default_halftime_us;
+global default_halftime_s;
 
-stim.halftime_us = default_halftime_us;
+stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = 1/increase_step;
 start_timer(hObject, handles);
@@ -879,9 +890,9 @@ function hold_Callback(hObject, eventdata, handles)
 global change;
 global increase_type;
 global stim;
-global default_halftime_us;
+global default_halftime_s;
 
-stim.halftime_us = default_halftime_us;
+stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = 1;
 start_timer(hObject, handles);
@@ -994,10 +1005,10 @@ end
 % When any of the "start sequence" buttons is pressed, open the Plexon box
 % and do some basic error checking.  Set all channels to nil.
 function plexon_start_timer_callback(obj, event, hObject, handles)
-save_globals;
-
-global stim_timer;
 global hardware stim;
+global stim_timer;
+
+save_globals;
 
 try
     NullPattern.W1 = 0;
@@ -1180,7 +1191,7 @@ global hardware stim;
 global detrend_param;
 global increase_type;
 global max_uAmps min_uAmps;
-global default_halftime_us;
+global default_halftime_s;
 global max_current;
 global max_halftime;
 global change;
@@ -1195,8 +1206,8 @@ switch increase_type
         stim.current_uA = max(min_uAmps, stim.current_uA * change);
         set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
     case 'time'
-        stim.halftime_us = min(default_halftime_us, stim.halftime_us * change);
-        set(handles.halftime, 'String', sprintf('%.1f', stim.halftime_us));
+        stim.halftime_s = min(default_halftime_s, stim.halftime_s * change);
+        set(handles.halftime, 'String', sprintf('%.1f', stim.halftime_s) * 1e6);
 end
        
 
@@ -1210,31 +1221,16 @@ if false
 end
 
 
-
-%hardware.tdt.nsamples = tdt_nsamples;
-%hardware.tdt.samplerate = tdt_samplerate;
-%hardware.intan.gain = intan_gain;
-%hardware.plexon.id = plexon_id;
-%hardware.audio_monitor_gain = audio_monitor_gain;
-
-%stim.plexon_monitor_electrode = monitor_electrode;
-%stim.current_uA = current_uAmps;
-%stim.halftime_us = halftime_us;
-%stim.interpulse_s = interpulse_s;
-%stim.active_electrodes = active_electrodes;
-%stim.n_repetitions = n_repetitions;
-%stim.repetition_Hz = repetition_Hz;
-%hardware.stim_trigger = stim_trigger;
-%stim.negativefirst = negfirst;
-
 [ data response_detected voltage ] = stimulate(stim, hardware, detrend_param, handles);
+if isempty(data)
+    return;
+end
 
-%vvsi(end+1, :) = [ stim.plexon_monitor_electrode current_uAmps stim.negativefirst VOLTAGE_RANGE_LAST_STIM stim.halftime_us];
 if voltage < voltage_limit
     % We can safely stimulate with these parameters
     if stim.plexon_monitor_electrode == electrode_last_stim
         max_current(stim.plexon_monitor_electrode) = stim.current_uA;
-        max_halftime(stim.plexon_monitor_electrode) = stim.halftime_us;
+        max_halftime(stim.plexon_monitor_electrode) = stim.halftime_s;
     end
 else
     % Dangerous voltage detected!
@@ -1244,7 +1240,7 @@ else
     
     disp(sprintf('WARNING: Channel %d (Intan %d) is pulling [ %.3g %.3g ] V @ %.3g uA, %dx2 us.', ...
         channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), ...
-        VOLTAGE_RANGE_LAST_STIM(2), current_uAmps, round(stim.halftime_us)));
+        VOLTAGE_RANGE_LAST_STIM(2), stim.current_uA, round(stim.halftime_s)));
     if timer_running(stim_timer)
         stop(stim_timer);
     end
@@ -1302,13 +1298,13 @@ guidata(hObject, handles);
 function vvsi_auto_safe_Callback(hObject, eventdata, handles)
 % Set us up as if we'd reset to 1 and hit "increase"
 global increase_type;
-global default_halftime_us;
+global default_halftime_s;
 global change;
 global hardware stim;
 global max_halftime;
 global valid_electrodes;
 global stim_timer;
-global start_uAmps current_uAmps;
+global start_uAmps;
 global interspike_s;
 
 change = 1.1;
@@ -1320,8 +1316,8 @@ interspike_s = 0.01;
 increase_type = 'time';
 
 for i = find(valid_electrodes)
-    stim.halftime_us = 50;
-    current_uAmps = start_uAmps;
+    stim.halftime_s = 50e-6;
+    stim.current_uA = start_uAmps;
     stim.active_electrodes = zeros(1, 16);
     stim.active_electrodes(i) = 1;
     stim.plexon_monitor_electrode = i;
@@ -1333,9 +1329,9 @@ for i = find(valid_electrodes)
     end
 end
 
-stim.halftime_us = default_halftime_us;
+stim.halftime_s = default_halftime_s;
 
-valid_electrodes = valid_electrodes & ~(~isnan(max_halftime) & max_halftime < default_halftime_us)
+valid_electrodes = valid_electrodes & ~(~isnan(max_halftime) & max_halftime < default_halftime_s)
 
 for i = find(~valid_electrodes)
     eval(sprintf('set(handles.electrode%d, ''Value'', 0, ''Enable'', ''off'');', i));
@@ -1373,11 +1369,11 @@ guidata(hObject, handles);
 % --- Executes on button press in vvsi_auto_full.
 function vvsi_auto_full_Callback(hObject, eventdata, handles)
 % Set us up as if we'd reset to 1 and hit "increase"
-global increase_type increase_step;
-global default_halftime_us;
-global current_uAmps start_uAmps;
-global change;
 global hardware stim;
+global increase_type increase_step;
+global default_halftime_s;
+global start_uAmps;
+global change;
 global max_current;
 global valid_electrodes;
 global stim_timer;
@@ -1386,13 +1382,13 @@ global interspike_s;
 max_current = NaN * ones(1, 16);
 
 change = increase_step;
-stim.halftime_us = default_halftime_us;
+stim.halftime_s = default_halftime_s;
 interspike_s = 0.01;
 
 increase_type = 'current';
 
 for i = find(valid_electrodes)
-    current_uAmps = start_uAmps;
+    stim.current_uA = start_uAmps;
     stim.active_electrodes = zeros(1, 16);
     stim.active_electrodes(i) = 1;
     stim.plexon_monitor_electrode = i;
@@ -1755,7 +1751,6 @@ end
 
 
 function [] = save_globals;
-disp('saving...');
 [save_vars savename] = get_save_vars();
 
 for i = save_vars
@@ -1790,7 +1785,7 @@ function [save_vars savename] = get_save_vars();
 global scriptdir;
 save_vars = {'stim', 'bird', 'comments', ...
     'increase_step', ...
-    'interspike_s', 'max_uAmps', 'min_uAmps', ...
+    'max_uAmps', 'min_uAmps', ...
     'show_device', ...
     'start_uAmps', 'tdt_show', 'valid_electrodes', 'voltage_limit', ...
     'ni_response_channels', ...
@@ -1832,7 +1827,7 @@ set(handles.startcurrent, 'String', sprintf('%d', round(start_uAmps)));
 set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
 set(handles.maxcurrent, 'String', sprintf('%d', round(max_uAmps)));
 set(handles.increasefactor, 'String', sprintf('%g', increase_step));
-set(handles.halftime, 'String', sprintf('%d', round(stim.halftime_us)));
+set(handles.halftime, 'String', sprintf('%d', round(stim.halftime_s*1e6)));
 set(handles.delaytime, 'String', sprintf('%g', stim.interpulse_s*1e6));
 set(handles.n_repetitions_box, 'String', sprintf('%d', stim.n_repetitions));
 set(handles.n_repetitions_hz_box, 'String', sprintf('%d', stim.repetition_Hz));
@@ -1864,6 +1859,14 @@ end
 set(handles.datadir_box, 'String', datadir);
 set(handles.birdname, 'String', bird, 'BackgroundColor', [0 0.8 0]);
 update_monitor_electrodes(hObject, handles);
+devices = {};
+devices_perhaps = {'tdt', 'ni'};
+for i = devices_perhaps
+    if isfield(hardware, i)
+        devices(end+1) = i;
+    end
+end
+set(handles.show_device, 'String', devices);
 
 
 if ~isempty(hardware.tdt.device)

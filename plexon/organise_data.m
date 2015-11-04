@@ -1,6 +1,6 @@
 % We got some data, through the NI and the TDT. Grab it, chop it up,
 % reorganise it into the "data" structure.
-function [ data response_detected voltage] = organise_data(stim, hardware, ...
+function [ data, response_detected, voltage] = organise_data(stim, hardware, ...
     detrend_param, obj, event, handlefigure)
 
 global saving_stimulations;
@@ -106,6 +106,10 @@ if length(size(data_aligned)) == 3
 end
 
 if n_repetitions_actual == 0
+    disp('...no triggers on NI; aborting this train...');
+    data = [];
+    response_detected = NaN;
+    voltage = NaN;
     return;
 end
 
@@ -124,27 +128,25 @@ end
 
 if n_repetitions_actual_tdt == 0
     disp('...no triggers on TDT; aborting this train...');
+    data = [];
+    response_detected = NaN;
+    voltage = NaN;
     return;
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 19;
+data.version = 20;
 
-data.repetition_Hz = repetition_Hz;
-data.halftime_us = halftime_us;
-data.interpulse_s = interpulse_s;
-data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
-data.current = current_uAmps;
-data.negativefirst = negfirst;
-data.stim_electrodes = active_electrodes;
-data.monitor_electrode = monitor_electrode;
-data.comments = comments;
+
 data.bird = bird;
+data.comments = comments;
+data.stim = stim;
+data.stim.duration = 2 * stim.halftime_s + stim.interpulse_s;
 data.detrend_param = detrend_param;
-data.goodtimes = [ 0.0002 + data.stim_duration ...
-    -0.0003 + 1/repetition_Hz ];
+data.goodtimes = [ 0.0002 + data.stim.duration ...
+    -0.0003 + 1/stim.repetition_Hz ];
 
-data.ni.index_recording = ni_recording_channel_indices;
+data.ni.index_recording = hardware.ni.recording_channel_indices;
 data.ni.stim = data_aligned(:, :, 1:2);
 data.ni.response = data_aligned(:, :, data.ni.index_recording);
 data.ni.show = 1:length(data.ni.index_recording); % For now, show everything that there is.
@@ -159,15 +161,19 @@ data.ni.stim_active_indices = stim_start_i:stim_stop_i;
 data.ni.n_repetitions = n_repetitions_actual;
 data.ni.times_aligned = event.TimeStamps(1:size(edata,1))' - triggertime;
 data.ni.time = event.TimeStamps';
-data.ni.recording_amplifier_gain = intan_gain;
+data.ni.recording_amplifier_gain = hardware.intan.gain;
 data.ni.fs = obj.Rate;
 data.ni.triggertime = triggertime;
 for i=1:nchannels
 	data.ni.labels{i} = obj.Channels(i).ID;
 	data.ni.names{i} = obj.Channels(i).Name;
 end
+[ data.ni.response_detrended data.ni.response_trend ] ...
+    = detrend_response([], data.ni, data, data.detrend_param);
+[ data.ni.spikes data.ni.spikes_r ] = look_for_spikes_xcorr(data.ni, data, [], []);
 
-if ~isempty(tdt)
+
+if ~isempty(hardware.tdt)
     data.tdt.response = tdata_aligned;
     data.tdt.show = find(tdt_show);
     data.tdt.index_recording = 1:size(data.tdt.response, 3);
@@ -176,7 +182,7 @@ if ~isempty(tdt)
     data.tdt.time = tdt_TimeStamps;
     data.tdt.times_aligned = tdt_TimeStamps(1:size(tdata_aligned,2)) - tdt_triggertime;
     data.tdt.recording_amplifier_gain = 1;
-    data.tdt.fs = hardware.tdt_samplerate;
+    data.tdt.fs = hardware.tdt.samplerate;
     data.tdt.triggertime = triggertime;
     for i=1:size(data.tdt.response, 3)
         data.tdt.labels{i} = sprintf('tdt %d', i);
@@ -196,7 +202,11 @@ if ~isempty(tdt)
     [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
 end
 
-handles = guihandles(handlefigure);
+if isstruct(handlefigure)
+    handles = handlefigure;
+else
+    handles = guihandles(handlefigure);
+end
 set(handles.baseline1, 'String', sprintf('%.2g', data.goodtimes(2)*1000));
 plot_stimulation(data, handles);
 

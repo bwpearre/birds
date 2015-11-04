@@ -34,8 +34,8 @@ end
 s = size(response);
 [nstims_m b c] = size(response);
 
-if length(s) == 2
-    disp(sprintf('Warning: assuming response has %d stimulations, %d timesteps...', nstims_m, b));
+if length(s) == 2 & nstims_m ~= d.n_repetitions
+    error('data:kludge_error', 'data: should see %d stims, but see %d', d.n_repetitions, nstims_m);
     %response = reshape(response, 1, b, c);
     %response = reshape(response, [nsamples nchannels]); % must already be mean(response, 1)
 end

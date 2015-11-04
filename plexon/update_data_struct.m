@@ -109,3 +109,14 @@ if data.version < 19
 end
 
 
+
+if data.version < 20
+    data.stim.repetition_Hz = data.repetition_Hz;
+    data.stim.halftime_us = data.halftime_us;
+    data.stim.interpulse_s = data.interpulse_s;
+    data.stim.duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
+    data.stim.current_uA = data.current_uAmps;
+    data.stim.negativefirst = data.negativefirst;
+    data.stim.active_electrodes = data.active_electrodes;
+    data.stim.monitor_electrode = data.plexon_monitor_electrode;
+end

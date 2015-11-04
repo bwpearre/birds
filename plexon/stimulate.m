@@ -1,10 +1,5 @@
 function [ data, response_detected, voltage ] = stimulate(stim, hardware, detrend_param, handles)
 
-% stim = [ current_uA, halftime_us, interpulse_s, n_repetitions,
-% repetition_Hz, active_electrodes, polarities ]
-
-% hardware = [ ni.session, tdt, hardware.plexon.id, stim.plexon_monitor_electrode ]
-
 global currently_reconfiguring;
 global scriptdir;
 global axes3yy;
@@ -16,22 +11,24 @@ if currently_reconfiguring
 end
 
 set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
-set(handles.halftime, 'String', sprintf('%.1f', stim.halftime_us));
+set(handles.halftime, 'String', sprintf('%.1f', stim.halftime_s * 1e6));
 
       
 
 % A is amplitude, W is width, Delay is interphase delay.
 
+stim
+
 StimParamPos.A1 = stim.current_uA;
 StimParamPos.A2 = -stim.current_uA;
-StimParamPos.W1 = stim.halftime_us;
-StimParamPos.W2 = stim.halftime_us;
+StimParamPos.W1 = stim.halftime_s * 1e6;
+StimParamPos.W2 = stim.halftime_s * 1e6;
 StimParamPos.Delay = stim.interpulse_s * 1e6;
 
 StimParamNeg.A1 = -stim.current_uA;
 StimParamNeg.A2 = stim.current_uA;
-StimParamNeg.W1 = stim.halftime_us;
-StimParamNeg.W2 = stim.halftime_us;
+StimParamNeg.W1 = stim.halftime_s * 1e6;
+StimParamNeg.W2 = stim.halftime_s * 1e6;
 StimParamNeg.Delay = stim.interpulse_s * 1e6;
 
 
@@ -89,7 +86,7 @@ try
                 hold(axes3yy(2), 'on');
                 plot(axes3yy(2), pat(1,:)/1e6, pat(2,:)/1e3, 'g');
                 hold(axes3yy(2), 'off');
-                legend(axes3, 'Voltage', 'Current', 'Next i');
+                legend(handles.axes3, 'Voltage', 'Current', 'Next i');
             end
         end
         
@@ -173,12 +170,14 @@ try
             hardware.ni.session.wait;  % This callback needs to be interruptible!  Apparently it is??
     end
     
+    %plot(handles.axes4, event.TimeStamps, event.Data(:,4));
     
     if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
         hardware.tdt.device.SetTagVal('mon_gain', hardware.tdt.audio_monitor_gain);
     end
     
-    [ data, response_detected, voltage ] = organise_data(stim, hardware, detrend_param, event, handles);
+    [ data, response_detected, voltage ] ...
+        = organise_data(stim, hardware, detrend_param, hardware.ni.session, event, handles);
 
 
 catch ME
@@ -199,6 +198,7 @@ end
 % Plexon. This gives sub-uA control, rather than the 1-uA control given by
 % their default rectangular pulse interface.
 function plexon_write_rectangular_pulse_file(filename, StimParam);
+StimParam
 fid = fopen(filename, 'w');
 fprintf(fid, 'variable\n');
 fprintf(fid, '%d\n%d\n', round(StimParam.A1*1000), round(StimParam.W1));

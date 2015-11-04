@@ -52,7 +52,7 @@ colours = distinguishable_colors(nchannels);
 
 % Generate stimulation alignment information
 if data.version <= 15 | ~isfield(d, 'stim_active_indices')
-    data.stim_duration = 2*data.halftime_us/1e6 + data.interpulse_s;
+    data.stim_duration = 2*data.stim.halftime_s + data.stim.interpulse_s;
     d.stim_active_indices = find(d.times_aligned >= 0 ...
         & d.times_aligned <= data.stim_duration);
     d.stim_active = 0 * d.response(1, :, 1);    
@@ -64,8 +64,6 @@ stim_times = d.times_aligned(d.stim_active_indices);
 
 
 
-halftime_us = data.halftime_us;
-interpulse_s = data.interpulse_s;
 times_aligned = d.times_aligned;
 beforetrigger = max(times_aligned(1), beforetrigger);
 aftertrigger = min(times_aligned(end), aftertrigger);
@@ -182,7 +180,7 @@ grid(handles.axes1, 'on');
 
 
 v = find(data.ni.times_aligned >= -0.0002 ...
-    & data.ni.times_aligned < 0.0002 + 2 * halftime_us/1e6 + interpulse_s);
+    & data.ni.times_aligned < 0.0002 + 2 * data.stim.halftime_s + data.stim.interpulse_s);
 if isempty(v)
     disp('No data to plot here... quitting...');
     return;
@@ -212,8 +210,8 @@ set(handles.axes1, 'XTick', xtick(1):0.001:aftertrigger);
 
 if false
     % Plot a close-up of the interpulse interval
-    w = find(times_aligned >= halftime_us/1e6 - 0.00003 ...
-        & times_aligned < halftime_us/1e6 + interpulse_s + 0.00001);
+    w = find(times_aligned >= data.stim.halftime_s - 0.00003 ...
+        & times_aligned < data.stim.halftime_s + data.stim.interpulse_s + 0.00001);
     %w = w(1:end-1);
     stim_avg = mean(data.ni.stim, 1);
     min_interpulse_volts = min(abs(stim_avg(1, w, 1)));
