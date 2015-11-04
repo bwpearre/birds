@@ -2044,7 +2044,7 @@ end
 function full_threshold_scan_Callback(hObject, eventdata, handles)
 global stim hardware detrend_param;
 global stop_button_pressed;
-global current_thresholds;
+global current_thresholds current_threshold_voltages;
 global datadir;
 
 DEBUG = true;
@@ -2068,6 +2068,7 @@ end
 
 
 current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
+voltages = zeros(length(frequencies), length(durations), length(polarities));
 disp(sprintf('Doing %d threshold searches. This might take around %s minutes.', ...
     prod(size(current_thresholds)), sigfig(prod(size(current_thresholds))/2, 2)));
 
@@ -2088,10 +2089,14 @@ for frequency = 1:length(frequencies)
                 stim.negativefirst(electrode) = bitget(polarities(polarity), electrode_bit);
             end
             
-            current_thresholds(frequency, dur, polarity) = find_threshold(handles);
+            [current_thresholds(frequency, dur, polarity) ...
+                current_threshold_voltages(frequency, dur, polarity) ] = find_threshold(handles);
         end
         
-        save(fullfile(datadir, 'current_thresholds'), 'current_thresholds');
+        save(fullfile(datadir, 'current_thresholds'), ...
+            'current_thresholds', 'current_threshold_voltages', ...
+            'frequencies', 'durations', ...
+            'polarities', 'stim', 'detrend_param');
     end
 end
 
