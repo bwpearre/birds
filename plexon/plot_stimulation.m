@@ -51,15 +51,15 @@ aftertrigger = 20e-3;
 colours = distinguishable_colors(nchannels);
 
 % Generate stimulation alignment information
-if data.version <= 15 | ~isfield(d, 'stim_active_indices')
-    data.stim_duration = 2*data.stim.halftime_s + data.stim.interpulse_s;
-    d.stim_active_indices = find(d.times_aligned >= 0 ...
-        & d.times_aligned <= data.stim_duration);
-    d.stim_active = 0 * d.response(1, :, 1);    
-    d.stim_active(d.stim_active_indices) = ones(1, length(d.stim_active_indices));
-else
-    d.stim_active = d.stim_active(1:size(d.response, 2));
-end
+%if data.version <= 15 | ~isfield(d, 'stim_active_indices')
+%    data.stim_duration_s = 2*data.stim.halftime_s + data.stim.interpulse_s;
+%    d.stim_active_indices = find(d.times_aligned >= 0 ...
+%        & d.times_aligned <= data.stim_duration_s);
+%    d.stim_active = 0 * d.response(1, :, 1);    
+%    d.stim_active(d.stim_active_indices) = ones(1, length(d.stim_active_indices));
+%else
+d.stim_active = d.stim_active(1:size(d.response, 2));
+%end
 stim_times = d.times_aligned(d.stim_active_indices);
 
 

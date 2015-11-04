@@ -194,7 +194,7 @@ if ~isempty(hardware.tdt)
     stim_start_i = find(d > 0.5, 1) + 1;
     stim_stop_i = find(d < -0.5, 1) + 1;
     %data.tdt.stim_active_indices = find(data.tdt.times_aligned >= 0 ...
-    %    & data.tdt.times_aligned <= data.stim_duration);
+    %    & data.tdt.times_aligned <= data.stim_duration_s);
     data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
     
     [ data.tdt.response_detrended data.tdt.response_trend ] ...

@@ -17,8 +17,6 @@ set(handles.halftime, 'String', sprintf('%.1f', stim.halftime_s * 1e6));
 
 % A is amplitude, W is width, Delay is interphase delay.
 
-stim
-
 StimParamPos.A1 = stim.current_uA;
 StimParamPos.A2 = -stim.current_uA;
 StimParamPos.W1 = stim.halftime_s * 1e6;
@@ -198,7 +196,7 @@ end
 % Plexon. This gives sub-uA control, rather than the 1-uA control given by
 % their default rectangular pulse interface.
 function plexon_write_rectangular_pulse_file(filename, StimParam);
-StimParam
+
 fid = fopen(filename, 'w');
 fprintf(fid, 'variable\n');
 fprintf(fid, '%d\n%d\n', round(StimParam.A1*1000), round(StimParam.W1));
