@@ -82,12 +82,9 @@ global recording_amplifier_gain;
 global ni_recording_channel_ranges;
 global valid_electrodes; % which electrodes seem valid for stimulation?
 global impedances_x;
-global stim_timer;
 global ni_response_channels;
-global tdt_show;  % Which TDT recording channels to show?
 global currently_reconfiguring;
-global tdt_show_buttons;
-global show_device;
+global show_device; % for now it will be "ni" or "tdt"
 global start_uAmps min_uAmps max_uAmps increase_step;
 global inter_trial_s;
 global voltage_limit;
@@ -201,10 +198,7 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 ni_response_channels = [ 0 0 0 0 0 0 1 ];
-tdt_show = zeros(1, 16);
 
-tdt_show_default = [1:16];
-tdt_show(tdt_show_default) = ones(size(tdt_show_default));
 
 
 %handles.TerminalConfig = 'SingleEnded';
@@ -256,20 +250,8 @@ text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
 axis off;
 
 
-%demo = strcat(homedir, '/r/data/birds/lny84rb-2015-10-05/stim_20151005_163343.013.mat');
-%demo = strcat(homedir, '/v/birds/plexon/lny84rb-2015-10-05/stim_20151005_163343.013.mat');
-if exist('demo', 'var')
-        load(demo);
-        plot_stimulation(data, handles);
-        for i = 1:16
-            handles.tdt_show{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
-                'Value',tdt_show(i),'Position', [780 764-22*(i-1) 30 20], ...
-                'Callback',{@tdt_show_channel_Callback});
-        end
-else
-    set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
-    handles = configure_acquisition_devices(hObject, handles);
-end
+set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
+handles = configure_acquisition_devices(hObject, handles);
 
 
 guidata(hObject, handles);
@@ -494,8 +476,8 @@ function [] = init_tdt(hObject, handles)
 global hardware stim;
 global scriptdir;
 global recording_time;
-global tdt_show tdt_show_buttons;
 global stim_timer;
+global tdt_valid_buttons tdt_show_buttons;
 
 hardware.tdt.audio_monitor_gain = 200; % For TDT audio monitor output
 
@@ -556,10 +538,16 @@ if ceil(hardware.tdt.nsamples*1.1) > tdt_dbuffer_size
     
 end
 
+stim.tdt_valid = ones(1, 16);
+stim.tdt_show = ones(1, 16);
+
 for i = 1:16
+    tdt_valid_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+                                     'Value',stim.tdt_valid(i),'Position', [750 764-22*(i-1) 50 20], ...
+                                     'Callback',{@tdt_valid_channel_Callback});
     tdt_show_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
-                       'Value',tdt_show(i),'Position', [780 764-22*(i-1) 50 20], ...
-                        'Callback',{@tdt_show_channel_Callback});
+                                    'Value',stim.tdt_show(i),'Position', [810 764-22*(i-1) 50 20], ...
+                                    'Callback',{@tdt_show_channel_Callback});
 end
 guidata(hObject, handles);
 
@@ -582,9 +570,26 @@ organise_data(stim, hardware, detrend_param, obj, event, handlefigure);
 
 
 
+function tdt_valid_channel_Callback(hObject, eventData, handles)
+global stim;
+global tdt_valid_buttons tdt_show_buttons;
+
+foo = get(hObject, 'Value');
+n = str2double(get(hObject, 'String'));
+stim.tdt_valid(n) = foo;
+stim.tdt_show(n) = foo;
+if foo
+    cow = 'on';
+else
+    cow = 'off';
+end
+set(tdt_show_buttons{n}, 'Enable', cow, 'Value', foo);
+
+
 function tdt_show_channel_Callback(hObject, eventData, handles)
-global tdt_show;
-tdt_show(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
+global stim;
+
+stim.tdt_show(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
 
 
 
@@ -1711,16 +1716,18 @@ end
 
 
 function tdt_show_all_Callback(hObject, eventdata, handles)
-global tdt_show tdt_show_buttons;
+global stim;
+global tdt_valid_buttons tdt_show_buttons;
 
-if sum(tdt_show) == 16
-    tdt_show = zeros(1,16);
+
+if sum(stim.tdt_show) == 16
+    stim.tdt_show = zeros(1,16);
 else
-    tdt_show = ones(1, 16);
+    stim.tdt_show = ones(1, 16);
 end
 
 for i = 1:16
-    set(tdt_show_buttons{i}, 'Value', tdt_show(i));
+    set(tdt_show_buttons{i}, 'Value', stim.tdt_show(i));
 end
 guidata(hObject, handles);
 
@@ -1779,8 +1786,8 @@ global scriptdir;
 save_vars = {'stim', 'bird', 'comments', ...
     'increase_step', ...
     'max_uAmps', 'min_uAmps', ...
-    'show_device', ...
-    'start_uAmps', 'tdt_show', 'valid_electrodes', 'voltage_limit', ...
+    'show_device', 'tdt_valid_buttons', 'tdt_show_buttons', ...
+    'start_uAmps', 'valid_electrodes', 'voltage_limit', ...
     'ni_response_channels', 'voltage_limit', ...
     'detrend_param'};
 % Which ones are in the list but don't have GUI elements (yet?)?
@@ -1791,8 +1798,9 @@ savename = strcat(scriptdir, '/saved.mat');
 
 function update_gui_values(hObject, handles);
 global hardware scriptdir;
+global tdt_valid_buttons tdt_show_buttons;
 
-
+tdt_valid_buttons{4}
 
 [save_vars savename] = get_save_vars(); % Just for the list!
 
@@ -1861,16 +1869,20 @@ for i = devices_perhaps
 end
 set(handles.show_device, 'String', devices);
 
-
+stim
 if ~isempty(hardware.tdt.device)
-    global tdt_show_buttons;
     for i = 1:16
-        set(tdt_show_buttons{i}, 'Value', tdt_show(i));
+        if stim.tdt_valid(i)
+            foo = 'on';
+        else
+            foo = 'off';
+        end
+        set(tdt_valid_buttons{i}, 'Value', stim.tdt_valid(i));
+        set(tdt_show_buttons{i}, 'Enable', foo, 'Value', stim.tdt_show(i));
     end
     %tdt.SetTagVal('mon_gain', round(hardware.tdt.audio_monitor_gain));
     %set(handles.audio_monitor_gain, 'String', sprintf('%d', round(tdt.GetTagVal('mon_gain'))));
 end
-
 %%%%% From hardware %%%%%
 %if ~isempty(tdt)
 %    set(handles.audio_monitor_gain, 'String', sprintf('%d', round(tdt.GetTagVal('mon_gain'))));
