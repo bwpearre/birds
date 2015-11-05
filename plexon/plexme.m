@@ -916,11 +916,8 @@ global stim_timer;
 
 if ~isempty(stim_timer)
     if isvalid(stim_timer)
-        %if timer_running(stim_timer)
         disp('Stopping timer for true...');
         stop(stim_timer);
-        stim_timer = [];
-        %end
     else
         disp('*** The timer was invalid!');
     end
@@ -954,8 +951,10 @@ enable_controls(handles);
 
 
 function currentcurrent_Callback(hObject, eventdata, handles)
-newcurrent = str2double(get(hObject, 'String'));
+global stim;
 global max_uAmps min_uAmps;
+
+newcurrent = str2double(get(hObject, 'String'));
 if isnan(newcurrent)
         set(hObject, 'String', sigfig(stim.current_uA, 2));
 elseif newcurrent < min_uAmps
@@ -1199,7 +1198,7 @@ global default_halftime_s;
 global max_current;
 global max_halftime;
 global change;
-global VOLTAGE_RANGE_LAST_STIM;
+global voltage_range_last_stim;
 global electrode_last_stim;
 global stim_timer;
 global voltage_limit;
@@ -1239,18 +1238,20 @@ if voltage < voltage_limit
 else
     % Dangerous voltage detected!
     %ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d (Intan %d) is pulling [ %.2g %.2g ] volts.  Stopping.', ...
-    %channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), VOLTAGE_RANGE_LAST_STIM(2));
+    %channel, map_plexon_pin_to_intan(channel, handles), voltage_range_last_stim(1), voltage_range_last_stim(2));
     %throw(ME);
     
     disp(sprintf('WARNING: Channel %d (Intan %d) is pulling [ %.3g %.3g ] V @ %.3g uA, %dx2 us.', ...
-        channel, map_plexon_pin_to_intan(channel, handles), VOLTAGE_RANGE_LAST_STIM(1), ...
-        VOLTAGE_RANGE_LAST_STIM(2), stim.current_uA, round(stim.halftime_s)));
+        stim.plexon_monitor_electrode, ...
+        map_plexon_pin_to_intan(stim.plexon_monitor_electrode, handles), ...
+        voltage_range_last_stim(1), ...
+        voltage_range_last_stim(2), stim.current_uA, round(stim.halftime_s)));
     if timer_running(stim_timer)
         stop(stim_timer);
     end
     
     % Find the maximum current at which voltage was < voltage_limit
-    %handles.voltage_at_max_current(1:2, stim.plexon_monitor_electrode) = VOLTAGE_RANGE_LAST_STIM;
+    %handles.voltage_at_max_current(1:2, stim.plexon_monitor_electrode) = voltage_range_last_stim;
     prevstring = eval(sprintf('get(handles.maxi%d, ''String'');', stim.plexon_monitor_electrode));
     switch increase_type
         case 'current'

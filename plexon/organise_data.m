@@ -12,7 +12,7 @@ global comments;
 global recording_time;
 global tdt_show;
 global axes2;
-
+global voltage_range_last_stim;
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
 % output because, um, TEXAS!
@@ -84,7 +84,7 @@ else
     tddata = [];
 end
 
-VOLTAGE_RANGE_LAST_STIM = [min(edata(:,1)) max(edata(:,1))];
+voltage_range_last_stim = [min(edata(:,1)) max(edata(:,1))];
 
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
@@ -221,6 +221,6 @@ if saving_stimulations
 end
 
 response_detected = any(data.tdt.spikes);
-voltage = max(abs(VOLTAGE_RANGE_LAST_STIM));
+voltage = max(abs(voltage_range_last_stim));
 
 
