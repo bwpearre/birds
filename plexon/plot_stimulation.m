@@ -5,12 +5,12 @@ function plot_stimulation(data, handles);
 %    return;
 %end
 
-global responses_detrended;
-global heur;
-global knowngood;
-global nnsetX;
-global net;
-global show_device;
+%global responses_detrended;
+%global heur;
+%global knowngood;
+%global nnsetX;
+%global net;
+%global show_device;
 global axes1 axes2 axes3 axes4;
 global detrend_param;
 
@@ -47,6 +47,8 @@ n_repetitions = d.n_repetitions;
 beforetrigger = -3e-3;
 aftertrigger = 20e-3;
 
+nchannels
+
 
 colours = distinguishable_colors(nchannels);
 
@@ -71,7 +73,7 @@ aftertrigger = min(times_aligned(end), aftertrigger);
 
 % u: indices into times_aligned that we want to show, aligned and shit.
 u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
-w = find(times_aligned >= 0.003 & times_aligned < 0.008);
+%w = find(times_aligned >= 0.003 & times_aligned < 0.008);
 
 if isempty(u) | length(u) < 5
     disp(sprintf('WARNING: time alignment problem.  Is triggering working?'));
@@ -136,7 +138,9 @@ else
     set(handles.response_indicator, 'BackgroundColor', 0.94 * [1 1 1], 'String', 'Response?');
 end
 
-for channel = union(d.show, find(d.spikes))
+show_channels = union(d.show, find(d.spikes))
+
+for channel = show_channels
     
     % Raw (or filtered) response
     if get(handles.response_show_all, 'Value') | get(handles.response_show_avg, 'Value')

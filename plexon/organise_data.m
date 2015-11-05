@@ -10,9 +10,10 @@ global ni_trigger_index;
 global ni_recording_channel_ranges;
 global comments;
 global recording_time;
-global tdt_show;
 global axes2;
 global voltage_range_last_stim;
+
+
 
 % Just to be confusing, the Plexon's voltage monitor channel scales its
 % output because, um, TEXAS!
@@ -32,6 +33,8 @@ edata(:,2) = event.Data(:,2) * scalefactor_i;
 edata(:,hardware.ni.recording_channel_indices) = event.Data(:,hardware.ni.recording_channel_indices) / hardware.intan.gain;
 
 if ~isempty(hardware.tdt)
+    
+
     %% If recording with TDT, block until the data buffer has enough samples:
     tdt_TimeStamps = 0:1/hardware.tdt.samplerate:(recording_time+0.01);
 
@@ -51,11 +54,15 @@ if ~isempty(hardware.tdt)
     
     % These should be the same. But TDT!
     goodlength = min(curidx/16, curidx2);
+    
+    index_recording = find(stim.tdt_valid)
 
     tdata = hardware.tdt.device.ReadTagVEX('Data', 0, curidx, 'F32', 'F64', 16)';
     tddata = hardware.tdt.device.ReadTagV('DData', 0, curidx2)';
-    tdata = tdata(1:goodlength, :);
+    tdata = tdata(1:goodlength, index_recording);
     tddata = tddata(1:goodlength, :);
+    
+    
     
     tdt_TimeStamps = tdt_TimeStamps(1:goodlength);
     if false
@@ -135,7 +142,7 @@ if n_repetitions_actual_tdt == 0
 end
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 20;
+data.version = 21;
 
 
 data.bird = bird;
@@ -175,8 +182,8 @@ end
 
 if ~isempty(hardware.tdt)
     data.tdt.response = tdata_aligned;
-    data.tdt.show = find(tdt_show);
-    data.tdt.index_recording = 1:size(data.tdt.response, 3);
+    data.tdt.index_recording = index_recording;
+    data.tdt.show = find(stim.tdt_show);
     data.tdt.index_trigger = [];
     data.tdt.n_repetitions = n_repetitions_actual_tdt;
     data.tdt.time = tdt_TimeStamps;
@@ -184,10 +191,8 @@ if ~isempty(hardware.tdt)
     data.tdt.recording_amplifier_gain = 1;
     data.tdt.fs = hardware.tdt.samplerate;
     data.tdt.triggertime = triggertime;
-    for i=1:size(data.tdt.response, 3)
-        data.tdt.labels{i} = sprintf('tdt %d', i);
-        data.tdt.names{i} = sprintf('tdt %d', i);
-    end
+    data.tdt.labels = hardware.tdt.channel_labels(index_recording);
+    data.tdt.names = data.tdt.labels;
     data.tdt.stim_active = tddata;
     
     d = diff(data.tdt.stim_active);

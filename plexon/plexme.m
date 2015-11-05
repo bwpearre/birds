@@ -252,12 +252,18 @@ axis off;
 
 set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
 handles = configure_acquisition_devices(hObject, handles);
+if isfield(hardware, 'tdt')
+    % This should not be in the TDT init code, as that may be called on
+    % reconfiguration and this should only appear once.
+    for i = 1:16
+            eval(sprintf('handles.disable_on_run{end+1} = handles.tdt_valid_buttons{%d};', i));
+    end
+end
 
-
-guidata(hObject, handles);
 
 update_gui_values(hObject, handles);
 
+guidata(hObject, handles);
 
 
 
@@ -268,7 +274,7 @@ global currently_reconfiguring;
 currently_reconfiguring = true;
 
 init_ni(hObject, handles);
-init_tdt(hObject, handles);
+handles = init_tdt(hObject, handles);
 init_plexon(hObject, handles);
 
 guidata(hObject, handles);
@@ -285,8 +291,8 @@ global hardware;
 % Open the stimulator
 
 
+PS_CloseAllStim;
 if hardware.plexon.open
-    PS_CloseAllStim;
     hardware.plexon.open = false;
 end
 
@@ -387,6 +393,8 @@ for i = find(ni_response_channels)
 end
 channel_labels{end+1} = 'Trigger';
 
+hardware.ni.channel_labels = channel_labels;
+
 daq.reset;
 hardware.ni.session = daq.createSession('ni');
 hardware.ni.session.Rate = 100000;
@@ -472,12 +480,11 @@ prepare(hardware.ni.session);
 
 
 
-function [] = init_tdt(hObject, handles)
+function [handles] = init_tdt(hObject, handles)
 global hardware stim;
 global scriptdir;
 global recording_time;
 global stim_timer;
-global tdt_valid_buttons tdt_show_buttons;
 
 hardware.tdt.audio_monitor_gain = 200; % For TDT audio monitor output
 
@@ -538,17 +545,23 @@ if ceil(hardware.tdt.nsamples*1.1) > tdt_dbuffer_size
     
 end
 
+
+
+
 stim.tdt_valid = ones(1, 16);
 stim.tdt_show = ones(1, 16);
 
 for i = 1:16
-    tdt_valid_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+    hardware.tdt.channel_labels{i} = sprintf('%d', i);
+    handles.tdt_valid_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
                                      'Value',stim.tdt_valid(i),'Position', [750 764-22*(i-1) 50 20], ...
                                      'Callback',{@tdt_valid_channel_Callback});
-    tdt_show_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+    handles.tdt_show_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
                                     'Value',stim.tdt_show(i),'Position', [810 764-22*(i-1) 50 20], ...
                                     'Callback',{@tdt_show_channel_Callback});
 end
+
+
 guidata(hObject, handles);
 
 
@@ -570,9 +583,10 @@ organise_data(stim, hardware, detrend_param, obj, event, handlefigure);
 
 
 
-function tdt_valid_channel_Callback(hObject, eventData, handles)
+function tdt_valid_channel_Callback(hObject, eventData)
 global stim;
-global tdt_valid_buttons tdt_show_buttons;
+
+handles = guidata(hObject);
 
 foo = get(hObject, 'Value');
 n = str2double(get(hObject, 'String'));
@@ -583,10 +597,11 @@ if foo
 else
     cow = 'off';
 end
-set(tdt_show_buttons{n}, 'Enable', cow, 'Value', foo);
+set(handles.tdt_show_buttons{n}, 'Enable', cow, 'Value', foo);
+guidata(hObject, handles);
 
 
-function tdt_show_channel_Callback(hObject, eventData, handles)
+function tdt_show_channel_Callback(hObject, eventData)
 global stim;
 
 stim.tdt_show(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
@@ -981,7 +996,7 @@ end
 function disable_controls(hObject, handles)
 
 for i = 1:length(handles.disable_on_run)
-        set(handles.disable_on_run{i}, 'Enable', 'off');
+    set(handles.disable_on_run{i}, 'Enable', 'off');
 end
 
 
@@ -990,7 +1005,7 @@ function enable_controls(handles);
 global valid_electrodes;
 
 for i = 1:length(handles.disable_on_run)
-        set(handles.disable_on_run{i}, 'Enable', 'on');
+    set(handles.disable_on_run{i}, 'Enable', 'on');
 end
 % Yeah, but we don't want to enable all the "stim" checkboxes, but rather
 % only the valid ones.  They get disabled with the rest of the
@@ -1717,7 +1732,6 @@ end
 
 function tdt_show_all_Callback(hObject, eventdata, handles)
 global stim;
-global tdt_valid_buttons tdt_show_buttons;
 
 
 if sum(stim.tdt_show) == 16
@@ -1727,7 +1741,7 @@ else
 end
 
 for i = 1:16
-    set(tdt_show_buttons{i}, 'Value', stim.tdt_show(i));
+    set(handles.tdt_show_buttons{i}, 'Value', stim.tdt_show(i));
 end
 guidata(hObject, handles);
 
@@ -1786,7 +1800,7 @@ global scriptdir;
 save_vars = {'stim', 'bird', 'comments', ...
     'increase_step', ...
     'max_uAmps', 'min_uAmps', ...
-    'show_device', 'tdt_valid_buttons', 'tdt_show_buttons', ...
+    'show_device', ...
     'start_uAmps', 'valid_electrodes', 'voltage_limit', ...
     'ni_response_channels', 'voltage_limit', ...
     'detrend_param'};
@@ -1798,9 +1812,6 @@ savename = strcat(scriptdir, '/saved.mat');
 
 function update_gui_values(hObject, handles);
 global hardware scriptdir;
-global tdt_valid_buttons tdt_show_buttons;
-
-tdt_valid_buttons{4}
 
 [save_vars savename] = get_save_vars(); % Just for the list!
 
@@ -1869,7 +1880,7 @@ for i = devices_perhaps
 end
 set(handles.show_device, 'String', devices);
 
-stim
+
 if ~isempty(hardware.tdt.device)
     for i = 1:16
         if stim.tdt_valid(i)
@@ -1877,8 +1888,8 @@ if ~isempty(hardware.tdt.device)
         else
             foo = 'off';
         end
-        set(tdt_valid_buttons{i}, 'Value', stim.tdt_valid(i));
-        set(tdt_show_buttons{i}, 'Enable', foo, 'Value', stim.tdt_show(i));
+        set(handles.tdt_valid_buttons{i}, 'Value', stim.tdt_valid(i));
+        set(handles.tdt_show_buttons{i}, 'Enable', foo, 'Value', stim.tdt_show(i));
     end
     %tdt.SetTagVal('mon_gain', round(hardware.tdt.audio_monitor_gain));
     %set(handles.audio_monitor_gain, 'String', sprintf('%d', round(tdt.GetTagVal('mon_gain'))));
@@ -1900,6 +1911,8 @@ set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/re
 if ~exist(datadir, 'dir')
     mkdir(datadir);
 end
+
+guidata(hObject, handles);
 
 
 

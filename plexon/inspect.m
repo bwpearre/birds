@@ -209,20 +209,20 @@ if doplot
         if data.version >= 6
             tabledata{1,1} = data.bird;
         end
-        tabledata{2,1} = sprintf('%d ', data.stim_electrodes);
-        tabledata{3,1} = sprintf('%.3g uA', data.current);
-        if isfield(data, 'halftime_us')
-            tabledata{4,1} = sprintf('%d us', round(data.halftime_us));
+        tabledata{2,1} = sprintf('%d ', data.stim.active_electrodes);
+        tabledata{3,1} = sprintf('%.3g uA', data.stim.current_uA);
+        if isfield(data.stim, 'halftime_us')
+            tabledata{4,1} = sprintf('%d us', round(data.halftime_s)*1e6);
         else
             tabledata{4,1} = '?';
         end
         
-        if isfield(data, 'negativefirst')
-            tabledata{5,1} = sprintf('%d ', data.negativefirst);
+        if isfield(data.stim, 'negativefirst')
+            tabledata{5,1} = sprintf('%d ', data.stim.negativefirst);
         else
             tabledata{5,1} = '?'; % negative pulse first
         end
-        tabledata{6,1} = sprintf('%d', data.monitor_electrode);
+        tabledata{6,1} = sprintf('%d', data.stim.plexon_monitor_electrode);
         if isfield(data, 'comments')
             set(handles.comments, 'String', data.comments);
         end
@@ -234,10 +234,6 @@ end
 data.tdt.show = find(tdt_show_now);
 plot_stimulation(data, handles);
 
-
-% Kludge that may be appropriate for bird lw95rhp only! (?)
-knowngood(file) = sum(data.stim_electrodes) == 16 && data.current >= 2;
-set(handles.response1, 'Value', knowngood(file));
 
 set(handles.thinking, 'BackgroundColor', 0.94 * [1 1 1]);
 
