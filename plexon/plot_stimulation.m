@@ -47,9 +47,6 @@ n_repetitions = d.n_repetitions;
 beforetrigger = -3e-3;
 aftertrigger = 20e-3;
 
-nchannels
-
-
 colours = distinguishable_colors(nchannels);
 
 % Generate stimulation alignment information
@@ -138,7 +135,8 @@ else
     set(handles.response_indicator, 'BackgroundColor', 0.94 * [1 1 1], 'String', 'Response?');
 end
 
-show_channels = union(d.show, find(d.spikes))
+%show_channels = union(d.show, find(d.spikes))
+show_channels = d.show;
 
 for channel = show_channels
     

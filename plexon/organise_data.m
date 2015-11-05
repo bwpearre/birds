@@ -55,7 +55,7 @@ if ~isempty(hardware.tdt)
     % These should be the same. But TDT!
     goodlength = min(curidx/16, curidx2);
     
-    index_recording = find(stim.tdt_valid)
+    index_recording = find(stim.tdt_valid);
 
     tdata = hardware.tdt.device.ReadTagVEX('Data', 0, curidx, 'F32', 'F64', 16)';
     tddata = hardware.tdt.device.ReadTagV('DData', 0, curidx2)';
@@ -175,15 +175,18 @@ for i=1:nchannels
 	data.ni.labels{i} = obj.Channels(i).ID;
 	data.ni.names{i} = obj.Channels(i).Name;
 end
+tic
 [ data.ni.response_detrended data.ni.response_trend ] ...
     = detrend_response([], data.ni, data, data.detrend_param);
 [ data.ni.spikes data.ni.spikes_r ] = look_for_spikes_xcorr(data.ni, data, [], []);
+fprintf('Time for detrending and detecting on NI: %s s', sigfig(toc, 2));
 
 
 if ~isempty(hardware.tdt)
     data.tdt.response = tdata_aligned;
     data.tdt.index_recording = index_recording;
-    data.tdt.show = find(stim.tdt_show);
+    % Whoops. 'show' should be indices into 'index_recording'...
+    data.tdt.show = find(stim.tdt_show(index_recording));
     data.tdt.index_trigger = [];
     data.tdt.n_repetitions = n_repetitions_actual_tdt;
     data.tdt.time = tdt_TimeStamps;
@@ -201,10 +204,13 @@ if ~isempty(hardware.tdt)
     %data.tdt.stim_active_indices = find(data.tdt.times_aligned >= 0 ...
     %    & data.tdt.times_aligned <= data.stim_duration_s);
     data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
-    
+
+    tic;
     [ data.tdt.response_detrended data.tdt.response_trend ] ...
         = detrend_response([], data.tdt, data, data.detrend_param);
     [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
+    fprintf('Time for detrending and detecting on NI: %s s', sigfig(toc, 2));
+
 end
 
 if isstruct(handlefigure)

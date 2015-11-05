@@ -486,13 +486,36 @@ global scriptdir;
 global recording_time;
 global stim_timer;
 
-hardware.tdt.audio_monitor_gain = 200; % For TDT audio monitor output
+
+if ~isfield(handles, 'tdt_valid_buttons')
+    disp('CREATING TDT STRUCTURES');
+    % If this is the first time, initialise stuff and create GUI elements.
+    
+    hardware.tdt.audio_monitor_gain = 200; % For TDT audio monitor output
+
+    stim.tdt_valid = ones(1, 16);
+    stim.tdt_show = ones(1, 16);
+
+    for i = 1:16
+        hardware.tdt.channel_labels{i} = sprintf('%d', i);
+        handles.tdt_valid_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+            'Value',stim.tdt_valid(i),'Position', [750 764-22*(i-1) 50 20], ...
+            'Callback',{@tdt_valid_channel_Callback});
+        handles.tdt_show_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+            'Value',stim.tdt_show(i),'Position', [810 764-22*(i-1) 50 20], ...
+            'Callback',{@tdt_show_channel_Callback});
+    end
+else
+    disp('NOT CREATING THEM');
+end
+
+
 
 tdtprogram = strrep(strcat(scriptdir, '/TDT_triggered_recorder_m.rcx'), ...
     '/', ...
     filesep);
 
-hardware.tdt.device = actxcontrol('RPco.X', [5 5 26 26]);
+hardware.tdt.device = actxcontrol('RPco.X', [5 5 5 5]);
 if ~hardware.tdt.device.ConnectRZ5('GB', 1)
     disp('Could not connect to RZ5');
     return;
@@ -546,20 +569,6 @@ if ceil(hardware.tdt.nsamples*1.1) > tdt_dbuffer_size
 end
 
 
-
-
-stim.tdt_valid = ones(1, 16);
-stim.tdt_show = ones(1, 16);
-
-for i = 1:16
-    hardware.tdt.channel_labels{i} = sprintf('%d', i);
-    handles.tdt_valid_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
-                                     'Value',stim.tdt_valid(i),'Position', [750 764-22*(i-1) 50 20], ...
-                                     'Callback',{@tdt_valid_channel_Callback});
-    handles.tdt_show_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
-                                    'Value',stim.tdt_show(i),'Position', [810 764-22*(i-1) 50 20], ...
-                                    'Callback',{@tdt_show_channel_Callback});
-end
 
 
 guidata(hObject, handles);
@@ -1792,8 +1801,8 @@ end
 datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 update_gui_values(hObject, handles);
 handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
 
+guidata(hObject, handles);
 
 function [save_vars savename] = get_save_vars();
 global scriptdir;
@@ -1880,7 +1889,6 @@ for i = devices_perhaps
 end
 set(handles.show_device, 'String', devices);
 
-
 if ~isempty(hardware.tdt.device)
     for i = 1:16
         if stim.tdt_valid(i)
@@ -1913,7 +1921,6 @@ if ~exist(datadir, 'dir')
 end
 
 guidata(hObject, handles);
-
 
 
 
