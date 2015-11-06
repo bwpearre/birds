@@ -237,6 +237,9 @@ for i = 1:16
     eval(sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i));
     eval(sprintf('handles.disable_on_run{end+1} = handles.stim%d;', i));
 end
+for i = 2:7
+    eval(sprintf('handles.disable_on_run{end+1} = handles.hvc%d;', i));
+end
 
 
 
