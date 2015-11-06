@@ -12,6 +12,7 @@ global comments;
 global recording_time;
 global axes2;
 global voltage_range_last_stim;
+global show_device;
 
 
 
@@ -179,7 +180,7 @@ tic
 [ data.ni.response_detrended data.ni.response_trend ] ...
     = detrend_response([], data.ni, data, data.detrend_param);
 [ data.ni.spikes data.ni.spikes_r ] = look_for_spikes_xcorr(data.ni, data, [], []);
-fprintf('Time for detrending and detecting on NI: %s s', sigfig(toc, 2));
+%fprintf('Time for detrending and detecting on NI: %s s\n', sigfig(toc, 2));
 
 
 if ~isempty(hardware.tdt)
@@ -209,8 +210,7 @@ if ~isempty(hardware.tdt)
     [ data.tdt.response_detrended data.tdt.response_trend ] ...
         = detrend_response([], data.tdt, data, data.detrend_param);
     [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
-    fprintf('Time for detrending and detecting on NI: %s s', sigfig(toc, 2));
-
+    %fprintf('Time for detrending and detecting on TDT: %s s\n', sigfig(toc, 2));
 end
 
 if isstruct(handlefigure)

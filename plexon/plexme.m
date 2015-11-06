@@ -488,7 +488,6 @@ global stim_timer;
 
 
 if ~isfield(handles, 'tdt_valid_buttons')
-    disp('CREATING TDT STRUCTURES');
     % If this is the first time, initialise stuff and create GUI elements.
     
     hardware.tdt.audio_monitor_gain = 200; % For TDT audio monitor output
@@ -505,8 +504,6 @@ if ~isfield(handles, 'tdt_valid_buttons')
             'Value',stim.tdt_show(i),'Position', [810 764-22*(i-1) 50 20], ...
             'Callback',{@tdt_show_channel_Callback});
     end
-else
-    disp('NOT CREATING THEM');
 end
 
 
@@ -1038,7 +1035,7 @@ global stim_timer;
 
 save_globals;
 
-try
+%try
     NullPattern.W1 = 0;
     NullPattern.W2 = 0;
     NullPattern.A1 = 0;
@@ -1073,16 +1070,16 @@ try
             throw(ME);
         end
     end
-catch ME
-    if timer_running(stim_timer)
-        stop(stim_timer);
-    end
-    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
-    report = getReport(ME)
-    PS_StopStimAllChannels(hardware.plexon.id);
-    guidata(hObject, handles);
-    rethrow(ME);
-end
+%catch ME
+%    if timer_running(stim_timer)
+%        stop(stim_timer);
+%    end
+%    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
+%    report = getReport(ME)
+%    PS_StopStimAllChannels(hardware.plexon.id);
+%    guidata(hObject, handles);
+%    rethrow(ME);
+%end
 
 guidata(hObject, handles);
 

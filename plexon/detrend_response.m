@@ -12,6 +12,14 @@ if isempty(response)
     response = d.response;
 end
 
+if prod(size(response)) == 0
+    % No data. Abort.
+    detrended = [];
+    trend = [];
+    return;
+end
+
+
 if isequal(detrend_param, data.detrend_param) ...
         & isfield(d, 'response_detrended') ...
         & all(size(response) == size(d.response))

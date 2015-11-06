@@ -1,15 +1,12 @@
 function [ spikes r ] = look_for_spikes_xcorr(d, data, detrend_param, response_detrended, handles);
 
-% If detrend_param != d.detrend_param
-%    if response_detrended == [] {
-%        re-detrend using detrend_param
-%    }
-%    use response_detrended
-% } else {
-%    use d.response_detrended
-% }
 
-    
+if ~isfield(d, response_detrended) & prod(size(response_detrended)) == 0
+    spikes = [];
+    r = NaN;
+    return;
+end
+
 [ nstims nsamples nchannels ] = size(d.response_detrended);
 times = d.times_aligned;
 
@@ -44,7 +41,7 @@ if length(roii) < 10
     r = zeros(1, nchannels);
     spikes = zeros(1, nchannels);
     return;
-end    
+end
 
 if ~isfield(d, 'response_detrended') ...
         | (exist('detrend_param') & ~isempty(detrend_param) ...
@@ -90,18 +87,17 @@ parfor channel = 1:nchannels
     %cow(channel,:,:) = cov(response_detrended(:, baselinei, channel)');
 end
 
-%ch9 = squeeze(response_detrended(:, roii, 9))
-%ch11 = squeeze(response_detrended(:, roii, 11))
-%plot(handles.axes2, times(roii), ch11);
 
 %% Remove the autocorrelation of each to self: that is the signal's power--useful?
-channel = 9;
 if 1
     a = 1:nstims+1:nstims^2;
     foo(:, :, a) = zeros(nchannels, size(foo,2), nstims);
-%    cow(:, :, a) = zeros(nchannels, size(cow,2), nstims);
+    cow(:, :, a) = zeros(nchannels, size(cow,2), nstims);
 end
-if exist('handles')
+
+% Draw some stuff?
+channel = 1;
+if exist('handles') & false
     %imagesc(squeeze(foo(channel,:,:)), 'Parent', handles.axes2);
     %imagesc(squeeze(cow(channel,:,:)), 'Parent', handles.axes4);
     colorbar('Peer', handles.axes2);

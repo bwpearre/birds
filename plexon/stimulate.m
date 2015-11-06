@@ -179,7 +179,6 @@ try
 
 
 catch ME
-    
     errordlg(ME.message, 'Error', 'modal');
     disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
     report = getReport(ME)
