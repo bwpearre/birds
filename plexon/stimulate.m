@@ -76,11 +76,13 @@ for channel = find(stim.active_electrodes)
         throw(ME);
     end
     
-    np = PS_GetNPointsArbPattern(hardware.plexon.id, channel);
-    target_current = [];
-    target_current(1,:) = PS_GetArbPatternPointsX(hardware.plexon.id, channel)/1e6;
-    target_current(2,:) = PS_GetArbPatternPointsY(hardware.plexon.id, channel)/1e3;
-    target_current = [[-0.001; 0] [0; 0] target_current [target_current(1,end); 0] [target_current(1,end)+0.001; 0]]; % Add zeros for cleaner look
+    if channel == stim.plexon_monitor_electrode
+        np = PS_GetNPointsArbPattern(hardware.plexon.id, channel);
+        target_current = [];
+        target_current(1,:) = PS_GetArbPatternPointsX(hardware.plexon.id, channel)/1e6;
+        target_current(2,:) = PS_GetArbPatternPointsY(hardware.plexon.id, channel)/1e3;
+        target_current = [[-0.001; 0] [0; 0] target_current [target_current(1,end); 0] [target_current(1,end)+0.001; 0]]; % Add zeros for cleaner look
+    end
     
     switch hardware.stim_trigger
         case 'master8'
