@@ -2,11 +2,14 @@ function [ data, response_detected, voltage ] = stimulate(stim, hardware, detren
 
 global currently_reconfiguring;
 global scriptdir;
-global axes3yy;
 
 
-if currently_reconfiguring
-    disp('Still reconfiguring the hardware... please wait (about 3 seconds, usually)...');
+while currently_reconfiguring
+    disp('Still reconfiguring the hardware... please wait (about 2 seconds, usually)...');
+    pause(1);
+    data = [];
+    response_detected = [];
+    voltage = [];
     return;
 end
 
@@ -42,7 +45,7 @@ plexon_write_rectangular_pulse_file(filenamePos, StimParamPos);
 plexon_write_rectangular_pulse_file(filenameNeg, StimParamNeg);
 
 
-try
+%try
 
     % If no stim.plexon_monitor_electrode is selected, just fail silently and let the user figure
     % out what's going on :)
@@ -74,19 +77,11 @@ try
             throw(ME);
         end
         
-        if true
-            np = PS_GetNPointsArbPattern(hardware.plexon.id, channel);
-            pat = [];
-            pat(1,:) = PS_GetArbPatternPointsX(hardware.plexon.id, channel);
-            pat(2,:) = PS_GetArbPatternPointsY(hardware.plexon.id, channel);
-            pat = [[0; 0] pat [pat(1,end); 0]]; % Add zeros for cleaner look
-            if ~isempty(axes3yy) & isvalid(axes3yy)
-                hold(axes3yy(2), 'on');
-                plot(axes3yy(2), pat(1,:)/1e6, pat(2,:)/1e3, 'g');
-                hold(axes3yy(2), 'off');
-                legend(handles.axes3, 'Voltage', 'Current', 'Next i');
-            end
-        end
+        np = PS_GetNPointsArbPattern(hardware.plexon.id, channel);
+        target_current = [];
+        target_current(1,:) = PS_GetArbPatternPointsX(hardware.plexon.id, channel)/1e6;
+        target_current(2,:) = PS_GetArbPatternPointsY(hardware.plexon.id, channel)/1e3;
+        target_current = [[-0.001; 0] [0; 0] target_current [target_current(1,end); 0] [target_current(1,end)+0.001; 0]]; % Add zeros for cleaner look
         
         switch hardware.stim_trigger
             case 'master8'
@@ -174,17 +169,20 @@ try
         hardware.tdt.device.SetTagVal('mon_gain', hardware.tdt.audio_monitor_gain);
     end
     
+    stim.target_current = target_current;
+    
     [ data, response_detected, voltage ] ...
         = organise_data(stim, hardware, detrend_param, hardware.ni.session, event, handles);
 
 
-catch ME
-    errordlg(ME.message, 'Error', 'modal');
-    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
-    report = getReport(ME)
-    rethrow(ME);
-end
+%catch ME
+%    errordlg(ME.message, 'Error', 'modal');
+%    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
+%    report = getReport(ME)
+%    rethrow(ME);
+%end
 
+plot_stimulation(data, handles);
 
 
 

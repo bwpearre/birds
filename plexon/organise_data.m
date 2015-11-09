@@ -142,6 +142,7 @@ if n_repetitions_actual_tdt == 0
     return;
 end
 
+
 %%%%% Increment the version whenever adding anything to the savefile format!
 data.version = 21;
 
@@ -218,8 +219,38 @@ if isstruct(handlefigure)
 else
     handles = guihandles(handlefigure);
 end
+
+%% Look for current delivery error:
+f=stim.target_current;
+u = find(data.ni.times_aligned >= -0.00002 & data.ni.times_aligned < 0.00002 + data.stim.duration);
+resample_times = data.ni.times_aligned(u);
+resample_currents = zeros(size(resample_times));
+ind = 1;
+next_time = f(1,ind+1);
+for i = 1:length(resample_times)
+    while resample_times(i) >= next_time
+        ind = ind+1;
+        if ind < size(f, 2)
+            next_time = f(1, ind+1);
+        else
+            next_time = Inf;
+        end
+        
+    end
+    resample_currents(i) = f(2,ind);
+end
+% Find the time indices over data.ni.stim(CURRENT) that surround
+% stim.target_current:
+v = find(resample_times > -0.001 & resample_times < 0.001 + data.stim.duration);
+meanstim = mean(data.ni.stim, 1);
+current_frac = sum(abs(meanstim(1, u, 2))) / sum(abs(resample_currents(v)));
+plot(handles.axes2, data.ni.times_aligned(u), meanstim(1,u,2), 'b', resample_times(v), resample_currents(v), 'r')
+fprintf('Current delivery is %s%%\n', sigfig(100*current_frac, 2));
+%data.stim.target_current(1,:)/1e6 data.stim.target_current(2,:)/1e3
+%current_difference = stim.target_current
+
+
 set(handles.baseline1, 'String', sprintf('%.2g', data.goodtimes(2)*1000));
-plot_stimulation(data, handles);
 
 
 if saving_stimulations

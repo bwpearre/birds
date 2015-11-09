@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 04-Nov-2015 15:43:31
+% Last Modified by GUIDE v2.5 09-Nov-2015 11:16:15
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -197,7 +197,7 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
-ni_response_channels = [ 0 0 0 0 0 0 1 ];
+ni_response_channels = [ 0 0 0 0 0 0 0 ];
 
 
 
@@ -232,7 +232,7 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
         handles.n_repetitions_box, handles.voltage_limit, ...
-        handles.n_repetitions_hz_box};
+        handles.n_repetitions_hz_box, handles.full_threshold_scan};
 for i = 1:16
     eval(sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i));
     eval(sprintf('handles.disable_on_run{end+1} = handles.stim%d;', i));
@@ -325,7 +325,7 @@ if nstim > 1
 end
 
 
-try
+%try
     %err = PS_SetDigitalOutputMode(hardware.plexon.id, 0); % Keep digital out HIGH in interpulse
     %if err
     %    ME = MException('plexon:init', 'Plexon: digital output on "%d".', hardware.plexon.id);
@@ -350,17 +350,17 @@ try
         throw(ME);
     end
 
-catch ME
-    disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
-    report = getReport(ME)
-    err = PS_CloseAllStim;
-    if err
-        disp('ERROR closing Plexon stim');
-    else
-        hardware.plexon.open = false;
-    end
-    rethrow(ME);
-end
+%catch ME
+%    disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
+%    report = getReport(ME)
+%    err = PS_CloseAllStim;
+%    if err
+%        disp('ERROR closing Plexon stim');
+%    else
+%        hardware.plexon.open = false;
+%    end
+%    rethrow(ME);
+%end
 
 
 guidata(hObject, handles);
@@ -1255,6 +1255,7 @@ end
 
 [ data response_detected voltage ] = stimulate(stim, hardware, detrend_param, handles);
 if isempty(data)
+    disp('timer callback: stimulate() did not capture any data.');
     return;
 end
 
@@ -1738,20 +1739,77 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
+function tdt_valid_Callback(hObject, eventdata, handles)
+global stim;
+
+persistent last_valid_state last_show_state;
+if ~exist('last_valid_state', 'var') | isempty(last_valid_state)
+    last_valid_state = stim.tdt_valid;
+    last_show_state = stim.tdt_show;
+end
+
+if all(stim.tdt_valid)
+    % If all on --> all off
+    stim.tdt_valid = zeros(1, 16);
+    stim.tdt_show = zeros(1, 16); % can't show these if invalid
+elseif ~any(stim.tdt_valid)
+    % if all off --> last remembered
+    stim.tdt_valid = last_valid_state;
+    stim.tdt_show = last_show_state;
+else
+    % if some mix --> (1) save state, (2) all on
+    last_valid_state = stim.tdt_valid;
+    last_show_state = stim.tdt_show;
+
+    stim.tdt_valid = ones(1, 16);
+end
+
+% Update checkboxes
+for i = 1:16
+    if stim.tdt_valid(i)
+        foo = 'on';
+    else
+        foo = 'off';
+    end
+    set(handles.tdt_valid_buttons{i}, 'Value', stim.tdt_valid(i));
+    set(handles.tdt_show_buttons{i}, 'Value', stim.tdt_show(i), 'Enable', foo);
+end
+guidata(hObject, handles);
+
+
 
 function tdt_show_all_Callback(hObject, eventdata, handles)
 global stim;
 
+persistent last_show_state;
+if ~exist('last_show_state', 'var') | isempty(last_show_state)
+    last_show_state = stim.tdt_show;
+end
 
-if sum(stim.tdt_show) == 16
-    stim.tdt_show = zeros(1,16);
+if all(stim.tdt_show(find(stim.tdt_valid))) 
+    % If all valid ones are on --> all off
+    stim.tdt_show = zeros(1, 16); % can't show these if invalid
+elseif ~any(stim.tdt_show)
+    % if all off --> last remembered
+    stim.tdt_show = last_show_state & stim.tdt_valid;
 else
-    stim.tdt_show = ones(1, 16);
+    % if some mix --> (1) save state, (2) all on
+    last_show_state = stim.tdt_show;
+
+    stim.tdt_show = stim.tdt_valid;
 end
 
+% Update checkboxes
 for i = 1:16
-    set(handles.tdt_show_buttons{i}, 'Value', stim.tdt_show(i));
+    if stim.tdt_valid(i)
+        foo = 'on';
+    else
+        foo = 'off';
+    end
+    set(handles.tdt_valid_buttons{i}, 'Value', stim.tdt_valid(i));
+    set(handles.tdt_show_buttons{i}, 'Value', stim.tdt_show(i), 'Enable', foo);
 end
+
 guidata(hObject, handles);
 
 
@@ -2023,7 +2081,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
-function [min_current min_current_voltage] = find_threshold(handles)
+function [min_current min_current_voltage] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
@@ -2035,19 +2093,20 @@ min_current = Inf;
 min_current_voltage = NaN;
 stim.current_uA = start_uAmps;
 
+[ data, response, voltage ] = stimulate(stim, hardware, detrend_param, handles);
+
 while factor > final_factor
-    update_gui_values([], handles);
+    update_gui_values(hObject, handles);
     
     if stop_button_pressed
         disp('stop button pressed');
         return;
     end
-
-    
-    [ data, response, voltage ] = stimulate(stim, hardware, detrend_param, handles);
     
     switch response
         case 1
+            % Response seen: (1) decrease search step size, (2) reduce
+            % current, (3) check termination conditions
             factor = factor ^ 0.8
             min_current = min(min_current, stim.current_uA);
             min_current_voltage = voltage; 
@@ -2057,6 +2116,8 @@ while factor > final_factor
                 factor = 1.1 + eps % try min, then terminate
             end
         case 0
+            % No response: (1) increase current, (2) check termination
+            % conditions
             stim.current_uA = stim.current_uA * factor;
             if stim.current_uA > max_uAmps
                 stim.current_uA = max_uAmps; % unused--just safety
@@ -2071,6 +2132,8 @@ while factor > final_factor
             % on the NI will result in NaN. Do nothing; await the next
             % stim.
     end
+    
+    [ data, response, voltage ] = stimulate(stim, hardware, detrend_param, handles);
 end
 
 
@@ -2080,14 +2143,14 @@ global stop_button_pressed;
 global current_thresholds current_threshold_voltages;
 global datadir;
 
-DEBUG = true;
+DEBUG = false;
 
 disable_controls(hObject, handles);
 stop_button_pressed = false;
 
-frequencies = 30 * 1.1.^[-3:3];
-durations = 100e-6 * 2.^[-2:0.5:2];
-polarities = 0:(2^sum(stim.active_electrodes)-1);
+frequencies = 30 * 1.1.^[-3:3]
+durations = 100e-6 * 2.^[-2:0.5:2]
+polarities = 0:(2^sum(stim.active_electrodes)-1)
 
 if DEBUG
     frequencies = 30;
@@ -2115,15 +2178,20 @@ for frequency = 1:length(frequencies)
             stim.current_uA = 1;
             stim.repetition_Hz = frequencies(frequency);
             stim.halftime_s = durations(dur);
-            electrode_bit = 0;
+            electrode_bit = 0; % run over all stim polarities...
             stim.negativefirst = zeros(size(stim.active_electrodes));
             for electrode = find(stim.active_electrodes)
                 electrode_bit = electrode_bit + 1;
                 stim.negativefirst(electrode) = bitget(polarities(polarity), electrode_bit);
             end
             
+            fprintf('Stimulating: %s uA for %s us at %s Hz.\n', ...
+                sigfig(stim.current_uA, 2), ...
+                sigfig(stim.halftime_s*1e6, 2), ...
+                sigfig(stim.repetition_Hz, 2));
+            
             [current_thresholds(frequency, dur, polarity) ...
-                current_threshold_voltages(frequency, dur, polarity) ] = find_threshold(handles);
+                current_threshold_voltages(frequency, dur, polarity) ] = find_threshold(hObject, handles);
         end
         
         save(fullfile(datadir, 'current_thresholds'), ...
@@ -2146,3 +2214,5 @@ function voltage_limit_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+

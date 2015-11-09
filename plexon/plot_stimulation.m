@@ -1,16 +1,9 @@
 function plot_stimulation(data, handles);
 
-%if data.version < 7
-%    plot_stimulation_pre12(data, handles);
-%    return;
-%end
+if isempty(data)
+    return;
+end
 
-%global responses_detrended;
-%global heur;
-%global knowngood;
-%global nnsetX;
-%global net;
-%global show_device;
 global axes1 axes2 axes3 axes4;
 global detrend_param;
 
@@ -187,12 +180,19 @@ if isempty(v)
     disp('No data to plot here... quitting...');
     return;
 end
-global axes3yy;
 axes3yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
     data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 2), 1)));
 set(axes3yy(1), 'XLim', data.ni.times_aligned(v([1 end])));
 set(axes3yy(2), 'XLim', data.ni.times_aligned(v([1 end])));
-legend(handles.axes3, data.ni.names{1:2});
+if isfield(data.stim, 'target_current')
+    hold(axes3yy(2), 'on');
+    plot(axes3yy(2), data.stim.target_current(1,:), data.stim.target_current(2,:), 'g');
+    hold(axes3yy(2), 'off');
+    legend(handles.axes3, 'V', 'i', 'i*');
+else
+    legend(handles.axes3, data.ni.names{1:2});
+end
+
 xlabel(handles.axes3, 'ms');
 set(get(axes3yy(1),'Ylabel'),'String','V')
 set(get(axes3yy(2),'Ylabel'),'String','\mu A')

@@ -1,14 +1,14 @@
 function [ spikes r ] = look_for_spikes_xcorr(d, data, detrend_param, response_detrended, handles);
 
 
-if ~isfield(d, response_detrended) & prod(size(response_detrended)) == 0
-    spikes = [];
-    r = NaN;
-    return;
-end
-
 [ nstims nsamples nchannels ] = size(d.response_detrended);
 times = d.times_aligned;
+
+if ~isfield(d, response_detrended) & prod(size(response_detrended)) == 0
+    spikes = [];
+    r = NaN * zeros(1, nstims);
+    return;
+end
 
 minstarttime = data.goodtimes(1);
 maxendtime = data.goodtimes(2);
