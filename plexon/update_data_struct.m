@@ -79,8 +79,6 @@ end
 
 
 if data.version < 18
-    % data.stim_duration appears earlier!  But it was mis-calculated.
-    data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
 
     data.detrend_param.model = 'fourier8';
     data.detrend_param.range = [0.003 0.025];
@@ -91,11 +89,12 @@ end
 
 
 if data.version < 19
-    data.detrend_param.response_detection_threshold = 2e-10;
-
+    % data.stim_duration appears earlier!  But it was mis-calculated.
+    data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
     data.goodtimes = [ 0.0002 + data.stim_duration,      -0.0003 + 1/data.repetition_Hz ];
      
-     if isfield(data, 'tdt')
+    data.detrend_param.response_detection_threshold = 2e-10;
+    if isfield(data, 'tdt')
         [ data.tdt.response_detrended data.tdt.response_trend ] ...
             = detrend_response([], data.tdt, data, []);
         [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
@@ -106,6 +105,10 @@ if data.version < 19
         [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
             data, [], [], handles);
      end
+     
+     data.current_uAmps = data.current;
+     data.active_electrodes = data.stim_electrodes;
+     data.plexon_monitor_electrode = data.monitor_electrode;
 end
 
 
@@ -118,5 +121,20 @@ if data.version < 20
     data.stim.current_uA = data.current_uAmps;
     data.stim.negativefirst = data.negativefirst;
     data.stim.active_electrodes = data.active_electrodes;
-    data.stim.monitor_electrode = data.plexon_monitor_electrode;
+    data.stim.plexon_monitor_electrode = data.plexon_monitor_electrode;
+end
+
+if data.version < 21
+    target_current = [ 0                                   0 ; ...
+        0                                                  data.stim.current_uA ; ...
+        data.stim.halftime_s                               data.stim.current_uA ; ...
+        data.stim.halftime_s                               0 ; ...
+        data.stim.halftime_s+data.stim.interpulse_s        0 ; ...
+        data.stim.halftime_s+data.stim.interpulse_s        -data.stim.current_uA ; ...
+        data.stim.duration_s                               -data.stim.current_uA ; ...
+        data.stim.duration_s                               0]';
+    if data.stim.negativefirst(data.stim.plexon_monitor_electrode) == 1
+        target_current(2,:) = target_current(2,:) * -1;
+    end
+    data.stim.target_current = target_current;
 end

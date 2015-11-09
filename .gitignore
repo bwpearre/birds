@@ -2,4 +2,5 @@
 *.wav
 *~
 *.asv
-
+.DS_Store
+*.pat

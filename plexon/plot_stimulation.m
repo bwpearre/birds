@@ -37,8 +37,8 @@ nchannels = size(d.response, 3);
 n_repetitions = d.n_repetitions;
 
 % For the graph
-beforetrigger = -3e-3;
-aftertrigger = 20e-3;
+beforetrigger = -1e-3;
+aftertrigger = 6e-3;
 
 colours = distinguishable_colors(nchannels);
 

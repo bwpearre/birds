@@ -1712,7 +1712,7 @@ guidata(hObject, handles);
 function tdt_monitor_channel_Callback(hObject, eventdata, handles)
 global hardware stim;
 hardware.tdt.audio_monitor_channel = get(hObject, 'Value');
-if ~hardware.tdt.device.SetTagVal('mon_channel', audio_monitor_channel)
+if ~hardware.tdt.device.SetTagVal('mon_channel', hardware.tdt.audio_monitor_channel)
     disp(sprintf('Can''t change TDT audio monitor'));
 end
 
