@@ -1230,7 +1230,6 @@ global change;
 global voltage_range_last_stim;
 global electrode_last_stim;
 global stim_timer;
-global voltage_limit;
 
 switch increase_type
     case 'current'
@@ -1253,55 +1252,20 @@ if false
 end
 
 
-[ data response_detected voltage ] = stimulate(stim, hardware, detrend_param, handles);
+[ data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
 if isempty(data)
     disp('timer callback: stimulate() did not capture any data.');
     return;
 end
 
-if voltage < voltage_limit
-    % We can safely stimulate with these parameters
-    if stim.plexon_monitor_electrode == electrode_last_stim
-        max_current(stim.plexon_monitor_electrode) = stim.current_uA;
-        max_halftime(stim.plexon_monitor_electrode) = stim.halftime_s;
+if errors.val ~= 0
+    for i = 1:length(errors.name)
+        disp(errors.name{i});
     end
-else
-    % Dangerous voltage detected!
-    %ME = MException('plexon:stimulate:brokenElectrode', 'Channel %d (Intan %d) is pulling [ %.2g %.2g ] volts.  Stopping.', ...
-    %channel, map_plexon_pin_to_intan(channel, handles), voltage_range_last_stim(1), voltage_range_last_stim(2));
-    %throw(ME);
     
-    disp(sprintf('WARNING: Channel %d (Intan %d) is pulling [ %.3g %.3g ] V @ %.3g uA, %dx2 us.', ...
-        stim.plexon_monitor_electrode, ...
-        map_plexon_pin_to_intan(stim.plexon_monitor_electrode, handles), ...
-        voltage_range_last_stim(1), ...
-        voltage_range_last_stim(2), stim.current_uA, round(stim.halftime_s)));
     if timer_running(stim_timer)
         stop(stim_timer);
     end
-    
-    % Find the maximum current at which voltage was < voltage_limit
-    %handles.voltage_at_max_current(1:2, stim.plexon_monitor_electrode) = voltage_range_last_stim;
-    prevstring = eval(sprintf('get(handles.maxi%d, ''String'');', stim.plexon_monitor_electrode));
-    switch increase_type
-        case 'current'
-            if isnan(max_current(stim.plexon_monitor_electrode))
-                maxistring = '***';
-            else
-                maxistring = sprintf('%.3g uA', max_current(stim.plexon_monitor_electrode));
-            end
-            eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
-                stim.plexon_monitor_electrode, prevstring, maxistring));
-        case 'time'
-            if isnan(max_halftime(stim.plexon_monitor_electrode))
-                maxistring = '***';
-            else
-                maxistring = sprintf('%.3g us', max_halftime(stim.plexon_monitor_electrode));
-            end
-            eval(sprintf('set(handles.maxi%d, ''String'', ''%s (%s)'');', ...
-                stim.plexon_monitor_electrode, prevstring, maxistring));
-    end
-    
 end
 
 
@@ -1540,7 +1504,7 @@ global hardware stim;
 stim.repetition_Hz = str2double(get(hObject, 'String'));
 if stim.repetition_Hz > 40
     stim.repetition_Hz = 40;
-    set(hObject, 'String', sigfig(stim.repetition_Hz, 2));
+    set(hObject, 'String', sigfig(stim.repetition_Hz, 3));
 end
 handles = configure_acquisition_devices(hObject, handles);
 guidata(hObject, handles);
@@ -1868,7 +1832,7 @@ save_vars = {'stim', 'bird', 'comments', ...
     'increase_step', ...
     'max_uAmps', 'min_uAmps', ...
     'show_device', ...
-    'start_uAmps', 'valid_electrodes', 'voltage_limit', ...
+    'start_uAmps', 'valid_electrodes', ...
     'ni_response_channels', 'voltage_limit', ...
     'detrend_param'};
 % Which ones are in the list but don't have GUI elements (yet?)?
@@ -1908,7 +1872,7 @@ set(handles.increasefactor, 'String', sprintf('%g', increase_step));
 set(handles.halftime, 'String', sprintf('%d', round(stim.halftime_s*1e6)));
 set(handles.delaytime, 'String', sprintf('%g', stim.interpulse_s*1e6));
 set(handles.n_repetitions_box, 'String', sprintf('%d', stim.n_repetitions));
-set(handles.n_repetitions_hz_box, 'String', sprintf('%d', stim.repetition_Hz));
+set(handles.n_repetitions_hz_box, 'String', sigfig(stim.repetition_Hz, 3));
 set(handles.comments, 'String', comments);
 set(handles.detrend_model, 'String', detrend_param.model);
 set(handles.fit0, 'String', sprintf('%g', detrend_param.range(1)*1000));
@@ -2093,13 +2057,12 @@ min_current = Inf;
 min_current_voltage = NaN;
 stim.current_uA = start_uAmps;
 
-[ data, response, voltage ] = stimulate(stim, hardware, detrend_param, handles);
+[ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
 
 while factor > final_factor
     update_gui_values(hObject, handles);
     
     if stop_button_pressed
-        disp('stop button pressed');
         return;
     end
     
@@ -2115,16 +2078,21 @@ while factor > final_factor
                 stim.current_uA = min_uAmps; % unused--just safety
                 factor = 1.1 + eps % try min, then terminate
             end
+            % This results in a decrease of current, so let's skip the
+            % error check...
         case 0
             % No response: (1) increase current, (2) check termination
             % conditions
             stim.current_uA = stim.current_uA * factor;
             if stim.current_uA > max_uAmps
                 stim.current_uA = max_uAmps; % unused--just safety
-                factor = 1; % terminate
+                factor = 0; % Try one more, and then terminate
             end
-            if voltage >= voltage_limit
-                factor = 1; % No response, but overvoltage: terminate
+            if errors.val ~= 0
+                for i = 1:length(errors.name)
+                    disp(errors.name{i});
+                end
+                break;
             end
 
         case NaN
@@ -2133,7 +2101,7 @@ while factor > final_factor
             % stim.
     end
     
-    [ data, response, voltage ] = stimulate(stim, hardware, detrend_param, handles);
+    [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
 end
 
 
@@ -2183,6 +2151,8 @@ for frequency = 1:length(frequencies)
             for electrode = find(stim.active_electrodes)
                 electrode_bit = electrode_bit + 1;
                 stim.negativefirst(electrode) = bitget(polarities(polarity), electrode_bit);
+                eval(sprintf('set(handles.negfirst%d, ''Value'', %d);', ...
+                    electrode, stim.negativefirst(electrode)));
             end
             
             fprintf('Stimulating: %s uA for %s us at %s Hz.\n', ...

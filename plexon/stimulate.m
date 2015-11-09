@@ -1,7 +1,8 @@
-function [ data, response_detected, voltage ] = stimulate(stim, hardware, detrend_param, handles)
+function [ data, response_detected, voltage, errors] = stimulate(stim, hardware, detrend_param, handles)
 
 global currently_reconfiguring;
 global scriptdir;
+global monitor_struct;
 
 
 while currently_reconfiguring
@@ -169,7 +170,7 @@ end
 
 stim.target_current = target_current;
 
-[ data, response_detected, voltage ] ...
+[ data, response_detected, voltage, errors ] ...
     = organise_data(stim, hardware, detrend_param, hardware.ni.session, event, handles);
 
 

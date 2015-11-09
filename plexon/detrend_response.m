@@ -23,7 +23,7 @@ end
 if isequal(detrend_param, data.detrend_param) ...
         & isfield(d, 'response_detrended') ...
         & all(size(response) == size(d.response))
-    disp('detrend_response: Using cached detrend with the same parameters.');
+    %disp('detrend_response: Using cached detrend with the same parameters.');
     detrended = d.response_detrended;
     trend = d.response_trend;
     return;

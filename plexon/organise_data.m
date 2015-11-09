@@ -1,6 +1,6 @@
 % We got some data, through the NI and the TDT. Grab it, chop it up,
 % reorganise it into the "data" structure.
-function [ data, response_detected, voltage] = organise_data(stim, hardware, ...
+function [ data, response_detected, voltage, errors] = organise_data(stim, hardware, ...
     detrend_param, obj, event, handlefigure)
 
 global saving_stimulations;
@@ -13,6 +13,10 @@ global recording_time;
 global axes2;
 global voltage_range_last_stim;
 global show_device;
+global voltage_limit;
+
+errors.val = 0;
+errors.name = {};
 
 
 
@@ -114,10 +118,11 @@ if length(size(data_aligned)) == 3
 end
 
 if n_repetitions_actual == 0
-    disp('...no triggers on NI; aborting this train...');
     data = [];
     response_detected = NaN;
     voltage = NaN;
+    %errors.val = errors.val | 4;
+    disp('No triggers found on NI.');
     return;
 end
 
@@ -139,6 +144,8 @@ if n_repetitions_actual_tdt == 0
     data = [];
     response_detected = NaN;
     voltage = NaN;
+    %errors.val = errors.val | 8;
+    disp('No triggers found on TDT.');
     return;
 end
 
@@ -220,8 +227,11 @@ else
     handles = guihandles(handlefigure);
 end
 
+
+
+
 %% Look for current delivery error:
-f=stim.target_current;
+f = stim.target_current;
 u = find(data.ni.times_aligned >= -0.00002 & data.ni.times_aligned < 0.00002 + data.stim.duration);
 resample_times = data.ni.times_aligned(u);
 resample_currents = zeros(size(resample_times));
@@ -239,21 +249,16 @@ for i = 1:length(resample_times)
     end
     resample_currents(i) = f(2,ind);
 end
-% Find the time indices over data.ni.stim(CURRENT) that surround
-% stim.target_current:
 v = find(resample_times > -0.001 & resample_times < 0.001 + data.stim.duration);
 meanstim = mean(data.ni.stim(:,:,2), 1);
 current_frac = sum(abs(meanstim(1, u, 1))) / sum(abs(resample_currents(v)));
-if current_frac < 0.9
-    warning('stimulation:monitoring', 'Channel %d current delivered is only %s%% of target. Bad electrode?', ...
+if current_frac < 0.5
+    errors.val = errors.val | 2;
+    errors.name{end+1} = sprintf('ERROR: Channel %d current delivered is only %s%% of target. Bad circuit!', ...
           stim.plexon_monitor_electrode, ...
           sigfig(current_frac*100, 2));
 end
-if current_frac < 0.5 & false
-    error('stimulation:monitoring', 'Channel %d current delivered is only %s%% of target. Bad electrode?', ...
-          stim.plexon_monitor_electrode, ...
-          sigfig(current_frac*100, 2));
-end
+
 if false
     figure(1);
     resample_times = resample_times - 1/data.ni.fs;
@@ -262,6 +267,23 @@ if false
     
     set(gca, 'XLim', [-0.0005 0.001]);
 end
+
+
+
+
+
+
+%% Look for voltage delivery error:
+voltage = max(abs(voltage_range_last_stim));
+if voltage > voltage_limit
+    errors.val = errors.val | 1;
+    errors.name{end+1} = sprintf('ERROR: Voltage over limit: %s V delivered.', sigfig(voltage, 2));
+end
+
+
+
+
+
 
 set(handles.baseline1, 'String', sprintf('%.2g', data.goodtimes(2)*1000));
 
@@ -276,6 +298,5 @@ if saving_stimulations
 end
 
 response_detected = any(data.tdt.spikes);
-voltage = max(abs(voltage_range_last_stim));
 
 
