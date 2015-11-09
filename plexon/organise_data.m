@@ -242,13 +242,26 @@ end
 % Find the time indices over data.ni.stim(CURRENT) that surround
 % stim.target_current:
 v = find(resample_times > -0.001 & resample_times < 0.001 + data.stim.duration);
-meanstim = mean(data.ni.stim, 1);
-current_frac = sum(abs(meanstim(1, u, 2))) / sum(abs(resample_currents(v)));
-plot(handles.axes2, data.ni.times_aligned(u), meanstim(1,u,2), 'b', resample_times(v), resample_currents(v), 'r')
-fprintf('Current delivery is %s%%\n', sigfig(100*current_frac, 2));
-%data.stim.target_current(1,:)/1e6 data.stim.target_current(2,:)/1e3
-%current_difference = stim.target_current
-
+meanstim = mean(data.ni.stim(:,:,2), 1);
+current_frac = sum(abs(meanstim(1, u, 1))) / sum(abs(resample_currents(v)));
+if current_frac < 0.9
+    warning('stimulation:monitoring', 'Channel %d current delivered is only %s%% of target. Bad electrode?', ...
+          stim.plexon_monitor_electrode, ...
+          sigfig(current_frac*100, 2));
+end
+if current_frac < 0.5 & false
+    error('stimulation:monitoring', 'Channel %d current delivered is only %s%% of target. Bad electrode?', ...
+          stim.plexon_monitor_electrode, ...
+          sigfig(current_frac*100, 2));
+end
+if false
+    figure(1);
+    resample_times = resample_times - 1/data.ni.fs;
+    plot(resample_times, resample_currents, 'b', ...
+        data.ni.times_aligned(:), edata(:,2), 'r*');
+    
+    set(gca, 'XLim', [-0.0005 0.001]);
+end
 
 set(handles.baseline1, 'String', sprintf('%.2g', data.goodtimes(2)*1000));
 
