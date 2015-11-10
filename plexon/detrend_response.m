@@ -2,6 +2,11 @@ function [ detrended trend detrend_param ] = detrend_response(d, data, detrend_p
 
 response = d.response;
 
+if nargin ~= 3
+    dbstack
+    error('args', 'Wrong number of arguments to detrend_response');
+end
+
 if prod(size(response)) == 0
     % No data. Abort.
     detrended = [];
@@ -10,7 +15,8 @@ if prod(size(response)) == 0
 end
 
 
-if isequal(detrend_param.model, data.detrend_param.model) ...
+if isfield(data, 'detrend_param') ...
+        & isequal(detrend_param.model, data.detrend_param.model) ...
         & isequal(detrend_param.range, data.detrend_param.range) ...
         & isfield(d, 'response_detrended') ...
         & all(size(response) == size(d.response))

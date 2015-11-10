@@ -122,7 +122,7 @@ if n_repetitions_actual == 0
     response_detected = NaN;
     voltage = NaN;
     %errors.val = errors.val | 4;
-    disp('No triggers found on NI.');
+    disp('No triggers found on NI. Aborting this run.');
     return;
 end
 
@@ -140,12 +140,11 @@ if ~isempty(hardware.tdt)
 end
 
 if n_repetitions_actual_tdt == 0
-    disp('...no triggers on TDT; aborting this train...');
     data = [];
     response_detected = NaN;
     voltage = NaN;
     %errors.val = errors.val | 8;
-    disp('No triggers found on TDT.');
+    disp('No triggers found on TDT. Aborting this run.');
     return;
 end
 
@@ -183,12 +182,13 @@ for i=1:nchannels
 	data.ni.labels{i} = obj.Channels(i).ID;
 	data.ni.names{i} = obj.Channels(i).Name;
 end
-tic
-[ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
-    = detrend_response(data.ni, data, detrend_param);
-[ data.ni.spikes data.ni.spikes_r ] = look_for_spikes_xcorr(data.ni, data, [], []);
-%fprintf('Time for detrending and detecting on NI: %s s\n', sigfig(toc, 2));
-
+if ~isempty(data.ni.index_recording)
+    tic;
+    [ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
+        = detrend_response(data.ni, data, detrend_param);
+    [ data.ni.spikes data.ni.spikes_r ] = look_for_spikes_xcorr(data.ni, data, [], []);
+    fprintf('Time for detrending and detecting on NI: %s s\n', sigfig(toc, 2));
+end
 
 if ~isempty(hardware.tdt)
     data.tdt.response = tdata_aligned;
@@ -213,10 +213,12 @@ if ~isempty(hardware.tdt)
     %    & data.tdt.times_aligned <= data.stim_duration_s);
     data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
 
-    tic;
-    [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
-        = detrend_response(data.tdt, data, detrend_param);
-    [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
+    if ~isempty(data.tdt.index_recording)
+        [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
+            = detrend_response(data.tdt, data, detrend_param);
+        [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
+    end
+    
     %fprintf('Time for detrending and detecting on TDT: %s s\n', sigfig(toc, 2));
 end
 
@@ -258,16 +260,6 @@ if current_frac < 0.5
           sigfig(current_frac*100, 2));
 end
 
-if false
-    figure(1);
-    resample_times = resample_times - 1/data.ni.fs;
-    plot(resample_times, resample_currents, 'b', ...
-        data.ni.times_aligned(:), edata(:,2), 'r*');
-    
-    set(gca, 'XLim', [-0.0005 0.001]);
-end
-
-
 
 
 
@@ -278,8 +270,6 @@ if voltage > voltage_limit
     errors.val = errors.val | 1;
     errors.name{end+1} = sprintf('ERROR: Voltage over limit: %s V delivered.', sigfig(voltage, 2));
 end
-
-
 
 
 

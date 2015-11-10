@@ -169,10 +169,9 @@ xl = get(handles.axes1, 'XLim');
 xl(1) = beforetrigger;
 set(handles.axes1, ...
     'XLim', [beforetrigger aftertrigger], ...
-    'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
+    'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
 ylabel(handles.axes1, 'volts');
 grid(handles.axes1, 'on');
-
 
 
 v = find(data.ni.times_aligned >= -0.0002 ...
@@ -228,3 +227,6 @@ if false
     xlabel(handles.axes4, 'ms');
     ylabel(handles.axes4, 'V');
 end
+
+
+

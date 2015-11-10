@@ -49,7 +49,7 @@ if ~isfield(d, 'response_detrended') ...
            & isempty(response_detrended))
     disp('look_for_spikes_xcorr: re-detrending as follows:');
     detrend_param
-    response_detrended = detrend_response([], d, data, detrend_param);
+    response_detrended = detrend_response(d, data, detrend_param);
 else
     response_detrended = d.response_detrended;
 end

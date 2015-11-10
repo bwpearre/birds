@@ -173,8 +173,10 @@ end
 
 stim.target_current = target_current;
 
+
 [ data, response_detected, voltage, errors ] ...
     = organise_data(stim, hardware, detrend_param, hardware.ni.session, event, handles);
+
 
 
 plot_stimulation(data, handles);

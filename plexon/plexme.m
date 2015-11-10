@@ -91,10 +91,10 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if false % For my X--HVC experiment
+if true % For my X--HVC experiment
     detrend_param.model = 'fourier8';
     detrend_param.range = [0.003 0.025];
-    detrend_param.response_roi = [0.003 0.008];
+    detrend_param.response_roi = [0.0035 0.007];
     detrend_param.response_baseline = [0.012 0.025];
     detrend_param.response_detection_threshold = 2e-10;
 else
@@ -1933,8 +1933,6 @@ end
 
 %%%%% From handles or hardcoded; currently not saved. %%%%%
 %set(handles.terminalconfigbox, 'String', handles.TerminalConfig);
-global recording_amplifier_gain;
-set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/recording_amplifier_gain);
 
 
 
@@ -2045,6 +2043,10 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
+
+
+
+
 function [min_current min_current_voltage] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
@@ -2057,11 +2059,15 @@ min_current = Inf;
 min_current_voltage = NaN;
 stim.current_uA = start_uAmps;
 
-[ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+data = [];
+while isempty(data)
+    [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+end
 
+    
 while factor > final_factor
     update_gui_values(hObject, handles);
-    
+        
     if stop_button_pressed
         return;
     end
@@ -2070,7 +2076,7 @@ while factor > final_factor
         case 1
             % Response seen: (1) decrease search step size, (2) reduce
             % current, (3) check termination conditions
-            factor = factor ^ 0.8
+            factor = factor ^ 0.8;
             min_current = min(min_current, stim.current_uA);
             min_current_voltage = voltage; 
             stim.current_uA = stim.current_uA / factor;
@@ -2101,8 +2107,13 @@ while factor > final_factor
             % stim.
     end
     
-    [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+    while isempty(data)
+        [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+    end
 end
+
+
+
 
 
 function full_threshold_scan_Callback(hObject, eventdata, handles)
@@ -2111,14 +2122,14 @@ global stop_button_pressed;
 global current_thresholds current_threshold_voltages;
 global datadir;
 
-DEBUG = false;
+DEBUG = true;
 
 disable_controls(hObject, handles);
 stop_button_pressed = false;
 
-frequencies = 30 * 1.1.^[-3:3]
+frequencies = 30 * 1.1.^[-2:3]
 durations = 100e-6 * 2.^[-2:0.5:2]
-polarities = 0:(2^sum(stim.active_electrodes)-1)
+polarities = 0:(2^sum(stim.active_electrodes)-1);
 
 if DEBUG
     frequencies = 30;
