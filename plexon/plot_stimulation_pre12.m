@@ -32,11 +32,9 @@ end
 doplot = true;
 
 
-if data.version >= 12 & ~isempty(data.tdata_aligned)
-    d = data.responses_tdt;
-else
-    d = data.responses_ni;
-end
+% Pre-12: there is no TDT, and the caller should have created data.ni from
+% the bits I saved at the time.
+d = data.ni;
 
 
 aftertrigger = 12e-3;

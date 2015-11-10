@@ -1,28 +1,12 @@
 function plot_stimulation(data, handles);
 
-if data.version < 12
-    plot_stimulation_pre12(data, handles);
+if isempty(data)
     return;
 end
 
-global responses_detrended;
-global heur;
-global knowngood;
-global nnsetX;
-global net;
-global show_device;
 global axes1 axes2 axes3 axes4;
 global detrend_param;
 
-if isempty(show_device)
-    show_device = 'tdt';
-end
-
-% Repair my stupidity -- version 12 has unscaled data.
-if data.version == 12
-    data.ni.stim(:,:,1) = data.ni.stim(:,:,1) * 4;
-    data.ni.stim(:,:,2) = data.ni.stim(:,:,2) * 400;
-end
 
 % If plot_stimulation is called from a timer or DAQ callback, the axes are
 % not present in the handles structure.  You may need a beer for this
@@ -43,42 +27,36 @@ if isempty(axes4)
 end
 
 
-if data.version <= 15
-    data.ni.times_aligned = data.ni.times_aligned';
-end
 
-if isfield(data, 'tdt')
-    eval(sprintf('d = data.%s;', lower(show_device)));
-else
-    d = data.ni;
-end
+
+index_selected = get(handles.show_device, 'Value');
+list = get(handles.show_device, 'String');
+eval(sprintf('d = data.%s;', char(list(index_selected))));
+
 nchannels = size(d.response, 3);
-
 n_repetitions = d.n_repetitions;
 
 % For the graph
-beforetrigger = -1e-3;
-aftertrigger = 6e-3;
-
+xscale = get(handles.xscale, 'Value');
+beforetrigger = -3 * 1e-3 * xscale;
+aftertrigger = 30 * 1e-3 * xscale;
 
 colours = distinguishable_colors(nchannels);
 
 % Generate stimulation alignment information
-if data.version <= 15 | ~isfield(d, 'stim_active_indices')
-    data.stim_duration = 2*data.halftime_us/1e6+data.interpulse_s;
-    d.stim_active_indices = find(d.times_aligned >= 0 ...
-        & d.times_aligned <= data.stim_duration);
-    d.stim_active = 0 * d.response(1, :, 1);    
-    d.stim_active(d.stim_active_indices) = ones(1, length(d.stim_active_indices));
-else
-    d.stim_active = d.stim_active(1:size(d.response, 2));
-end
+%if data.version <= 15 | ~isfield(d, 'stim_active_indices')
+%    data.stim_duration_s = 2*data.stim.halftime_s + data.stim.interpulse_s;
+%    d.stim_active_indices = find(d.times_aligned >= 0 ...
+%        & d.times_aligned <= data.stim_duration_s);
+%    d.stim_active = 0 * d.response(1, :, 1);    
+%    d.stim_active(d.stim_active_indices) = ones(1, length(d.stim_active_indices));
+%else
+d.stim_active = d.stim_active(1:size(d.response, 2));
+%end
 stim_times = d.times_aligned(d.stim_active_indices);
 
 
 
-halftime_us = data.halftime_us;
-interpulse_s = data.interpulse_s;
 times_aligned = d.times_aligned;
 beforetrigger = max(times_aligned(1), beforetrigger);
 aftertrigger = min(times_aligned(end), aftertrigger);
@@ -86,7 +64,7 @@ aftertrigger = min(times_aligned(end), aftertrigger);
 
 % u: indices into times_aligned that we want to show, aligned and shit.
 u = find(times_aligned > beforetrigger & times_aligned < aftertrigger);
-w = find(times_aligned >= 0.003 & times_aligned < 0.008);
+%w = find(times_aligned >= 0.003 & times_aligned < 0.008);
 
 if isempty(u) | length(u) < 5
     disp(sprintf('WARNING: time alignment problem.  Is triggering working?'));
@@ -116,15 +94,11 @@ end
 %[spikes r] = look_for_spikes_xcorr(d, data, detrend_param);
 
 linewidths = 0.3*ones(1, nchannels);
-linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes)))) * 3;
+linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes)))) * 2;
 
 
 % get(handles.response_show_all, 'Value')
 
-% Let's try a filter, shall we?  This used to filter the raw data, but I
-% think I should not filter until after detrending, if at all.
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(2, 0.07, 'high');
 if get(handles.response_filter, 'Value')
     [B A] = ellip(2, .000001, 30, [100]/(d.fs/2), 'high');
     for i = 1:size(response_plot, 1)
@@ -139,7 +113,9 @@ end
 %%% Plot axes1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-roii = find(d.times_aligned >= detrend_param.range(1) & d.times_aligned < detrend_param.range(2));
+roi = [ max(detrend_param.range(1), data.goodtimes(1)) ...
+    min(detrend_param.range(2), data.goodtimes(2))];
+roii = find(d.times_aligned >= roi(1) & d.times_aligned < roi(2));
 roitimes = d.times_aligned(roii);
 
 cla(handles.axes1);
@@ -147,13 +123,16 @@ hold(handles.axes1, 'on');
 legend_handles = [];
 legend_names = {};
 
-if sum(d.spikes)
-    set(handles.response_indicator, 'BackgroundColor', [ 1 1 0 ], 'String', 'Response!');
+if any(d.spikes)
+    set(handles.response_indicator, 'BackgroundColor', [ 1 0 1 ], 'String', 'Response!');
 else
     set(handles.response_indicator, 'BackgroundColor', 0.94 * [1 1 1], 'String', 'Response?');
 end
 
-for channel = union(d.show, find(d.spikes))
+%show_channels = union(d.show, find(d.spikes))
+show_channels = d.show;
+
+for channel = show_channels
     
     % Raw (or filtered) response
     if get(handles.response_show_all, 'Value') | get(handles.response_show_avg, 'Value')
@@ -169,7 +148,8 @@ for channel = union(d.show, find(d.spikes))
             'Color', colours(channel, :), 'LineStyle', '--', 'LineWidth', linewidths(channel));
     end
     if get(handles.response_show_trend, 'Value')
-        plot(handles.axes1, roitimes, d.response_trend(1, roii, channel), ...
+        plot(handles.axes1, roitimes, ...
+            reshape(d.response_trend(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
             'Color', colours(channel,:), 'LineStyle', ':');
         axes1legend{end+1} = 'Trend';
     end
@@ -196,17 +176,29 @@ grid(handles.axes1, 'on');
 
 
 v = find(data.ni.times_aligned >= -0.0002 ...
-    & data.ni.times_aligned < 0.0002 + 2 * halftime_us/1e6 + interpulse_s);
+    & data.ni.times_aligned < 0.0002 + 2 * data.stim.halftime_s + data.stim.interpulse_s);
 if isempty(v)
     disp('No data to plot here... quitting...');
     return;
 end
-global axes3yy;
-axes3yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
-    data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 2), 1)));
-set(axes3yy(1), 'XLim', data.ni.times_aligned(v([1 end])));
-set(axes3yy(2), 'XLim', data.ni.times_aligned(v([1 end])));
-legend(handles.axes3, data.ni.names{1:2});
+%axes3yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
+[axes3yy h1 h2] = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(data.ni.stim(:, v, 1)), ...
+    data.ni.times_aligned(v), squeeze((data.ni.stim(:, v, 2))));
+set(axes3yy(1), 'XLim', data.ni.times_aligned(v([1 end])), 'YColor', 'b');
+set(axes3yy(2), 'XLim', data.ni.times_aligned(v([1 end])), 'YColor', 'r');
+for i = 1:length(h1)
+    set(h1(i), 'Color', 'b');
+    set(h2(i), 'Color', 'r');
+end
+
+hold(axes3yy(2), 'on');
+h3 = plot(axes3yy(2), data.stim.target_current(1,:), data.stim.target_current(2,:), 'Color', [0 1 0]);
+hold(axes3yy(2), 'off');
+
+legend_handles = [h1(1) h2(1) h3];
+legend_names = {'V', 'i', 'i*'};
+legend(handles.axes3, legend_handles, legend_names);
+
 xlabel(handles.axes3, 'ms');
 set(get(axes3yy(1),'Ylabel'),'String','V')
 set(get(axes3yy(2),'Ylabel'),'String','\mu A')
@@ -226,8 +218,8 @@ set(handles.axes1, 'XTick', xtick(1):0.001:aftertrigger);
 
 if false
     % Plot a close-up of the interpulse interval
-    w = find(times_aligned >= halftime_us/1e6 - 0.00003 ...
-        & times_aligned < halftime_us/1e6 + interpulse_s + 0.00001);
+    w = find(times_aligned >= data.stim.halftime_s - 0.00003 ...
+        & times_aligned < data.stim.halftime_s + data.stim.interpulse_s + 0.00001);
     %w = w(1:end-1);
     stim_avg = mean(data.ni.stim, 1);
     min_interpulse_volts = min(abs(stim_avg(1, w, 1)));
