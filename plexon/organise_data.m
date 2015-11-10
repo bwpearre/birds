@@ -158,7 +158,6 @@ data.bird = bird;
 data.comments = comments;
 data.stim = stim;
 data.stim.duration = 2 * stim.halftime_s + stim.interpulse_s;
-data.detrend_param = detrend_param;
 data.goodtimes = [ 0.0002 + data.stim.duration ...
     -0.0003 + 1/stim.repetition_Hz ];
 
@@ -185,8 +184,8 @@ for i=1:nchannels
 	data.ni.names{i} = obj.Channels(i).Name;
 end
 tic
-[ data.ni.response_detrended data.ni.response_trend ] ...
-    = detrend_response([], data.ni, data, data.detrend_param);
+[ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
+    = detrend_response(data.ni, data, detrend_param);
 [ data.ni.spikes data.ni.spikes_r ] = look_for_spikes_xcorr(data.ni, data, [], []);
 %fprintf('Time for detrending and detecting on NI: %s s\n', sigfig(toc, 2));
 
@@ -215,8 +214,8 @@ if ~isempty(hardware.tdt)
     data.tdt.stim_active_indices = stim_start_i:stim_stop_i;
 
     tic;
-    [ data.tdt.response_detrended data.tdt.response_trend ] ...
-        = detrend_response([], data.tdt, data, data.detrend_param);
+    [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
+        = detrend_response(data.tdt, data, detrend_param);
     [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
     %fprintf('Time for detrending and detecting on TDT: %s s\n', sigfig(toc, 2));
 end

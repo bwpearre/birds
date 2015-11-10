@@ -136,13 +136,11 @@ function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
 global detrend_param;
 
-default_colour = get(handles.thinking, 'BackgroundColor');
-set(handles.thinking, 'BackgroundColor', [1 0 0]);
+set(handles.listbox1, 'Enable', 'inactive');
 drawnow;
 
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
-
 
 devices = {};
 devices_perhaps = {'tdt', 'ni'};
@@ -235,7 +233,7 @@ data.tdt.show = find(tdt_show_now);
 plot_stimulation(data, handles);
 
 
-set(handles.thinking, 'BackgroundColor', 0.94 * [1 1 1]);
+set(handles.listbox1, 'Enable', 'on');
 
 guidata(hObject, handles);
 
@@ -519,9 +517,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-
-% --- Executes on button press in thinking.
-function thinking_Callback(hObject, eventdata, handles)
 
 
 % --- Executes on slider movement.

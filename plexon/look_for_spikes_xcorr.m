@@ -4,7 +4,7 @@ function [ spikes r ] = look_for_spikes_xcorr(d, data, detrend_param, response_d
 [ nstims nsamples nchannels ] = size(d.response_detrended);
 times = d.times_aligned;
 
-if ~isfield(d, response_detrended) & prod(size(response_detrended)) == 0
+if ~isfield(d, 'response_detrended') & prod(size(response_detrended)) == 0
     spikes = [];
     r = NaN * zeros(1, nchannels);
     return;

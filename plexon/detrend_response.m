@@ -1,16 +1,6 @@
-function [ detrended trend ] = detrend_response(response, d, data, detrend_param);
+function [ detrended trend detrend_param ] = detrend_response(d, data, detrend_param);
 
-%persistent last_detrend;
-if isempty(detrend_param)
-    if isfield(data, 'detrend_param')
-        detrend_param = data.detrend_param;
-    else
-        detrend_param = last_detrend;
-    end
-end
-if isempty(response)
-    response = d.response;
-end
+response = d.response;
 
 if prod(size(response)) == 0
     % No data. Abort.
@@ -20,10 +10,11 @@ if prod(size(response)) == 0
 end
 
 
-if isequal(detrend_param, data.detrend_param) ...
+if isequal(detrend_param.model, data.detrend_param.model) ...
+        & isequal(detrend_param.range, data.detrend_param.range) ...
         & isfield(d, 'response_detrended') ...
         & all(size(response) == size(d.response))
-    %disp('detrend_response: Using cached detrend with the same parameters.');
+    disp('detrend_response: Using cached detrend with the same parameters.');
     detrended = d.response_detrended;
     trend = d.response_trend;
     return;
@@ -33,7 +24,7 @@ end
 %    size(response,1), size(d.response,3)));
 
 if isempty(response)
-    % Use a processed version (e.g. mean) if provided; otherwise revert to detrending individuals
+    % Use a processed version (e.g. mean or subset) if provided; otherwise revert to detrending individuals
     response = d.response;
 end
 
