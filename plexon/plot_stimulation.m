@@ -191,7 +191,7 @@ for i = 1:length(h1)
 end
 
 hold(axes3yy(2), 'on');
-h3 = plot(axes3yy(2), data.stim.target_current(1,:), data.stim.target_current(2,:), 'Color', [0 1 0]);
+h3 = plot(axes3yy(2), data.stim.target_current(1,:)*1e3, data.stim.target_current(2,:), 'Color', [0 1 0]);
 hold(axes3yy(2), 'off');
 
 legend_handles = [h1(1) h2(1) h3];
