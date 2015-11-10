@@ -2053,7 +2053,7 @@ global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
 
 response = false;
-factor = 2;
+factor = 1.6;
 final_factor = 1.1;
 min_current = Inf;
 min_current_voltage = NaN;

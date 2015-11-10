@@ -38,7 +38,7 @@ n_repetitions = d.n_repetitions;
 
 % For the graph
 xscale = get(handles.xscale, 'Value');
-beforetrigger = -3 * 1e-3 * xscale;
+beforetrigger = -4 * 1e-3 * xscale;
 aftertrigger = 30 * 1e-3 * xscale;
 
 colours = distinguishable_colors(nchannels);
@@ -181,10 +181,10 @@ if isempty(v)
     return;
 end
 %axes3yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
-[axes3yy h1 h2] = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(data.ni.stim(:, v, 1)), ...
-    data.ni.times_aligned(v), squeeze((data.ni.stim(:, v, 2))));
-set(axes3yy(1), 'XLim', data.ni.times_aligned(v([1 end])), 'YColor', 'b');
-set(axes3yy(2), 'XLim', data.ni.times_aligned(v([1 end])), 'YColor', 'r');
+[axes3yy h1 h2] = plotyy(handles.axes3, data.ni.times_aligned(v)*1e3, squeeze(data.ni.stim(:, v, 1)), ...
+    data.ni.times_aligned(v)*1e3, squeeze((data.ni.stim(:, v, 2))));
+set(axes3yy(1), 'XLim', data.ni.times_aligned(v([1 end]))*1e3, 'YColor', 'b');
+set(axes3yy(2), 'XLim', data.ni.times_aligned(v([1 end]))*1e3, 'YColor', 'r');
 for i = 1:length(h1)
     set(h1(i), 'Color', 'b');
     set(h2(i), 'Color', 'r');

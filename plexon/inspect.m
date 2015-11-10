@@ -175,13 +175,13 @@ end
 if ~isequal(detrend_param, data.detrend_param)
     %data.detrend_param = detrend_param;
     if isfield(data, 'tdt')
-        [ data.tdt.response_detrended data.tdt.response_trend ] ...
-            = detrend_response([], data.tdt, data, detrend_param);
+        [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
+            = detrend_response(data.tdt, data, detrend_param);
         [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
             data, detrend_param, [], handles);
     else
-        [ data.ni.response_detrended data.ni.response_trend ] ...
-            = detrend_response([], data.ni, data, detrend_param);
+        [ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
+            = detrend_response(data.ni, data, detrend_param);
         [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
             data, detrend_param, [], handles);
     end
@@ -521,8 +521,8 @@ end
 
 % --- Executes on slider movement.
 function xscale_Callback(hObject, eventdata, handles)
-set(handles.axes1, 'XLim', get(handles.yscale, 'Value') * [-3 30] * 1e-3);
-set(handles.axes2, 'XLim', get(handles.yscale, 'Value') * [-3 30] * 1e-3);
+set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30] * 1e-3);
+set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] * 1e-3);
 
 function xscale_CreateFcn(hObject, eventdata, handles)
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
