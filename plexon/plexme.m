@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 09-Nov-2015 11:16:15
+% Last Modified by GUIDE v2.5 10-Nov-2015 12:00:30
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -2137,15 +2137,19 @@ disp(sprintf('Doing %d threshold searches. This might take around %s minutes.', 
     prod(size(current_thresholds)), sigfig(prod(size(current_thresholds))/2, 2)));
 
 for frequency = 1:length(frequencies)
+    stim.repetition_Hz = frequencies(frequency);
+
     for dur = 1:length(durations)
+        stim.halftime_s = durations(dur);
+        
+        handles = configure_acquisition_devices(hObject, handles);
+ 
         for polarity = 1:length(polarities)
             if stop_button_pressed
                 stop_button_pressed = false;
                 return;
             end
             stim.current_uA = 1;
-            stim.repetition_Hz = frequencies(frequency);
-            stim.halftime_s = durations(dur);
             electrode_bit = 0; % run over all stim polarities...
             stim.negativefirst = zeros(size(stim.active_electrodes));
             for electrode = find(stim.active_electrodes)
@@ -2186,3 +2190,12 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
+
+
+function xscale_Callback(hObject, eventdata, handles)
+
+
+function xscale_CreateFcn(hObject, eventdata, handles)
+if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor',[.9 .9 .9]);
+end

@@ -11,6 +11,7 @@ while currently_reconfiguring
     data = [];
     response_detected = [];
     voltage = [];
+    errors = {};
     return;
 end
 

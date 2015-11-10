@@ -1,6 +1,17 @@
 function [ data ] = update_data_struct(data, detrend_param, handles)
 
 
+if ~isfield(data, 'version')
+    data.version = 0;
+    
+    npts = size(data.data, 1);
+    data.data_raw = [data.data zeros(npts, 1)];
+    
+    % Add timing pulse to channel 4
+    data.data_raw(4, find(abs(data.data(:,3)) > 0.5, 1)) = 1;
+    
+end
+
 if data.version < 8
     [data.data_aligned data.triggertime data.n_repetitions_actual] ...
         = chop_and_align(data.data_raw, ...
@@ -8,7 +19,8 @@ if data.version < 8
                          data.time', ...
                          Inf, ...
                          data.fs);
-end    
+    data.times_aligned = data.time - data.triggertime;
+end
 
 
 

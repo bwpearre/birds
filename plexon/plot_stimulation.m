@@ -37,8 +37,9 @@ nchannels = size(d.response, 3);
 n_repetitions = d.n_repetitions;
 
 % For the graph
-beforetrigger = -1e-3;
-aftertrigger = 6e-3;
+xscale = get(handles.xscale, 'Value');
+beforetrigger = -3 * 1e-3 * xscale;
+aftertrigger = 30 * 1e-3 * xscale;
 
 colours = distinguishable_colors(nchannels);
 
@@ -180,18 +181,23 @@ if isempty(v)
     disp('No data to plot here... quitting...');
     return;
 end
-axes3yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
-    data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 2), 1)));
-set(axes3yy(1), 'XLim', data.ni.times_aligned(v([1 end])));
-set(axes3yy(2), 'XLim', data.ni.times_aligned(v([1 end])));
-if isfield(data.stim, 'target_current')
-    hold(axes3yy(2), 'on');
-    plot(axes3yy(2), data.stim.target_current(1,:), data.stim.target_current(2,:), 'g');
-    hold(axes3yy(2), 'off');
-    legend(handles.axes3, 'V', 'i', 'i*');
-else
-    legend(handles.axes3, data.ni.names{1:2});
+%axes3yy = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(mean(data.ni.stim(:, v, 1), 1)), ...
+[axes3yy h1 h2] = plotyy(handles.axes3, data.ni.times_aligned(v), squeeze(data.ni.stim(:, v, 1)), ...
+    data.ni.times_aligned(v), squeeze((data.ni.stim(:, v, 2))));
+set(axes3yy(1), 'XLim', data.ni.times_aligned(v([1 end])), 'YColor', 'b');
+set(axes3yy(2), 'XLim', data.ni.times_aligned(v([1 end])), 'YColor', 'r');
+for i = 1:length(h1)
+    set(h1(i), 'Color', 'b');
+    set(h2(i), 'Color', 'r');
 end
+
+hold(axes3yy(2), 'on');
+h3 = plot(axes3yy(2), data.stim.target_current(1,:), data.stim.target_current(2,:), 'Color', [0 1 0]);
+hold(axes3yy(2), 'off');
+
+legend_handles = [h1(1) h2(1) h3];
+legend_names = {'V', 'i', 'i*'};
+legend(handles.axes3, legend_handles, legend_names);
 
 xlabel(handles.axes3, 'ms');
 set(get(axes3yy(1),'Ylabel'),'String','V')

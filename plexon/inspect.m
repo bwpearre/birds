@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 30-Oct-2015 17:46:26
+% Last Modified by GUIDE v2.5 10-Nov-2015 11:48:05
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -522,3 +522,14 @@ end
 
 % --- Executes on button press in thinking.
 function thinking_Callback(hObject, eventdata, handles)
+
+
+% --- Executes on slider movement.
+function xscale_Callback(hObject, eventdata, handles)
+set(handles.axes1, 'XLim', get(handles.yscale, 'Value') * [-3 30] * 1e-3);
+set(handles.axes2, 'XLim', get(handles.yscale, 'Value') * [-3 30] * 1e-3);
+
+function xscale_CreateFcn(hObject, eventdata, handles)
+if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor',[.9 .9 .9]);
+end
