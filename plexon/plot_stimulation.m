@@ -139,6 +139,7 @@ if any(d.spikes)
 else
     set(handles.response_indicator, 'BackgroundColor', 0.94 * [1 1 1], 'String', 'Response?');
 end
+drawnow;
 
 %show_channels = union(d.show, find(d.spikes))
 show_channels = d.show;

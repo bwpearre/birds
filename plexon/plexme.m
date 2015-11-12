@@ -2066,6 +2066,7 @@ min_current_voltage = NaN;
 stim.current_uA = start_uAmps;
 
 data = [];
+stim %;
 while isempty(data)
     [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
     data
@@ -2074,6 +2075,7 @@ end
     
 while factor > final_factor
     update_gui_values(hObject, handles);
+    drawnow;
 
     if stop_button_pressed
         return;
@@ -2096,7 +2098,7 @@ while factor > final_factor
         case 0
             % No response: (1) increase current, (2) check termination
             % conditions
-            stim.current_uA = stim.current_uA * factor
+            stim.current_uA = stim.current_uA * factor;
             if stim.current_uA > max_uAmps
                 stim.current_uA = max_uAmps; % unused--just safety
                 factor = 0; % Try one more, and then terminate
@@ -2114,6 +2116,7 @@ while factor > final_factor
             % stim.
     end
     
+    stim %;
     [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
     while isempty(data)
         [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
@@ -2135,9 +2138,11 @@ DEBUG = false;
 disable_controls(hObject, handles);
 stop_button_pressed = false;
 
-frequencies = 30 * 1.1.^[-2:3]
-durations = 100e-6 * 2.^[-2:0.5:2]
-polarities = 0:(2^sum(stim.active_electrodes)-1);
+frequencies = 30 * 1.1.^[-1:2]
+durations = 100e-6 * 2.^[1:2]
+%polarities = 0:(2^sum(stim.active_electrodes)-1);
+polarities = randperm(2^sum(stim.active_electrodes)) - 1;
+polarities = polarities(1:min([length(polarities) 30]));
 
 if DEBUG
     frequencies = 30;
@@ -2168,7 +2173,6 @@ for frequency = 1:length(frequencies)
                 stop_button_pressed = false;
                 return;
             end
-            stim.current_uA = 1;
             electrode_bit = 0; % run over all stim polarities...
             stim.negativefirst = zeros(size(stim.active_electrodes));
             for electrode = find(stim.active_electrodes)
