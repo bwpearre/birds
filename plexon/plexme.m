@@ -107,13 +107,13 @@ end
 
 currently_reconfiguring = true;
 
-max_uAmps = 1000;
+max_uAmps = 25;
 min_uAmps = 0.05;
 increase_step = 1.1;
 start_uAmps = 1;
 stim.current_uA = start_uAmps;
 inter_trial_s = 0.01; % Additional time between sets; not really used.
-voltage_limit = 8;
+voltage_limit = 5;
 hardware.plexon.id = 1;   % Assume (hardcode) 1 Plexon box
 hardware.plexon.open = false;
 change = increase_step;
@@ -614,7 +614,6 @@ function tdt_show_channel_Callback(hObject, eventData)
 global stim;
 
 stim.tdt_show(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
-
 
 
 
@@ -1471,17 +1470,22 @@ function response_show_avg_Callback(hObject, eventdata, handles)
 if get(hObject, 'Value')
     set(handles.response_show_all, 'Value', 0);
 end
+plot_stimulation([], handles, true);
 
 function response_show_all_Callback(hObject, eventdata, handles)
 if get(hObject, 'Value')
     set(handles.response_show_avg, 'Value', 0);
 end
+plot_stimulation([], handles, true);
 
 function response_show_trend_Callback(hObject, eventdata, handles)
+plot_stimulation([], handles, true);
 
 function response_show_detrended_Callback(hObject, eventdata, handles)
+plot_stimulation([], handles, true);
 
 function response_filter_Callback(hObject, eventdata, handles)
+plot_stimulation([], handles, true);
 
 
 
@@ -2055,7 +2059,7 @@ global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
 
 response = false;
-factor = 1.6;
+factor = 1.5;
 final_factor = 1.1;
 min_current = Inf;
 min_current_voltage = NaN;
@@ -2064,6 +2068,7 @@ stim.current_uA = start_uAmps;
 data = [];
 while isempty(data)
     [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+    data
 end
 
     
@@ -2078,7 +2083,7 @@ while factor > final_factor
         case 1
             % Response seen: (1) decrease search step size, (2) reduce
             % current, (3) check termination conditions
-            factor = factor ^ 0.8;
+            factor = factor ^ 0.9;
             min_current = min(min_current, stim.current_uA);
             min_current_voltage = voltage; 
             stim.current_uA = stim.current_uA / factor;
@@ -2091,7 +2096,7 @@ while factor > final_factor
         case 0
             % No response: (1) increase current, (2) check termination
             % conditions
-            stim.current_uA = stim.current_uA * factor;
+            stim.current_uA = stim.current_uA * factor
             if stim.current_uA > max_uAmps
                 stim.current_uA = max_uAmps; % unused--just safety
                 factor = 0; % Try one more, and then terminate
@@ -2109,6 +2114,7 @@ while factor > final_factor
             % stim.
     end
     
+    [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
     while isempty(data)
         [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
     end
@@ -2124,7 +2130,7 @@ global stop_button_pressed;
 global current_thresholds current_threshold_voltages;
 global datadir;
 
-DEBUG = true;
+DEBUG = false;
 
 disable_controls(hObject, handles);
 stop_button_pressed = false;
