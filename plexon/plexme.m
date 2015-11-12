@@ -939,6 +939,12 @@ global hardware stim;
 global axes1;
 global increase_type;
 global stim_timer;
+global thewaitbar;
+
+if ~isempty(thewaitbar)
+    delete(thewaitbar);
+    thewaitbar = [];
+end
 
 %PS_StopStimAllChannels(hardware.plexon.id);
 
@@ -2132,6 +2138,7 @@ global stim hardware detrend_param;
 global stop_button_pressed;
 global current_thresholds current_threshold_voltages;
 global datadir;
+global thewaitbar;
 
 DEBUG = false;
 
@@ -2157,6 +2164,19 @@ end
 
 current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
 voltages = zeros(length(frequencies), length(durations), length(polarities));
+
+% Track progress...
+nsearches = prod(size(current_thresholds));
+nsearches_done = 0;
+start_time = tic;
+start_datetime = datenum(datetime('now'));
+if isempty(thewaitbar)
+    thewaitbar = waitbar(0, 'Time remaining: 5.5 years');
+else
+    waitbar(0, thewaitbar, 'Time remaining: 5.5 years');
+end
+
+
 disp(sprintf('Doing %d threshold searches. This might take around %s minutes.', ...
     prod(size(current_thresholds)), sigfig(prod(size(current_thresholds))/2, 2)));
 
@@ -2189,14 +2209,27 @@ for frequency = 1:length(frequencies)
             
             [current_thresholds(frequency, dur, polarity) ...
                 current_threshold_voltages(frequency, dur, polarity) ] = find_threshold(hObject, handles);
-        end
+            
+            elapsed_time = toc(start_time);
+            nsearches_done = nsearches_done + 1;
+            total_expected_time = elapsed_time * nsearches / nsearches_done;
+            expected_finish_time = start_datetime + (total_expected_time / (24*3600));
+            waitbar(elapsed_time / total_expected_time, ...
+                thewaitbar, ...
+                sprintf('Expected finish time: %s', datestr(expected_finish_time, 'dddd HH:MM:SS')));
         
-        save(fullfile(datadir, 'current_thresholds'), ...
-            'current_thresholds', 'current_threshold_voltages', ...
-            'frequencies', 'durations', ...
-            'polarities', 'stim', 'detrend_param');
+            
+        
+            save(fullfile(datadir, 'current_thresholds'), ...
+                'current_thresholds', 'current_threshold_voltages', ...
+                'frequencies', 'durations', ...
+                'polarities', 'stim', 'detrend_param');
+        end
     end
 end
+
+delete(thewaitbar);
+thewaitbar = [];
 
 enable_controls(handles);
 
