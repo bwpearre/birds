@@ -20,14 +20,14 @@ if isfield(data, 'detrend_param') ...
         & isequal(detrend_param.range, data.detrend_param.range) ...
         & isfield(d, 'response_detrended') ...
         & all(size(response) == size(d.response))
-    disp('detrend_response: Using cached detrend with the same parameters.');
+    %disp('detrend_response: Using cached detrend with the same parameters.');
     detrended = d.response_detrended;
     trend = d.response_trend;
     return;
+elseif isfield(data, 'detrend_param') ...
+        & isfield(d, 'response_detrended')
+    disp('Detrend parameters differ from cached version. Re-detrending.');
 end
-
-%disp(sprintf('DETRENDING %d pulses per channel, %d channels...', ...
-%    size(response,1), size(d.response,3)));
 
 if isempty(response)
     % Use a processed version (e.g. mean or subset) if provided; otherwise revert to detrending individuals

@@ -1442,20 +1442,22 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-
-% --- Executes on slider movement.
-function yscale_Callback(hObject, eventdata, handles)
-global show_device;
-global recording_amplifier_gain;
-
-switch lower(show_device)
-    case 'tdt'
-        recording_amplifier_gain = 1;
-    case 'ni'
-        recording_amplifier_gain = hardware.intan.gain;
+% --- Executes on slider movement. DUPLICATED in inspect.m
+function xscale_Callback(hObject, eventdata, handles)
+last_xlim = get(handles.axes1, 'XLim');
+set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
+set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
+new_xlim = get(handles.axes1, 'XLim');
+% It seems that the whole graph isn't drawn--expanding the view region
+% results in blank areas. In this case, replot.
+if new_xlim(2) > last_xlim(2)
+    plot_stimulation([], handles, 1);
 end
 
-set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1000/recording_amplifier_gain);
+% --- Executes on slider movement. DUPLICATED in inspect.m
+function yscale_Callback(hObject, eventdata, handles)
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+%plot_stimulation([], handles, 1);
 
 
 % --- Executes during object creation, after setting all properties.
@@ -2067,7 +2069,7 @@ end
     
 while factor > final_factor
     update_gui_values(hObject, handles);
-        
+
     if stop_button_pressed
         return;
     end
@@ -2201,9 +2203,6 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 
-
-
-function xscale_Callback(hObject, eventdata, handles)
 
 
 function xscale_CreateFcn(hObject, eventdata, handles)

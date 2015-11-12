@@ -54,11 +54,9 @@ path(sprintf('%s/../lib', scriptpath), path);
 
 global responses_detrended;
 global wait_bar;
-global knowngood;
-global heur;
-global nnsetX;
 global tdt_show_now tdt_show_data tdt_show_data_last tdt_show_last_chosen;
 global detrend_param;
+
 
 clear detrend_param;
 
@@ -141,6 +139,7 @@ drawnow;
 
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
+
 
 devices = {};
 devices_perhaps = {'tdt', 'ni'};
@@ -344,10 +343,22 @@ set(handles.train, 'Enable', 'on');
 
 
 % --- Executes on slider movement.
-function yscale_Callback(hObject, eventdata, handles)
-set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
-set(handles.axes2, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/515/2);
+function xscale_Callback(hObject, eventdata, handles)
+last_xlim = get(handles.axes1, 'XLim');
+set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
+set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
+new_xlim = get(handles.axes1, 'XLim');
+% It seems that the whole graph isn't drawn--expanding the view region
+% results in blank areas. In this case, replot.
+if new_xlim(2) > last_xlim(2)
+    plot_stimulation([], handles, 1);
+end
 
+
+% --- Executes on slider movement.
+function yscale_Callback(hObject, eventdata, handles)
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+set(handles.axes2, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
 
 
 % --- Executes during object creation, after setting all properties.
@@ -519,10 +530,7 @@ end
 
 
 
-% --- Executes on slider movement.
-function xscale_Callback(hObject, eventdata, handles)
-set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30] * 1e-3);
-set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] * 1e-3);
+
 
 function xscale_CreateFcn(hObject, eventdata, handles)
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))

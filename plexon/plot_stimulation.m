@@ -1,12 +1,23 @@
-function plot_stimulation(data, handles);
-
-if isempty(data)
-    return;
-end
+function plot_stimulation(data, handles, use_cached);
 
 global axes1 axes2 axes3 axes4;
 global detrend_param;
 
+% A bunch of GUI-changing functions want to be able to call
+% plot_stimulation but because they're called through the GUI they don't
+% have access to 'data'. So if plot_stimulation([], handles), use the last
+% data plotted.
+persistent cached_data;
+if isempty(data) & ~exist('use_cached', 'var')
+    return;
+elseif exist('use_cached', 'var') & use_cached
+    data = cached_data;
+else
+    if isempty(data)
+        a(0)
+    end
+    cached_data = data;
+end
 
 % If plot_stimulation is called from a timer or DAQ callback, the axes are
 % not present in the handles structure.  You may need a beer for this
