@@ -2059,7 +2059,7 @@ end
 
 
 
-function [min_current min_current_voltage] = find_threshold(hObject, handles)
+function [min_current min_current_voltage stim_filename] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
@@ -2069,13 +2069,12 @@ factor = 1.5;
 final_factor = 1.1;
 min_current = Inf;
 min_current_voltage = NaN;
+stim_filename = {};
 stim.current_uA = start_uAmps;
 
 data = [];
-stim %;
 while isempty(data)
     [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
-    data
 end
 
     
@@ -2093,7 +2092,8 @@ while factor > final_factor
             % current, (3) check termination conditions
             factor = factor ^ 0.9;
             min_current = min(min_current, stim.current_uA);
-            min_current_voltage = voltage; 
+            min_current_voltage = voltage;
+            stim_filename = data.filename;
             stim.current_uA = stim.current_uA / factor;
             if stim.current_uA < min_uAmps
                 stim.current_uA = min_uAmps; % unused--just safety
@@ -2122,7 +2122,6 @@ while factor > final_factor
             % stim.
     end
     
-    stim %;
     [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
     while isempty(data)
         [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
@@ -2136,7 +2135,7 @@ end
 function full_threshold_scan_Callback(hObject, eventdata, handles)
 global stim hardware detrend_param;
 global stop_button_pressed;
-global current_thresholds current_threshold_voltages;
+global current_thresholds current_threshold_voltages; % add to plot_stim...?
 global datadir;
 global thewaitbar;
 
@@ -2163,7 +2162,8 @@ end
 
 
 current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
-voltages = zeros(length(frequencies), length(durations), length(polarities));
+current_threshold_voltages = zeros(length(frequencies), length(durations), length(polarities));
+data_filenames = cell(length(frequencies), length(durations), length(polarities));
 
 % Track progress...
 nsearches = prod(size(current_thresholds));
@@ -2171,9 +2171,9 @@ nsearches_done = 0;
 start_time = tic;
 start_datetime = datenum(datetime('now'));
 if isempty(thewaitbar)
-    thewaitbar = waitbar(0, 'Time remaining: 5.5 years');
+    thewaitbar = waitbar(0, 'Time remaining: hundreds of years');
 else
-    waitbar(0, thewaitbar, 'Time remaining: 5.5 years');
+    waitbar(0, thewaitbar, 'Time remaining: hundreds of years');
 end
 
 
@@ -2208,7 +2208,8 @@ for frequency = 1:length(frequencies)
                 sigfig(stim.repetition_Hz, 2));
             
             [current_thresholds(frequency, dur, polarity) ...
-                current_threshold_voltages(frequency, dur, polarity) ] = find_threshold(hObject, handles);
+                current_threshold_voltages(frequency, dur, polarity), ...
+                data_filenames(frequency, dur, polarity) ] = find_threshold(hObject, handles);
             
             elapsed_time = toc(start_time);
             nsearches_done = nsearches_done + 1;
@@ -2219,11 +2220,11 @@ for frequency = 1:length(frequencies)
                 sprintf('Expected finish time: %s', datestr(expected_finish_time, 'dddd HH:MM:SS')));
         
             
-        
             save(fullfile(datadir, 'current_thresholds'), ...
-                'current_thresholds', 'current_threshold_voltages', ...
+                'current_thresholds', 'current_threshold_voltages', 
+                'data_filenames' ...
                 'frequencies', 'durations', ...
-                'polarities', 'stim', 'detrend_param');
+                'polarities', 'detrend_param');
         end
     end
 end

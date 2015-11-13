@@ -150,10 +150,11 @@ end
 
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 21;
+data.version = 22;
 
 
 data.bird = bird;
+data.time = datenum(now);
 data.comments = comments;
 data.stim = stim;
 data.stim.duration = 2 * stim.halftime_s + stim.interpulse_s;
@@ -278,12 +279,14 @@ set(handles.baseline1, 'String', sprintf('%.2g', data.goodtimes(2)*1000));
 
 
 if saving_stimulations
-    datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
+    
+    data.filename = [ file_basename '_' datestr(data.time, file_format) '.mat' ];
+    fullfilename = fullfile(datadir, data.filename);
     if ~exist(datadir, 'dir')
         mkdir(datadir);
     end
 
-    save(fullfile(datadir, datafile_name), 'data');
+    save(fullfilename, 'data');
 end
 
 response_detected = any(data.tdt.spikes);

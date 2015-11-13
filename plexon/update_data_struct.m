@@ -136,6 +136,8 @@ if data.version < 20
     data.stim.plexon_monitor_electrode = data.plexon_monitor_electrode;
 end
 
+
+
 if data.version < 21
     target_current = [ 0                                   0 ; ...
         0                                                  data.stim.current_uA ; ...
@@ -150,3 +152,12 @@ if data.version < 21
     end
     data.stim.target_current = target_current;
 end
+
+
+
+if data.version < 22
+     % These could be corrected if needed...
+    data.time = 0;
+    data.filename = '';
+end
+
