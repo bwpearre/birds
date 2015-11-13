@@ -2088,23 +2088,40 @@ while factor > final_factor
     
     switch response
         case 1
-            % Response seen: (1) decrease search step size, (2) reduce
-            % current, (3) check termination conditions
+            % Response seen: (0) record it, (1) decrease search step size,
+            % (2) reduce current, (3) check termination conditions Best
+            % stim so far? If so, save it.
+            
+            % (0) record it
+            if stim.current_uA < min_current
+                min_current = stim.current_uA;
+                min_current_voltage = voltage;
+                stim_filename = data.filename;
+            end
+
+            % (1, 2)
             factor = factor ^ 0.9;
-            min_current = min(min_current, stim.current_uA);
-            min_current_voltage = voltage;
-            stim_filename = data.filename;
             stim.current_uA = stim.current_uA / factor;
+            
+            % (3)
             if stim.current_uA < min_uAmps
                 stim.current_uA = min_uAmps; % unused--just safety
                 factor = 1.1 + eps % try min, then terminate
             end
+            
             % This results in a decrease of current, so let's skip the
             % error check...
         case 0
             % No response: (1) increase current, (2) check termination
             % conditions
             stim.current_uA = stim.current_uA * factor;
+            
+            % If we don't have a best-case stim filename, save something
+            % anyway. This will be the largest stim current used.
+            if isempty(stim_filename)
+                stim_filename = data.filename;
+            end
+            
             if stim.current_uA > max_uAmps
                 stim.current_uA = max_uAmps; % unused--just safety
                 factor = 0; % Try one more, and then terminate
@@ -2115,6 +2132,7 @@ while factor > final_factor
                 end
                 break;
             end
+            
 
         case NaN
             % That quirk in which the first stim sometimes doesn't register
