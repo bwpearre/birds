@@ -2096,7 +2096,7 @@ while factor > final_factor
             if stim.current_uA < min_current
                 min_current = stim.current_uA;
                 min_current_voltage = voltage;
-                stim_filename = data.filename;
+                stim_filename = cellstr(data.filename);
             end
 
             % (1, 2)
@@ -2119,7 +2119,7 @@ while factor > final_factor
             % If we don't have a best-case stim filename, save something
             % anyway. This will be the largest stim current used.
             if isempty(stim_filename)
-                stim_filename = data.filename;
+                stim_filename = cellstr(data.filename);
             end
             
             if stim.current_uA > max_uAmps
@@ -2162,7 +2162,7 @@ DEBUG = false;
 disable_controls(hObject, handles);
 stop_button_pressed = false;
 
-frequencies = 30 * 1.1.^[-1:2]
+frequencies = 30 * 1.1.^[-1:0]
 durations = 100e-6 * 2.^[1:2]
 %polarities = 0:(2^sum(stim.active_electrodes)-1);
 polarities = randperm(2^sum(stim.active_electrodes)) - 1;
@@ -2239,8 +2239,8 @@ for frequency = 1:length(frequencies)
         
             
             save(fullfile(datadir, 'current_thresholds'), ...
-                'current_thresholds', 'current_threshold_voltages', 
-                'data_filenames' ...
+                'current_thresholds', 'current_threshold_voltages', ...
+                'data_filenames', ...
                 'frequencies', 'durations', ...
                 'polarities', 'detrend_param');
         end

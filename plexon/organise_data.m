@@ -256,7 +256,7 @@ meanstim = mean(data.ni.stim(:,:,2), 1);
 current_frac = sum(abs(meanstim(1, u, 1))) / sum(abs(resample_currents(v)));
 if current_frac < 0.5
     errors.val = errors.val | 2;
-    errors.name{end+1} = sprintf('ERROR: Channel %d current delivered is only %s%% of target. Bad circuit!', ...
+    errors.name{end+1} = sprintf('TERMINATE: Channel %d current delivered is only %s%% of target. Bad circuit!', ...
           stim.plexon_monitor_electrode, ...
           sigfig(current_frac*100, 2));
 end
@@ -269,7 +269,7 @@ end
 voltage = max(abs(voltage_range_last_stim));
 if voltage > voltage_limit
     errors.val = errors.val | 1;
-    errors.name{end+1} = sprintf('ERROR: Voltage over limit: %s V delivered.', sigfig(voltage, 2));
+    errors.name{end+1} = sprintf('TERMINATE: Voltage over limit: %s V delivered.', sigfig(voltage, 2));
 end
 
 
