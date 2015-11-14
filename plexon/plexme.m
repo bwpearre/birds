@@ -2059,54 +2059,61 @@ end
 
 
 
-function [min_current min_current_voltage stim_filename] = find_threshold(hObject, handles)
+function [best_current_so_far best_current_voltage stim_filename] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
 
-response = false;
-factor = 1.5;
-final_factor = 1.1;
-min_current = Inf;
-min_current_voltage = NaN;
+factor = 1.4;
+final_factor = 1.05;
+best_current_so_far = Inf;
+best_current_voltage = NaN;
 stim_filename = {};
 stim.current_uA = start_uAmps;
 
-data = [];
-while isempty(data)
-    [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
-end
+done = false;
 
     
-while factor > final_factor
+while ~done
+    
     update_gui_values(hObject, handles);
     drawnow;
-
+    
     if stop_button_pressed
         return;
     end
     
+    data = [];
+    while isempty(data)
+        [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+    end
+
     switch response
         case 1
-            % Response seen: (0) record it, (1) decrease search step size,
-            % (2) reduce current, (3) check termination conditions Best
-            % stim so far? If so, save it.
+            % Response seen: (0) record it, (1) reduce current, (2)
+            % decrease search step size, (3) check termination conditions
+            % Best stim so far? If so, save it.
             
             % (0) record it
-            if stim.current_uA < min_current
-                min_current = stim.current_uA;
-                min_current_voltage = voltage;
+            if stim.current_uA < best_current_so_far
+                best_current_so_far = stim.current_uA;
+                best_current_voltage = voltage;
                 stim_filename = cellstr(data.filename);
             end
 
             % (1, 2)
-            factor = factor ^ 0.9;
             stim.current_uA = stim.current_uA / factor;
+            factor = factor ^ (1/1.6);
+            if factor < final_factor
+                done = true;
+            end
             
             % (3)
             if stim.current_uA < min_uAmps
-                stim.current_uA = min_uAmps; % unused--just safety
-                factor = 1.1 + eps % try min, then terminate
+                %disp(sprintf('Current is %s < %s, but saw response so continuing lower anyway!', ...
+                %    sigfig(stim.current_uA, 3), sigfig(min_uAmps, 3)));
+                stim.current_uA = min_uAmps;
+                done = true;
             end
             
             % This results in a decrease of current, so let's skip the
@@ -2114,6 +2121,17 @@ while factor > final_factor
         case 0
             % No response: (1) increase current, (2) check termination
             % conditions
+            if stim.current_uA >= max_uAmps
+                done = true;
+            end
+            
+            if errors.val
+                for i = 1:length(errors.name)
+                    disp(errors.name{i});
+                end
+                done = true;
+            end
+            
             stim.current_uA = stim.current_uA * factor;
             
             % If we don't have a best-case stim filename, save something
@@ -2122,28 +2140,12 @@ while factor > final_factor
                 stim_filename = cellstr(data.filename);
             end
             
-            if stim.current_uA > max_uAmps
-                stim.current_uA = max_uAmps; % unused--just safety
-                factor = 0; % Try one more, and then terminate
-            end
-            if errors.val ~= 0
-                for i = 1:length(errors.name)
-                    disp(errors.name{i});
-                end
-                break;
-            end
-            
 
         case NaN
             % That quirk in which the first stim sometimes doesn't register
             % on the NI will result in NaN. Do nothing; await the next
             % stim.
-    end
-    
-    [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
-    while isempty(data)
-        [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
-    end
+    end        
 end
 
 
@@ -2162,11 +2164,11 @@ DEBUG = false;
 disable_controls(hObject, handles);
 stop_button_pressed = false;
 
-frequencies = 30 * 1.1.^[-1:0]
-durations = 100e-6 * 2.^[1:2]
+frequencies = [25 25 25]
+durations = 200e-6;
 %polarities = 0:(2^sum(stim.active_electrodes)-1);
 polarities = randperm(2^sum(stim.active_electrodes)) - 1;
-polarities = polarities(1:min([length(polarities) 30]));
+polarities = polarities(1:min([length(polarities) 50]));
 
 if DEBUG
     frequencies = 30;
@@ -2220,10 +2222,10 @@ for frequency = 1:length(frequencies)
                     electrode, stim.negativefirst(electrode)));
             end
             
-            fprintf('Stimulating: %s uA for %s us at %s Hz.\n', ...
-                sigfig(stim.current_uA, 2), ...
-                sigfig(stim.halftime_s*1e6, 2), ...
-                sigfig(stim.repetition_Hz, 2));
+            %fprintf('Stimulating: %s uA for %s us at %s Hz.\n', ...
+            %    sigfig(stim.current_uA, 2), ...
+            %    sigfig(stim.halftime_s*1e6, 2), ...
+            %    sigfig(stim.repetition_Hz, 2));
             
             [current_thresholds(frequency, dur, polarity) ...
                 current_threshold_voltages(frequency, dur, polarity), ...

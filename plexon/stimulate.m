@@ -6,8 +6,8 @@ global monitor_struct;
 
 
 while currently_reconfiguring
-    disp('Still reconfiguring the hardware... please wait (about 2 seconds, usually)...');
-    pause(1);
+    disp('Still reconfiguring the hardware... please wait (about 5 seconds, usually)...');
+    pause(2);
     data = [];
     response_detected = [];
     voltage = [];
@@ -18,7 +18,6 @@ end
 set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
 set(handles.halftime, 'String', sprintf('%.1f', stim.halftime_s * 1e6));
 
-      
 
 % A is amplitude, W is width, Delay is interphase delay.
 
