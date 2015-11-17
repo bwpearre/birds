@@ -16,7 +16,7 @@ while currently_reconfiguring
 end
 
 set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
-set(handles.halftime, 'String', sprintf('%.1f', stim.halftime_s * 1e6));
+set(handles.halftime, 'String', sigfig(stim.halftime_s * 1e6, 3));
 
 
 % A is amplitude, W is width, Delay is interphase delay.

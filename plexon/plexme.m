@@ -96,7 +96,7 @@ if true % For my X--HVC experiment
     detrend_param.range = [0.003 0.025];
     detrend_param.response_roi = [0.0035 0.007];
     detrend_param.response_baseline = [0.012 0.025];
-    detrend_param.response_detection_threshold = 2e-10;
+    detrend_param.response_detection_threshold = 1e-10;
 else
     detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
     detrend_param.range = [0.0007 0.02];
@@ -120,7 +120,7 @@ change = increase_step;
 
 
 stim.n_repetitions = 10;
-stim.repetition_Hz = 30;
+stim.repetition_Hz = 25;
 
 
 % NI control rubbish
@@ -183,7 +183,7 @@ end
 bird = 'noname';
 datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 increase_type = 'current'; % or 'time'
-default_halftime_s = 100e-6;
+default_halftime_s = 200e-6;
 stim.halftime_s = default_halftime_s;
 stim.interpulse_s = 0;
 stim.plexon_monitor_electrode = 1;
@@ -1243,7 +1243,7 @@ switch increase_type
         set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
     case 'time'
         stim.halftime_s = min(default_halftime_s, stim.halftime_s * change);
-        set(handles.halftime, 'String', sprintf('%.1f', stim.halftime_s) * 1e6);
+        set(handles.halftime, 'String', sigfig(stim.halftime_s * 1e6, 3));
 end
        
 
@@ -1853,6 +1853,10 @@ unused = {'min_uAmps', ...
 savename = strcat(scriptdir, '/saved.mat');
 
 
+
+
+
+
 function update_gui_values(hObject, handles);
 global hardware scriptdir;
 
@@ -1881,8 +1885,8 @@ set(handles.startcurrent, 'String', sprintf('%d', round(start_uAmps)));
 set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
 set(handles.maxcurrent, 'String', sprintf('%d', round(max_uAmps)));
 set(handles.increasefactor, 'String', sprintf('%g', increase_step));
-set(handles.halftime, 'String', sprintf('%d', round(stim.halftime_s*1e6)));
-set(handles.delaytime, 'String', sprintf('%g', stim.interpulse_s*1e6));
+set(handles.halftime, 'String', sigfig(stim.halftime_s*1e6, 3));
+set(handles.delaytime, 'String', sigfig(stim.interpulse_s*1e6, 3));
 set(handles.n_repetitions_box, 'String', sprintf('%d', stim.n_repetitions));
 set(handles.n_repetitions_hz_box, 'String', sigfig(stim.repetition_Hz, 3));
 set(handles.comments, 'String', comments);
@@ -2063,9 +2067,10 @@ function [best_current_so_far best_current_voltage stim_filename] = find_thresho
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
+global increase_step;
 
-factor = 1.4;
-final_factor = 1.05;
+factor = increase_step;
+final_factor = 1.03;
 best_current_so_far = Inf;
 best_current_voltage = NaN;
 stim_filename = {};
@@ -2164,11 +2169,11 @@ DEBUG = false;
 disable_controls(hObject, handles);
 stop_button_pressed = false;
 
-frequencies = [25 25 25]
+frequencies = [25 25]
 durations = 200e-6;
 %polarities = 0:(2^sum(stim.active_electrodes)-1);
 polarities = randperm(2^sum(stim.active_electrodes)) - 1;
-polarities = polarities(1:min([length(polarities) 50]));
+polarities = polarities(1:min([length(polarities) 30]));
 
 if DEBUG
     frequencies = 30;
