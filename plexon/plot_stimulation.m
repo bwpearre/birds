@@ -141,7 +141,7 @@ else
 end
 drawnow;
 
-%show_channels = union(d.show, find(d.spikes))
+%show_channels = union(d.show, find(d.spikes));
 show_channels = d.show;
 
 for channel = show_channels

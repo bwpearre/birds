@@ -20,19 +20,27 @@ for i = 1:length(d)
     most = max(most, foo);
 end
 
+most = 4;
+
 
 for i = 1:length(d)
     
     [nfreqs ndurs npolarities] = size(d{i}.current_thresholds);
     polarity_indices = [1:npolarities];
+    
+    nfreqs = 2;
+    ndurs = 2;
 
     [~, sort_indices] = sort(squeeze(d{i}.current_thresholds(1, 1, :)));
-    %[~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(1, 1, :)));
+    
+    % Need polarity_indices here for the buggy dataset lw85ry-2015-11-12:
+    [~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(1, 1, polarity_indices)));
+    
     %sort_indices = 1:npolarities;
     
 
     plotpos = 0;
-        
+    
     polarities_sorted = d{i}.polarities(sort_indices);
     
     for freq = 1:nfreqs
@@ -44,11 +52,11 @@ for i = 1:length(d)
             current_thresholds_sorted = squeeze(d{i}.current_thresholds(freq, dur, sort_indices));
                         
             % FIT() requires no NANs, but doesn't care about order.
-            found = find(~isinf(current_thresholds_sorted));
+            found = find(~isnan(current_thresholds_sorted) & ~isinf(current_thresholds_sorted));
             
             ff = fit(found, ...
                      current_thresholds_sorted(found), ...
-                     'poly1');
+                     'poly1')
             fy = ff([1 npolarities]');
             cor = corr(current_thresholds_sorted(found), ...
                        ff(found), 'rows', 'complete');
@@ -76,7 +84,7 @@ for i = 1:length(d)
                 
                 ff = fit(found, ...
                     current_threshold_voltages_sorted(found), ...
-                    'poly1');
+                    'poly1')
                 fy = ff([1 npolarities]');
                 cor = corr(current_threshold_voltages_sorted(found), ...
                            ff(found));
@@ -88,7 +96,7 @@ for i = 1:length(d)
                 plot(found, current_threshold_voltages_sorted(found), '*', ...
                     [1 npolarities], fy, 'g');
 
-                title(sprintf('Voltage: Freq %s, Half-dur %s, corr %s', ...
+                title(sprintf('Freq %s, Half-dur %s, corr %s', ...
                     sigfig(d{i}.frequencies(freq), 3), ...
                     sigfig(d{i}.durations(dur), 3), ...
                     sigfig(cor, 3)));

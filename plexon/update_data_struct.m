@@ -51,6 +51,10 @@ if data.version < 9
     data.ni.triggertime = data.triggertime;
     data.ni.labels = data.labels;
     data.ni.names = data.names;
+    
+    if any(size(data.negativefirst) ~= size(data.stim_electrodes))
+        data.negativefirst = ones(size(data.stim_electrodes)) * data.negativefirst;
+    end
 end    
 
 

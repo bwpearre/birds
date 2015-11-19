@@ -2063,7 +2063,7 @@ end
 
 
 
-function [best_current_so_far best_current_voltage stim_filename] = find_threshold(hObject, handles)
+function [best_current_so_far best_current_voltage final_response_current final_response_voltage stim_filename] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
@@ -2071,8 +2071,10 @@ global increase_step;
 
 factor = increase_step;
 final_factor = 1.03;
-best_current_so_far = Inf;
+best_current_so_far = NaN;
 best_current_voltage = NaN;
+final_response_voltage = NaN;
+final_response_current = NaN;
 stim_filename = {};
 stim.current_uA = start_uAmps;
 
@@ -2108,7 +2110,7 @@ while ~done
 
             % (1, 2)
             stim.current_uA = stim.current_uA / factor;
-            factor = factor ^ (1/1.6);
+            factor = factor ^ (1/1.5);
             if factor < final_factor
                 done = true;
             end
@@ -2120,6 +2122,9 @@ while ~done
                 stim.current_uA = min_uAmps;
                 done = true;
             end
+            
+            final_response_current = stim.current_uA;
+            final_response_voltage = voltage;
             
             % This results in a decrease of current, so let's skip the
             % error check...
@@ -2150,7 +2155,7 @@ while ~done
             % That quirk in which the first stim sometimes doesn't register
             % on the NI will result in NaN. Do nothing; await the next
             % stim.
-    end        
+    end
 end
 
 
@@ -2188,6 +2193,8 @@ end
 
 current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
 current_threshold_voltages = zeros(length(frequencies), length(durations), length(polarities));
+f_current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
+f_current_threshold_voltages = zeros(length(frequencies), length(durations), length(polarities));
 data_filenames = cell(length(frequencies), length(durations), length(polarities));
 
 % Track progress...
