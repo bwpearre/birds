@@ -43,54 +43,59 @@ if ~isempty(hardware.tdt)
     %% If recording with TDT, block until the data buffer has enough samples:
     tdt_TimeStamps = 0:1/hardware.tdt.samplerate:(recording_time+0.01);
 
-    curidx = hardware.tdt.device.GetTagVal('DataIdx');
-    %disp(sprintf('TDT contains %d samples', curidx));
-    lastidx = curidx;
-	while curidx < hardware.tdt.nsamples
-        disp(sprintf('Waiting for TDT: buffer now contains %d samples', curidx));
-		curidx = hardware.tdt.device.GetTagVal('DataIdx');
-        if lastidx == curidx
-            disp('TDT doesn''t seem to be getting triggers.  Discarding...');
-            return;
-        end
+    try
+        curidx = hardware.tdt.device.GetTagVal('DataIdx');
+        %disp(sprintf('TDT contains %d samples', curidx));
         lastidx = curidx;
+        while curidx < hardware.tdt.nsamples
+            disp(sprintf('Waiting for TDT: buffer now contains %d samples', curidx));
+            curidx = hardware.tdt.device.GetTagVal('DataIdx');
+            if lastidx == curidx
+                disp('TDT doesn''t seem to be getting triggers.  Discarding...');
+                return;
+            end
+            lastidx = curidx;
+        end
+        curidx2 = hardware.tdt.device.GetTagVal('DDataIdx');
+        
+        % These should be the same. But TDT!
+        goodlength = min(curidx/16, curidx2);
+        
+        index_recording = find(stim.tdt_valid);
+        
+        tdata = hardware.tdt.device.ReadTagVEX('Data', 0, curidx, 'F32', 'F64', 16)';
+        tddata = hardware.tdt.device.ReadTagV('DData', 0, curidx2)';
+        tdata = tdata(1:goodlength, index_recording);
+        tddata = tddata(1:goodlength, :);
+        
+        
+        
+        tdt_TimeStamps = tdt_TimeStamps(1:goodlength);
+        if false
+            figure(1);
+            subplot(3, 1, [1 2]);
+            plot(tdt_TimeStamps, tdata);
+            subplot(3,1,3);
+            plot(tdt_TimeStamps, tddata);
+            set(gca, 'YLim', [-0.1 6]);
+        end
+        
+        %set(gca, 'XScale', 'linear');
+        % [a b] = rat(NIsession.Rate / tdt_samplerate);
+        % tdata = resample(tdata, a, b);
+        % tddata = resample(double(tddata), a, b);
+        %subplot(1,2,2);
+        %plot(tddata);
+        
+        %figure(1);
+        %subplot(3,1,[1 2]);
+        %plot(tdata);
+        %subplot(3,1,3);
+        %plot(tddata);
+    catch
+        warning('Ignoring TDT-is-stupid error #546, WHICH IS ONLY OKAY IF YOU JUST PRESSED STOP!');
     end
-    curidx2 = hardware.tdt.device.GetTagVal('DDataIdx');
-    
-    % These should be the same. But TDT!
-    goodlength = min(curidx/16, curidx2);
-    
-    index_recording = find(stim.tdt_valid);
 
-    tdata = hardware.tdt.device.ReadTagVEX('Data', 0, curidx, 'F32', 'F64', 16)';
-    tddata = hardware.tdt.device.ReadTagV('DData', 0, curidx2)';
-    tdata = tdata(1:goodlength, index_recording);
-    tddata = tddata(1:goodlength, :);
-    
-    
-    
-    tdt_TimeStamps = tdt_TimeStamps(1:goodlength);
-    if false
-        figure(1);
-        subplot(3, 1, [1 2]);
-        plot(tdt_TimeStamps, tdata);
-        subplot(3,1,3);
-        plot(tdt_TimeStamps, tddata);
-        set(gca, 'YLim', [-0.1 6]);
-    end
-    
-    %set(gca, 'XScale', 'linear');
-    % [a b] = rat(NIsession.Rate / tdt_samplerate);
-    % tdata = resample(tdata, a, b);
-    % tddata = resample(double(tddata), a, b);
-    %subplot(1,2,2);
-    %plot(tddata);
-
-    %figure(1);
-    %subplot(3,1,[1 2]);
-    %plot(tdata);
-    %subplot(3,1,3);
-    %plot(tddata);
 else
     tdata = [];
     tddata = [];

@@ -130,6 +130,11 @@ file = handles.sorted_index(get(hObject,'Value'));
 do_file(hObject, handles, file, true);
 
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% This is the main function!
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
 global detrend_param;
@@ -139,7 +144,6 @@ drawnow;
 
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
-
 
 devices = {};
 devices_perhaps = {'tdt', 'ni'};

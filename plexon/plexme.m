@@ -662,7 +662,11 @@ if false
 end
 
 if ~isempty(hardware.tdt.device)
-    hardware.tdt.device.Halt;
+    try
+        hardware.tdt.device.Halt;
+    catch
+        disp('Caught TDT-is-stupid error #2589723. Moving on.');
+    end
 end
 
 delete(hObject);
@@ -2063,7 +2067,7 @@ end
 
 
 
-function [best_current_so_far best_current_voltage final_response_current final_response_voltage stim_filename] = find_threshold(hObject, handles)
+function [best_current_so_far best_current_voltage stim_filename all_resp all_resp_filenames] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
@@ -2073,10 +2077,11 @@ factor = increase_step;
 final_factor = 1.03;
 best_current_so_far = NaN;
 best_current_voltage = NaN;
-final_response_voltage = NaN;
-final_response_current = NaN;
 stim_filename = {};
 stim.current_uA = start_uAmps;
+
+all_resp = [];
+all_resp_filenames = {};
 
 done = false;
 
@@ -2123,8 +2128,8 @@ while ~done
                 done = true;
             end
             
-            final_response_current = stim.current_uA;
-            final_response_voltage = voltage;
+            all_resp(:, end+1) = [ stim.current_uA; voltage ];
+            all_resp_filenames(end+1) = cellstr(data.filename);
             
             % This results in a decrease of current, so let's skip the
             % error check...
@@ -2174,7 +2179,7 @@ DEBUG = false;
 disable_controls(hObject, handles);
 stop_button_pressed = false;
 
-frequencies = [25 25]
+frequencies = [25 25 25 25 25 25 25 25 25 25]
 durations = 200e-6;
 %polarities = 0:(2^sum(stim.active_electrodes)-1);
 polarities = randperm(2^sum(stim.active_electrodes)) - 1;
@@ -2193,9 +2198,9 @@ end
 
 current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
 current_threshold_voltages = zeros(length(frequencies), length(durations), length(polarities));
-f_current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
-f_current_threshold_voltages = zeros(length(frequencies), length(durations), length(polarities));
 data_filenames = cell(length(frequencies), length(durations), length(polarities));
+all_resp = cell(length(frequencies), length(durations), length(polarities));
+all_resp_filenames = cell(length(frequencies), length(durations), length(polarities));
 
 % Track progress...
 nsearches = prod(size(current_thresholds));
@@ -2220,7 +2225,7 @@ for frequency = 1:length(frequencies)
         
         handles = configure_acquisition_devices(hObject, handles);
  
-        for polarity = 1:length(polarities)
+        for polarity = randperm(length(polarities))
             if stop_button_pressed
                 stop_button_pressed = false;
                 return;
@@ -2239,22 +2244,32 @@ for frequency = 1:length(frequencies)
             %    sigfig(stim.halftime_s*1e6, 2), ...
             %    sigfig(stim.repetition_Hz, 2));
             
+            %[a b c d e] = find_threshold(hObject, handles);
+            %current_thresholds(frequency, dur, polarity) = a;
+            %current_threshold_voltages(frequency, dur, polarity) = b;
+            %data_filenames{frequency, dur, polarity} = c;
+            %all_resp{frequency, dur, polarity} = d;
+            %all_resp_filenames{frequency, dur, polarity} = e;
             [current_thresholds(frequency, dur, polarity) ...
                 current_threshold_voltages(frequency, dur, polarity), ...
-                data_filenames(frequency, dur, polarity) ] = find_threshold(hObject, handles);
+                data_filenames{frequency, dur, polarity}, ...
+                all_resp{frequency, dur, polarity}, ...
+                all_resp_filenames{frequency, dur, polarity}] = find_threshold(hObject, handles);
             
             elapsed_time = toc(start_time);
             nsearches_done = nsearches_done + 1;
             total_expected_time = elapsed_time * nsearches / nsearches_done;
             expected_finish_time = start_datetime + (total_expected_time / (24*3600));
-            waitbar(elapsed_time / total_expected_time, ...
-                thewaitbar, ...
-                sprintf('Expected finish time: %s', datestr(expected_finish_time, 'dddd HH:MM:SS')));
-        
+            if ishandle(thewaitbar)
+                waitbar(elapsed_time / total_expected_time, ...
+                    thewaitbar, ...
+                    sprintf('Expected finish time: %s', datestr(expected_finish_time, 'dddd HH:MM:SS')));
+            end
             
             save(fullfile(datadir, 'current_thresholds'), ...
                 'current_thresholds', 'current_threshold_voltages', ...
                 'data_filenames', ...
+                'all_resp', 'all_resp_filenames', ...
                 'frequencies', 'durations', ...
                 'polarities', 'detrend_param');
         end

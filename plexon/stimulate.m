@@ -166,8 +166,12 @@ end
 
 %plot(handles.axes4, event.TimeStamps, event.Data(:,4));
 
-if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
-    hardware.tdt.device.SetTagVal('mon_gain', hardware.tdt.audio_monitor_gain);
+try
+    if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
+        hardware.tdt.device.SetTagVal('mon_gain', hardware.tdt.audio_monitor_gain);
+    end
+catch
+    disp('Caught TDT-is-being-stupid error #2731. Moving on.');
 end
 
 stim.target_current = target_current;
