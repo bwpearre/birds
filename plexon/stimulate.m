@@ -170,7 +170,7 @@ try
     if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
         hardware.tdt.device.SetTagVal('mon_gain', hardware.tdt.audio_monitor_gain);
     end
-catch
+catch ME
     disp('Caught TDT-is-being-stupid error #2731. Moving on.');
 end
 

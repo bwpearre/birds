@@ -141,21 +141,40 @@ else
 end
 drawnow;
 
-%show_channels = union(d.show, find(d.spikes));
-show_channels = d.show;
+for ch = 1:length(d.show)
+    chr = d.index_recording(ch);
+    if d.spikes(ch)
+        set(handles.tdt_show_buttons{chr}, 'BackgroundColor', [1 0 1]);
+    else
+        set(handles.tdt_show_buttons{chr}, 'BackgroundColor', 0.94 * [1 1 1]);
+    end
+end
+
+if isfield(d, 'show_now')
+    show_channels = d.show_now;
+else
+    show_channels = d.show;
+end
+
+% These need to be cached so we don't get inconsistent legends halfway
+% through.
+show_avg = get(handles.response_show_avg, 'Value');
+show_all = get(handles.response_show_all, 'Value');
+show_detrended = get(handles.response_show_detrended, 'Value');
+show_trend = get(handles.response_show_trend, 'Value');
 
 for channel = show_channels
     
     % Raw (or filtered) response
-    if get(handles.response_show_all, 'Value') | get(handles.response_show_avg, 'Value')
+    if show_all | show_avg
         foo = plot(handles.axes1, ...
             times_aligned(u), ...
             reshape(response_plot(:,u,channel), [size(response_plot, 1) length(u)])', ...
             'Color', colours(channel, :), 'LineWidth', linewidths(channel));
     end
     % Detrended
-    if get(handles.response_show_detrended, 'Value')
-        if get(handles.response_show_avg, 'Value')
+    if show_detrended
+        if show_avg
             foo = plot(handles.axes1, roitimes, ...
                 reshape(mean(d.response_detrended(:, roii, channel), 1), [1 length(roii)])', ...
                 'Color', colours(channel, :), 'LineWidth', linewidths(channel));
@@ -165,7 +184,7 @@ for channel = show_channels
                 'Color', colours(channel, :), 'LineWidth', linewidths(channel));
         end
     end
-    if get(handles.response_show_trend, 'Value')
+    if show_trend
         plot(handles.axes1, roitimes, ...
             reshape(d.response_trend(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
             'Color', colours(channel,:), 'LineStyle', ':');
@@ -179,8 +198,11 @@ for channel = show_channels
 end
 hold(handles.axes1, 'off');
 %legend_names = d.names(d.show);
-legend(handles.axes1, legend_handles, legend_names);
-
+try
+    legend(handles.axes1, legend_handles, legend_names);
+catch ME
+    disp('Legend error: inconsistent legend state.');
+end
     
 title(handles.axes1, 'Response');
 xl = get(handles.axes1, 'XLim');

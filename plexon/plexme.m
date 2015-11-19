@@ -1540,6 +1540,7 @@ global intandir;
 global datadir;
 global impedances_x;
 global valid_electrodes;
+global bird;
 
 
 if ~exist(datadir, 'dir')
@@ -1548,13 +1549,31 @@ end
 
 %% Try to grab any Intan impedance files that may be
 %% lying about... if they were created within the last 30 minutes.
-intanfilespec = strcat(intandir, '*.csv');
+intanfilespec = strcat(intandir, '*.csv')
 csvs = dir(intanfilespec);
 for i = 1:length(csvs)
     % datenum's unit is days, so 1/48 of a day is 30 minutes
     if datenum(now) - csvs(i).datenum <= 1/48
         %disp('Warning: copying x.csv, not moving it as god intended');
-        movefile(strcat(intandir, csvs(i).name), strcat(datadir, '\impedances-', csvs(i).name));
+        copyfile(strcat(intandir, csvs(i).name), strcat(datadir, '\impedances-', csvs(i).name));
+        disp(sprintf('Copied %s to %s', ...
+            strcat(intandir, csvs(i).name), ...
+            strcat(datadir, '\impedances-', csvs(i).name)));
+
+    end
+end
+
+%% Also copy any RECENT (half hour) recordings named 'bird*.rhd' into the data dir
+intanfilespec = strcat(intandir, bird, '*.rhd')
+csvs = dir(intanfilespec);
+for i = 1:length(csvs)
+    % datenum's unit is days, so 1/48 of a day is 30 minutes
+    if datenum(now) - csvs(i).datenum <= 1/48
+        %disp('Warning: copying x.csv, not moving it as god intended');
+        copyfile(strcat(intandir, csvs(i).name), strcat(datadir, '\intan-recordings-', csvs(i).name));
+        disp(sprintf('Copied %s to %s', ...
+            strcat(intandir, csvs(i).name), ...
+            strcat(datadir, '\intan-recordings-', csvs(i).name)));
     end
 end
 if exist(strcat(intandir, 'plexon-compatible.isf'), 'file')
@@ -2219,7 +2238,7 @@ end
 
 
 disp(sprintf('Doing %d threshold searches.', ...
-    prod(size(current_thresholds)));
+    prod(size(current_thresholds))));
 
 for frequency = 1:length(frequencies)
     stim.repetition_Hz = frequencies(frequency);

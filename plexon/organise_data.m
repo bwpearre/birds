@@ -92,7 +92,7 @@ if ~isempty(hardware.tdt)
         %plot(tdata);
         %subplot(3,1,3);
         %plot(tddata);
-    catch
+    catch ME
         warning('Ignoring TDT-is-stupid error #546, WHICH IS ONLY OKAY IF YOU JUST PRESSED STOP!');
     end
 
