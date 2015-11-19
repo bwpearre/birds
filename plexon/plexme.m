@@ -2084,7 +2084,7 @@ all_resp = [];
 all_resp_filenames = {};
 
 done = false;
-
+found_lower_limit = false;
     
 while ~done
     
@@ -2115,9 +2115,11 @@ while ~done
 
             % (1, 2)
             stim.current_uA = stim.current_uA / factor;
-            factor = factor ^ (1/1.5);
-            if factor < final_factor
-                done = true;
+            if found_lower_limit
+                factor = factor ^ (1/1.5);
+                if factor < final_factor
+                    done = true;
+                end
             end
             
             % (3)
@@ -2136,6 +2138,8 @@ while ~done
         case 0
             % No response: (1) increase current, (2) check termination
             % conditions
+            found_lower_limit = true;
+            
             if stim.current_uA >= max_uAmps
                 done = true;
             end
@@ -2214,8 +2218,8 @@ else
 end
 
 
-disp(sprintf('Doing %d threshold searches. This might take around %s minutes.', ...
-    prod(size(current_thresholds)), sigfig(prod(size(current_thresholds))/2, 2)));
+disp(sprintf('Doing %d threshold searches.', ...
+    prod(size(current_thresholds)));
 
 for frequency = 1:length(frequencies)
     stim.repetition_Hz = frequencies(frequency);
