@@ -2094,8 +2094,8 @@ global increase_step;
 
 factor = increase_step;
 final_factor = 1.03;
-best_current_so_far = NaN;
-best_current_voltage = NaN;
+best_current_so_far = Inf;
+best_current_voltage = Inf;
 stim_filename = {};
 stim.current_uA = start_uAmps;
 
