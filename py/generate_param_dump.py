@@ -6,7 +6,7 @@ import os
 # import argparse as args
 import sys
 import pprint
-import Queue
+# import Queue
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures as conf
 
@@ -18,7 +18,7 @@ def add_to_main_data(main, new):
 def convert_data(data):
     temp = {}
     for key, value in data.items():
-        temp_value = list(value)
+        temp_value = sorted(list(value))
         # if temp_value[0] == list:
         temp[key] = temp_value
     return temp
@@ -27,7 +27,7 @@ def generate_data_summary(f):
     struct = {}
     matfile = loadmat(f, squeeze_me=True)
     try:
-        struct['current'] = float(matfile['data'][('current')])
+        struct['current'] = round(float(matfile['data'][('current')]), 3)
         struct['negative_first'] = tuple(map(lambda a: int(a), matfile['data'][('negativefirst')].tolist()))
         struct['stim_electrodes'] = tuple(map(lambda a: int(a), matfile['data'][('stim_electrodes')].tolist()))
         struct['bird'] = str(matfile['data'][('bird')])
@@ -43,7 +43,7 @@ def generate_data_summary(f):
 
 
 def main():
-    data_queue = Queue.Queue()
+    # data_queue = Queue.Queue()
     files = glob('*.mat')
     if not files:
         print('No files in this directory that match stimulation!')
