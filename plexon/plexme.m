@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 10-Nov-2015 12:00:30
+% Last Modified by GUIDE v2.5 23-Nov-2015 15:33:11
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -662,7 +662,11 @@ if false
 end
 
 if ~isempty(hardware.tdt.device)
-    hardware.tdt.device.Halt;
+    try
+        hardware.tdt.device.Halt;
+    catch
+        disp('Caught TDT-is-stupid error #2589723. Moving on.');
+    end
 end
 
 delete(hObject);
@@ -940,6 +944,7 @@ global axes1;
 global increase_type;
 global stim_timer;
 global thewaitbar;
+global stop_button_pressed;
 
 if ~isempty(thewaitbar)
     delete(thewaitbar);
@@ -980,6 +985,7 @@ if ~isempty(vvsi)
 end
 
 enable_controls(handles);
+stop_button_pressed = false;
 
 
 
@@ -990,7 +996,7 @@ global max_uAmps min_uAmps;
 
 newcurrent = str2double(get(hObject, 'String'));
 if isnan(newcurrent)
-        set(hObject, 'String', sigfig(stim.current_uA, 2));
+        set(hObject, 'String', sigfig(stim.current_uA, 3));
 elseif newcurrent < min_uAmps
         stim.current_uA = min_uAmps;
 elseif newcurrent > max_uAmps
@@ -998,7 +1004,7 @@ elseif newcurrent > max_uAmps
 else
         stim.current_uA = newcurrent;
 end
-set(hObject, 'String', sigfig(stim.current_uA, 2));
+set(hObject, 'String', sigfig(stim.current_uA, 3));
 
 
 % --- Executes during object creation, after setting all properties.
@@ -1130,11 +1136,8 @@ if stim.active_electrodes(stim.plexon_monitor_electrode)
 else
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.2 0.1]);
 end
+drawnow;
 
-if isempty(hObject)
-    hObject = handles.restore_globals;
-end
-guidata(hObject, handles);
 
 % --- Executes on button press in stim1.
 function stim1_Callback(hObject, eventdata, handles)
@@ -1240,7 +1243,7 @@ switch increase_type
     case 'current'
         stim.current_uA = min(max_uAmps, stim.current_uA * change);
         stim.current_uA = max(min_uAmps, stim.current_uA * change);
-        set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
+        set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 3));
     case 'time'
         stim.halftime_s = min(default_halftime_s, stim.halftime_s * change);
         set(handles.halftime, 'String', sigfig(stim.halftime_s * 1e6, 3));
@@ -1536,6 +1539,7 @@ global intandir;
 global datadir;
 global impedances_x;
 global valid_electrodes;
+global bird;
 
 
 if ~exist(datadir, 'dir')
@@ -1544,13 +1548,31 @@ end
 
 %% Try to grab any Intan impedance files that may be
 %% lying about... if they were created within the last 30 minutes.
-intanfilespec = strcat(intandir, '*.csv');
+intanfilespec = strcat(intandir, '*.csv')
 csvs = dir(intanfilespec);
 for i = 1:length(csvs)
     % datenum's unit is days, so 1/48 of a day is 30 minutes
     if datenum(now) - csvs(i).datenum <= 1/48
         %disp('Warning: copying x.csv, not moving it as god intended');
-        movefile(strcat(intandir, csvs(i).name), strcat(datadir, '\impedances-', csvs(i).name));
+        copyfile(strcat(intandir, csvs(i).name), strcat(datadir, '\impedances-', csvs(i).name));
+        disp(sprintf('Copied %s to %s', ...
+            strcat(intandir, csvs(i).name), ...
+            strcat(datadir, '\impedances-', csvs(i).name)));
+
+    end
+end
+
+%% Also copy any RECENT (half hour) recordings named 'bird*.rhd' into the data dir
+intanfilespec = strcat(intandir, bird, '*.rhd')
+csvs = dir(intanfilespec);
+for i = 1:length(csvs)
+    % datenum's unit is days, so 1/48 of a day is 30 minutes
+    if datenum(now) - csvs(i).datenum <= 1/48
+        %disp('Warning: copying x.csv, not moving it as god intended');
+        copyfile(strcat(intandir, csvs(i).name), strcat(datadir, '\intan-recordings-', csvs(i).name));
+        disp(sprintf('Copied %s to %s', ...
+            strcat(intandir, csvs(i).name), ...
+            strcat(datadir, '\intan-recordings-', csvs(i).name)));
     end
 end
 if exist(strcat(intandir, 'plexon-compatible.isf'), 'file')
@@ -1820,6 +1842,7 @@ end
 save(savename, 'saved');
 
 
+
 function restore_globals_Callback(hObject, eventdata, handles)
 [save_vars savename] = get_save_vars();
 global datadir scriptdir;
@@ -1837,6 +1860,9 @@ update_gui_values(hObject, handles);
 handles = configure_acquisition_devices(hObject, handles);
 
 guidata(hObject, handles);
+
+
+
 
 function [save_vars savename] = get_save_vars();
 global scriptdir;
@@ -1860,7 +1886,7 @@ savename = strcat(scriptdir, '/saved.mat');
 function update_gui_values(hObject, handles);
 global hardware scriptdir;
 
-[save_vars savename] = get_save_vars(); % Just for the list!
+save_vars = get_save_vars(); % Just for the list!
 
 for i = save_vars
     eval(sprintf('global %s;', char(i)));
@@ -1882,7 +1908,7 @@ datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
 
 set(handles.datadir_box, 'String', datadir);
 set(handles.startcurrent, 'String', sprintf('%d', round(start_uAmps)));
-set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
+set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 3));
 set(handles.maxcurrent, 'String', sprintf('%d', round(max_uAmps)));
 set(handles.increasefactor, 'String', sprintf('%g', increase_step));
 set(handles.halftime, 'String', sigfig(stim.halftime_s*1e6, 3));
@@ -2063,7 +2089,7 @@ end
 
 
 
-function [best_current_so_far best_current_voltage final_response_current final_response_voltage stim_filename] = find_threshold(hObject, handles)
+function [best_current_so_far best_current_voltage stim_filename all_resp all_resp_filenames] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
@@ -2071,15 +2097,16 @@ global increase_step;
 
 factor = increase_step;
 final_factor = 1.03;
-best_current_so_far = NaN;
-best_current_voltage = NaN;
-final_response_voltage = NaN;
-final_response_current = NaN;
+best_current_so_far = Inf;
+best_current_voltage = Inf;
 stim_filename = {};
 stim.current_uA = start_uAmps;
 
-done = false;
+all_resp = [];
+all_resp_filenames = {};
 
+done = false;
+found_lower_limit = false;
     
 while ~done
     
@@ -2110,9 +2137,11 @@ while ~done
 
             % (1, 2)
             stim.current_uA = stim.current_uA / factor;
-            factor = factor ^ (1/1.5);
-            if factor < final_factor
-                done = true;
+            if found_lower_limit
+                factor = factor ^ (1/1.5);
+                if factor < final_factor
+                    done = true;
+                end
             end
             
             % (3)
@@ -2123,14 +2152,16 @@ while ~done
                 done = true;
             end
             
-            final_response_current = stim.current_uA;
-            final_response_voltage = voltage;
+            all_resp(:, end+1) = [ stim.current_uA; voltage ];
+            all_resp_filenames(end+1) = cellstr(data.filename);
             
             % This results in a decrease of current, so let's skip the
             % error check...
         case 0
             % No response: (1) increase current, (2) check termination
             % conditions
+            found_lower_limit = true;
+            
             if stim.current_uA >= max_uAmps
                 done = true;
             end
@@ -2168,34 +2199,65 @@ global stop_button_pressed;
 global current_thresholds current_threshold_voltages; % add to plot_stim...?
 global datadir;
 global thewaitbar;
-
-DEBUG = false;
+global scriptdir;
 
 disable_controls(hObject, handles);
 stop_button_pressed = false;
 
-frequencies = [25 25]
-durations = 200e-6;
-%polarities = 0:(2^sum(stim.active_electrodes)-1);
-polarities = randperm(2^sum(stim.active_electrodes)) - 1;
-polarities = polarities(1:min([length(polarities) 30]));
 
-if DEBUG
-    frequencies = 30;
-    durations = 100e-6;
-    polarities = 0;
+
+%%% Repeat a previous experiment, as given in this threshold scan file and
+%%% this stimulation file:
+repeat_experiment = strcat(scriptdir, '/lw95rhp-2015-11-19/current_thresholds_8.mat');
+repeat_stim_file = strcat(scriptdir, '/lw95rhp-2015-11-19/stim_20151119_175100.405.mat');
+
+if exist('repeat_experiment', 'var')
+    if ~exist(repeat_experiment, 'file') | ~exist(repeat_stim_file, 'file')
+        error('continue:wrongfiles', 'You are trying to continue an experiment, but the files are not found.');
+    end
+    repeatme = load(repeat_experiment);
+    repeat = load(repeat_stim_file);
+    
+    disp(sprintf('*** Continuing the experiment from %s...', repeat_experiment));
+
+    frequencies = repeatme.frequencies;
+    durations = repeatme.durations;
+    %detrend_param = repeatme.detrend_param;
+    polarities = repeatme.polarities;
+    
+    % This copies across frequency, repetitions, active electrodes, pulse
+    % width, choice of TDT channels... the other stuff will be overwritten
+    % as necessary.
+    disp(sprintf('    Using hardware configuration recorded in %s:', repeat_stim_file));
+    stim = repeat.data.stim
+
+    update_gui_values(hObject, handles);
+    handles = configure_acquisition_devices(hObject, handles);
+else
+    frequencies = [25 25 25 25 25 25 25 25 25 25]
+    durations = 200e-6;
+    %polarities = 0:(2^sum(stim.active_electrodes)-1);
+    polarities = randperm(2^sum(stim.active_electrodes)) - 1;
+    polarities = polarities(1:min([length(polarities) 30]));
 end
+
 
 if ~exist(datadir, 'dir')
     mkdir(datadir);
 end
 
+if exist(fullfile(datadir, 'current_thresholds.mat', 'file'))
+    error('duplicatefile:warning', 'Error: ''%s'' already exists. Rename or delete.', ...
+        fullfile(datadir, 'current_thresholds.mat'));
+end
 
 current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
 current_threshold_voltages = zeros(length(frequencies), length(durations), length(polarities));
-f_current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
-f_current_threshold_voltages = zeros(length(frequencies), length(durations), length(polarities));
 data_filenames = cell(length(frequencies), length(durations), length(polarities));
+all_resp = cell(length(frequencies), length(durations), length(polarities));
+all_resp_filenames = cell(length(frequencies), length(durations), length(polarities));
+
+detrend_param
 
 % Track progress...
 nsearches = prod(size(current_thresholds));
@@ -2209,8 +2271,10 @@ else
 end
 
 
-disp(sprintf('Doing %d threshold searches. This might take around %s minutes.', ...
-    prod(size(current_thresholds)), sigfig(prod(size(current_thresholds))/2, 2)));
+disp(sprintf('Doing %d threshold searches.', ...
+    prod(size(current_thresholds))));
+
+freqs_completed = 0;
 
 for frequency = 1:length(frequencies)
     stim.repetition_Hz = frequencies(frequency);
@@ -2220,7 +2284,7 @@ for frequency = 1:length(frequencies)
         
         handles = configure_acquisition_devices(hObject, handles);
  
-        for polarity = 1:length(polarities)
+        for polarity = randperm(length(polarities))
             if stop_button_pressed
                 stop_button_pressed = false;
                 return;
@@ -2235,36 +2299,59 @@ for frequency = 1:length(frequencies)
             end
             
             %fprintf('Stimulating: %s uA for %s us at %s Hz.\n', ...
-            %    sigfig(stim.current_uA, 2), ...
+            %    sigfig(stim.current_uA, 3), ...
             %    sigfig(stim.halftime_s*1e6, 2), ...
             %    sigfig(stim.repetition_Hz, 2));
             
+            %[a b c d e] = find_threshold(hObject, handles);
+            %current_thresholds(frequency, dur, polarity) = a;
+            %current_threshold_voltages(frequency, dur, polarity) = b;
+            %data_filenames{frequency, dur, polarity} = c;
+            %all_resp{frequency, dur, polarity} = d;
+            %all_resp_filenames{frequency, dur, polarity} = e;
             [current_thresholds(frequency, dur, polarity) ...
                 current_threshold_voltages(frequency, dur, polarity), ...
-                data_filenames(frequency, dur, polarity) ] = find_threshold(hObject, handles);
+                data_filenames{frequency, dur, polarity}, ...
+                all_resp{frequency, dur, polarity}, ...
+                all_resp_filenames{frequency, dur, polarity}] = find_threshold(hObject, handles);
             
             elapsed_time = toc(start_time);
             nsearches_done = nsearches_done + 1;
             total_expected_time = elapsed_time * nsearches / nsearches_done;
             expected_finish_time = start_datetime + (total_expected_time / (24*3600));
-            waitbar(elapsed_time / total_expected_time, ...
-                thewaitbar, ...
-                sprintf('Expected finish time: %s', datestr(expected_finish_time, 'dddd HH:MM:SS')));
-        
+            if ishandle(thewaitbar)
+                waitbar(elapsed_time / total_expected_time, ...
+                    thewaitbar, ...
+                    sprintf('Expected finish time: %s', datestr(expected_finish_time, 'dddd HH:MM:SS')));
+            end
             
             save(fullfile(datadir, 'current_thresholds'), ...
                 'current_thresholds', 'current_threshold_voltages', ...
                 'data_filenames', ...
+                'all_resp', 'all_resp_filenames', ...
                 'frequencies', 'durations', ...
-                'polarities', 'detrend_param');
+                'polarities', 'detrend_param', ...
+                'freqs_completed');
         end
     end
+    
+    freqs_completed = freqs_completed + 1;
+    save(fullfile(datadir, 'current_thresholds'), ...
+        'current_thresholds', 'current_threshold_voltages', ...
+        'data_filenames', ...
+        'all_resp', 'all_resp_filenames', ...
+        'frequencies', 'durations', ...
+        'polarities', 'detrend_param', ...
+        'freqs_completed');
+
+    squeeze(current_threshold_voltages(1:8,1,:))'
 end
 
 delete(thewaitbar);
 thewaitbar = [];
 
 enable_controls(handles);
+
 
 
 
@@ -2285,3 +2372,53 @@ function xscale_CreateFcn(hObject, eventdata, handles)
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
+
+
+
+
+
+%% Given a stimulation pattern, don't change anything except the plexon monitor channel, and monitor the delivere
+function [ voltages ] = check_all_stim_voltages(hObject, handles);
+global stop_button_pressed;
+global stim hardware detrend_param;
+
+orig_monitor_electrode = stim.plexon_monitor_electrode;
+
+voltages = NaN * zeros(size(stim.active_electrodes));
+
+for i = find(stim.active_electrodes)
+    stim.plexon_monitor_electrode = i;
+    update_monitor_electrodes(hObject, handles);
+    
+    if stop_button_pressed
+        disp('stop button pressed');
+        stop_button_pressed = false;
+        stim.plexon_monitor_electrode = orig_monitor_electrode;
+        update_monitor_electrodes(hObject, handles);
+        break;
+    end
+    
+    [ data, response_detected, voltages(i), errors] = stimulate(stim, hardware, detrend_param, handles);
+end
+
+stim.plexon_monitor_electrode = orig_monitor_electrode;
+update_monitor_electrodes(hObject, handles);
+
+
+
+% --- Executes on button press in stim_voltage_scan.
+function stim_voltage_scan_Callback(hObject, eventdata, handles)
+global stim hardware detrend_param;
+global datadir;
+
+
+voltages = check_all_stim_voltages(hObject, handles)
+
+
+polarity_string = '';
+for i = find(stim.active_electrodes)
+    polarity_string = strcat(polarity_string, sigfig(stim.negativefirst(i), 1));
+end
+save(fullfile(datadir, sprintf('all_stim_voltages_%s.mat', polarity_string)), ...
+    'stim', 'voltages');
+

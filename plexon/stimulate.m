@@ -15,7 +15,7 @@ while currently_reconfiguring
     return;
 end
 
-set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 2));
+set(handles.currentcurrent, 'String', sigfig(stim.current_uA, 3));
 set(handles.halftime, 'String', sigfig(stim.halftime_s * 1e6, 3));
 
 
@@ -142,7 +142,11 @@ end
 
 
 if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
-    hardware.tdt.device.SetTagVal('mon_gain', round(hardware.tdt.audio_monitor_gain/5));
+    try
+        hardware.tdt.device.SetTagVal('mon_gain', round(hardware.tdt.audio_monitor_gain/5));
+    catch ME
+        disp('TDT stupid error 203495');
+    end
 end
 
 
@@ -166,8 +170,12 @@ end
 
 %plot(handles.axes4, event.TimeStamps, event.Data(:,4));
 
-if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
-    hardware.tdt.device.SetTagVal('mon_gain', hardware.tdt.audio_monitor_gain);
+try
+    if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
+        hardware.tdt.device.SetTagVal('mon_gain', hardware.tdt.audio_monitor_gain);
+    end
+catch ME
+    disp('Caught TDT-is-being-stupid error #2731. Moving on.');
 end
 
 stim.target_current = target_current;

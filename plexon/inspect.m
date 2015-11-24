@@ -82,7 +82,7 @@ end
 
 % Which channels to show?
 for i = 1:16
-    handles.tdt_show{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
+    handles.tdt_show_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
                        'Value',0,'Position', [920 570-22*(i-1) 50 20], ...
                         'Callback',{@tdt_show_channel_Callback});
 end
@@ -130,16 +130,20 @@ file = handles.sorted_index(get(hObject,'Value'));
 do_file(hObject, handles, file, true);
 
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% This is the main function!
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
 global detrend_param;
 
-set(handles.listbox1, 'Enable', 'inactive');
+%set(handles.listbox1, 'Enable', 'inactive');
 drawnow;
 
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
-
 
 devices = {};
 devices_perhaps = {'tdt', 'ni'};
@@ -153,11 +157,11 @@ set(handles.show_device, 'String', devices);
 
 if data.version >= 12
     tdt_show_data = zeros(1, 16);
-    tdt_show_data(data.tdt.show) = ones(1, length(data.tdt.show));
+    tdt_show_data(data.tdt.index_recording(data.tdt.show)) = ones(1, length(data.tdt.show));
     if any(tdt_show_data ~= tdt_show_data_last)
         tdt_show_now = tdt_show_data;
         for i = 1:16
-            set(handles.tdt_show{i}, 'Value', tdt_show_now(i));
+            set(handles.tdt_show_buttons{i}, 'Value', tdt_show_now(i));
         end
         tdt_show_data_last = tdt_show_data;
     end
@@ -197,6 +201,17 @@ set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1
 set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
 set(handles.response_detection_threshold, 'String', sprintf('%g', ...
     detrend_param.response_detection_threshold));
+if isfield(data, 'tdt')
+    for i = 1:16
+        if any(data.tdt.index_recording == i)
+            foo = 'on';
+        else
+            foo = 'off';
+        end
+        set(handles.tdt_show_buttons{i}, 'Enable', foo);
+    end
+end
+            
 
 
 
@@ -228,7 +243,8 @@ if doplot
         set(handles.table1, 'Data', tabledata);
 end
 
-data.tdt.show = find(tdt_show_now);
+data.tdt.show_now = find(tdt_show_now(data.tdt.index_recording));
+
 plot_stimulation(data, handles);
 
 
