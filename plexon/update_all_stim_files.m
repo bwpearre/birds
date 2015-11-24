@@ -1,4 +1,4 @@
-files = dir('*.mat')
+files = dir('*.mat');
 
 for i=1:length(files)
   load(files(i).name)
