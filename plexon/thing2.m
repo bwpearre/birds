@@ -5,12 +5,29 @@ path(sprintf('%s/../lib', scriptpath), path);
 
 d = {};
 
-%d{1} = load('current_thresholds-1.mat');
-d{end+1} = load('current_thresholds_8.mat');
+d{1} = load('current_thresholds.mat');
+%d{end+1} = load('current_thresholds_8.mat');
+%d{end+1} = load('current_thresholds_3.5-7.mat');
 % Adding another breaks single-figure plotting!
 
-d{1}.current_thresholds = d{1}.current_thresholds(1:7,:,:);
-d{1}.current_threshold_voltages = d{1}.current_threshold_voltages(1:7,:,:);
+%% Find out how many complete runs were done. Not foolproof!
+nvalid = length(d{1}.frequencies);
+for i = 1:length(d{1}.frequencies)
+    complete_run = true;
+    for j = 1:length(d{1}.polarities)
+        if isempty(d{1}.all_resp{i, 1, j})
+            complete_run = false;
+            break;
+        end
+    end
+    if complete_run
+        nvalid = i;
+    end
+end
+    
+d{1}.current_thresholds = d{1}.current_thresholds(1:nvalid,:,:);
+d{1}.current_threshold_voltages = d{1}.current_threshold_voltages(1:nvalid,:,:);
+d{1}.frequencies = d{1}.frequencies(1:nvalid);
 % I fucked up the recording by changing an Inf to a NaN for
 % lw95rhp-2015-11-19
 
@@ -52,14 +69,15 @@ for i = 1:length(d)
     [nfreqs ndurs npolarities] = size(d{i}.current_thresholds);
     polarity_indices = [1:npolarities];
     
-    [~, sort_indices] = sort(squeeze(d{i}.current_thresholds(1, 1, :)));
+    [~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(1, 1, :)));
     
     % Need polarity_indices here for the buggy dataset lw85ry-2015-11-12:
-    [~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(4, 1, polarity_indices)));
-    
+    %[~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(1, 1, polarity_indices)));
+    load sort_indices-2015-11-19.mat;
     %sort_indices = 1:npolarities;
     
-
+    sort_indices
+    
     plotpos = 0;
     
     polarities_sorted = d{i}.polarities(sort_indices);
