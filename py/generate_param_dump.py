@@ -1,4 +1,4 @@
-from scipy.io import loadmat
+# from scipy.io import loadmat
 from glob import glob
 from collections import defaultdict
 import json
@@ -9,6 +9,24 @@ import pprint
 # import Queue
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures as conf
+import subprocess
+import h5py
+
+def old_matlab_version(f):
+    try:
+        g = h5py.File(f, 'r')
+        g.close()
+        return False
+    except:
+        return True
+
+def convert_matlab():
+    matlab_path = '/Applications/MATLAB_R2015a.app/bin/matlab'
+    home = os.path.expanduser('~')
+    script = 'Documents/MATLAB/birds/plexon'
+    out = subprocess.check_output([matlab_path, '-nodesktop', '-nosplash', '-nodisplay', '-r', "addpath('{}');{};exit;".format(os.path.join(home, script),'update_all_stim_files')])
+
+
 
 def add_to_main_data(main, new):
     for (key, value) in new.items():
@@ -25,19 +43,20 @@ def convert_data(data):
 
 def generate_data_summary(f):
     struct = {}
-    matfile = loadmat(f, squeeze_me=True)
+    matfile = h5py.File(f, 'r')
     try:
-        struct['current'] = round(float(matfile['data'][('current')]), 3)
-        struct['negative_first'] = tuple(map(lambda a: int(a), matfile['data'][('negativefirst')].tolist()))
-        struct['stim_electrodes'] = tuple(map(lambda a: int(a), matfile['data'][('stim_electrodes')].tolist()))
-        struct['bird'] = str(matfile['data'][('bird')])
-        struct['data_version'] = int(matfile['data'][('version')])
-        struct['repetition_freq'] = float(matfile['data'][('repetition_Hz')])
-        struct['pulse_halftime'] = float(matfile['data'][('halftime_us')])
-        struct['interpulse_interval'] = float(matfile['data'][('interpulse_s')])
+        struct['current'] = round(float(matfile['data']['stim']['current_uA'].value), 3)
+        struct['negative_first'] = tuple(map(lambda a: int(a), matfile['data']['stim']['negativefirst'].value))
+        struct['stim_electrodes'] = tuple(map(lambda a: int(a), matfile['data']['stim']['active_electrodes'].value))
+        struct['bird'] = matfile['data']['bird'].value.tostring().decode('utf-8')[::2]
+        struct['data_version'] = int(matfile['data']['version'].value)
+        struct['repetition_freq'] = float(matfile['data']['stim']['repetition_Hz'].value)
+        struct['pulse_halftime'] = float(matfile['data']['stim']['halftime_s'].value)
+        struct['interpulse_interval'] = float(matfile['data']['stim']['interpulse_s'].value)
     except Exception as e:
         # print('Problem with {}'.format(f))
         # print('Dtypes = {}'.format(matfile['data'].dtype))
+        # print(e)
         pass
     return struct
 
@@ -49,6 +68,11 @@ def main():
         print('No files in this directory that match stimulation!')
         print('Please navigate to the proper directory')
         return
+    print('Converting matlab data to updated structs and hdf5 format')
+    if old_matlab_version(files[0]):
+        print('Converting')
+        convert_matlab()
+    print('Generating parameters file')
 
     print('Need to go through {} files'.format(len(files)))
 
