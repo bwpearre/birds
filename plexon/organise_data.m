@@ -155,7 +155,7 @@ end
 
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 22;
+data.version = 23;
 
 
 data.bird = bird;
@@ -165,6 +165,7 @@ data.stim = stim;
 data.stim.duration = 2 * stim.halftime_s + stim.interpulse_s;
 data.goodtimes = [ 0.0002 + data.stim.duration ...
     -0.0003 + 1/stim.repetition_Hz ];
+data.voltage = max(abs(voltage_range_last_stim));
 
 data.ni.index_recording = hardware.ni.recording_channel_indices;
 data.ni.stim = data_aligned(:, :, 1:2);

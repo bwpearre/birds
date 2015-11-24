@@ -241,12 +241,13 @@ legend(handles.axes3, legend_handles, legend_names);
 xlabel(handles.axes3, 'ms');
 set(get(axes3yy(1),'Ylabel'),'String','V')
 set(get(axes3yy(2),'Ylabel'),'String','\mu A')
+title(handles.axes3, sprintf('Stimulation (%sV)', sigfig(data.voltage, 3)));
+
 
 xtick = get(handles.axes1, 'XTick');
 set(handles.axes1, 'XTick', xtick(1):0.001:aftertrigger);
 %figure(1);
 %plot(times_aligned(u), reshape(data.data_aligned(:,u,data.channels_out), [ length(u) length(data.channels_out)])');
-
 
 
 

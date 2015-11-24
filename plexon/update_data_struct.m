@@ -165,3 +165,8 @@ if data.version < 22
     data.filename = '';
 end
 
+
+if data.version < 23
+    data.voltage = max(max(abs(data.ni.stim(:, :, 1))));
+end
+

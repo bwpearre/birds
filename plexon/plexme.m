@@ -944,6 +944,7 @@ global axes1;
 global increase_type;
 global stim_timer;
 global thewaitbar;
+global stop_button_pressed;
 
 if ~isempty(thewaitbar)
     delete(thewaitbar);
@@ -984,6 +985,7 @@ if ~isempty(vvsi)
 end
 
 enable_controls(handles);
+stop_button_pressed = false;
 
 
 
@@ -2272,6 +2274,8 @@ end
 disp(sprintf('Doing %d threshold searches.', ...
     prod(size(current_thresholds))));
 
+freqs_completed = 0;
+
 for frequency = 1:length(frequencies)
     stim.repetition_Hz = frequencies(frequency);
 
@@ -2326,9 +2330,20 @@ for frequency = 1:length(frequencies)
                 'data_filenames', ...
                 'all_resp', 'all_resp_filenames', ...
                 'frequencies', 'durations', ...
-                'polarities', 'detrend_param');
+                'polarities', 'detrend_param', ...
+                'freqs_completed');
         end
     end
+    
+    freqs_completed = freqs_completed + 1;
+    save(fullfile(datadir, 'current_thresholds'), ...
+        'current_thresholds', 'current_threshold_voltages', ...
+        'data_filenames', ...
+        'all_resp', 'all_resp_filenames', ...
+        'frequencies', 'durations', ...
+        'polarities', 'detrend_param', ...
+        'freqs_completed');
+
     squeeze(current_threshold_voltages(1:8,1,:))'
 end
 

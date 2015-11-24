@@ -73,7 +73,7 @@ for i = 1:length(d)
     
     % Need polarity_indices here for the buggy dataset lw85ry-2015-11-12:
     %[~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(1, 1, polarity_indices)));
-    load sort_indices-2015-11-19.mat;
+    %load sort_indices-2015-11-19.mat;
     %sort_indices = 1:npolarities;
     
     sort_indices
