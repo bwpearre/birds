@@ -7,7 +7,8 @@ import pickle
 
 def main():
     if not glob.glob('*.pkl'):
-        imortlib.imp.load_module('generate_param_dump').main()
+        imp.load_source('generate_param_dump',
+         os.path.expanduser('~/Documents/MATLAB/birds/py/generate_param_dump.py')).main()
         data = pickle.load(open(glob.glob('*.pkl')[0], 'rb'))
     else:
         data = pickle.load(open(glob.glob('*.pkl')[0], 'rb'))
