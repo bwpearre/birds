@@ -1,4 +1,8 @@
-function [ data ] = update_data_struct(data, detrend_param, handles)
+f
+
+
+
+unction [ data ] = update_data_struct(data, detrend_param, handles)
 
 
 if ~isfield(data, 'version')

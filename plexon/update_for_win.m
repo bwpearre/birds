@@ -140,7 +140,9 @@ if data.version < 20
     data.stim.plexon_monitor_electrode = data.plexon_monitor_electrode;
 end
 
-
+if data.version == 20
+   data.stim.duration_s = 2*data.stim.halftime_s + data.stim.interpulse_s;
+end
 
 if data.version < 21
     target_current = [ 0                                   0 ; ...
