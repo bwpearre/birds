@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures as conf
 import subprocess
 import h5py
+import pickle
 
 def old_matlab_version(f):
     try:
@@ -25,8 +26,6 @@ def convert_matlab():
     home = os.path.expanduser('~')
     script = 'Documents/MATLAB/birds/plexon'
     out = subprocess.check_output([matlab_path, '-nodesktop', '-nosplash', '-nodisplay', '-r', "addpath('{}');{};exit;".format(os.path.join(home, script),'update_all_stim_files')])
-
-
 
 def add_to_main_data(main, new):
     for (key, value) in new.items():
@@ -46,6 +45,7 @@ def generate_data_summary(f):
     matfile = h5py.File(f, 'r')
     try:
         struct['current'] = round(float(matfile['data']['stim']['current_uA'].value), 3)
+        struct['current_approx'] = int(matfile['data']['stim']['current_uA'].value)
         struct['negative_first'] = tuple(map(lambda a: int(a), matfile['data']['stim']['negativefirst'].value))
         struct['stim_electrodes'] = tuple(map(lambda a: int(a), matfile['data']['stim']['active_electrodes'].value))
         struct['bird'] = matfile['data']['bird'].value.tostring().decode('utf-8')[::2]
@@ -60,40 +60,53 @@ def generate_data_summary(f):
         pass
     return struct
 
+def map_data_to_file(maindata, data, filename):
+    for key, value in data.items():
+        maindata[(key, value)].append(filename)
+    return maindata
 
 def main():
     # data_queue = Queue.Queue()
     files = glob('*.mat')
+    mapped_data = defaultdict(list)
     if not files:
         print('No files in this directory that match stimulation!')
         print('Please navigate to the proper directory')
         return
     print('Converting matlab data to updated structs and hdf5 format')
-    if old_matlab_version(files[0]):
+    if old_matlab_version(files[0]) and old_matlab_version(files[-1]):
         print('Converting')
         convert_matlab()
-    print('Generating parameters file')
+    else:
+        print('Files have already been converted to proper matlab format')
 
+    print('Generating parameters file')
     print('Need to go through {} files'.format(len(files)))
 
     savefile = os.path.basename(os.getcwd()) + '-parameters.json'
     data = defaultdict(set)
     ff = 0
     with ThreadPoolExecutor(max_workers=8) as thread:
-        future_res = [thread.submit(generate_data_summary, f) for f in files]
+        future_res = {thread.submit(generate_data_summary, f):f for f in files}
         for future in conf.as_completed(future_res):
             sys.stdout.write('On file {} \r'.format(ff))
             sys.stdout.flush()
             ff += 1
-            data = add_to_main_data(data, future.result())
+            struct = future.result()
+            mapped_data = map_data_to_file(mapped_data, struct, future_res[future])
+            data = add_to_main_data(data, struct)
     data = convert_data(data)
+
     with open(savefile, 'w') as save:
         d = json.dump(data, save)
     with open(savefile[:-4] + 'txt', 'w') as save:
         pprint.pprint(data, save)
 
-    print('Parameters file created, enjoy!')
+    with open(savefile[:-5] + 'file_db.pkl', 'wb') as save:
+        pickle.dump(mapped_data, save)
 
+    print('File database created, enjoy!')
+    print('Parameters file created, enjoy!')
 
 
 if __name__ == '__main__':
