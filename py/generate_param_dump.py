@@ -69,7 +69,7 @@ def main():
     # data_queue = Queue.Queue()
     files = glob('*.mat')
     mapped_data = defaultdict(list)
-    if not files:
+    if not os.path.exists():
         print('No files in this directory that match stimulation!')
         print('Please navigate to the proper directory')
         return

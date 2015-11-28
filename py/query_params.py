@@ -3,6 +3,7 @@ import shutil
 import glob
 import imp
 import pickle
+import json
 
 
 def main():
@@ -26,6 +27,11 @@ def cp_files(data, key):
         shutil.copy2(f, folder_name)
 
     return True
+
+def open_json():
+    with open(glob.glob('*.json')[0], 'r') as sa:
+        s = json.load(sa)
+    return s
 
 
 if __name__=='__main__':
