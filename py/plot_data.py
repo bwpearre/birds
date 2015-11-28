@@ -2,11 +2,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 import h5py
-import os
 from glob import glob
 
 def main():
-    files = glob(os.path.join('updated','*.mat'))
+    files = glob('*.mat')
     colors = sns.hls_palette(9, l=0.4, s=0.85)
     for f in files:
         handle_data(f, colors)

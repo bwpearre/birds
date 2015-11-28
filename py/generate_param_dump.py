@@ -67,19 +67,15 @@ def map_data_to_file(maindata, data, filename):
 
 def main():
     # data_queue = Queue.Queue()
-    files = glob('*.mat')
-    mapped_data = defaultdict(list)
-    if not os.path.exists():
-        print('No files in this directory that match stimulation!')
-        print('Please navigate to the proper directory')
-        return
+    path = 'updated'
+        mapped_data = defaultdict(list)
     print('Converting matlab data to updated structs and hdf5 format')
-    if old_matlab_version(files[0]) and old_matlab_version(files[-1]):
+    if not os.path.exists(path):
         print('Converting')
         convert_matlab()
     else:
         print('Files have already been converted to proper matlab format')
-
+    files = glob(os.path.join(path,'*.mat'))
     print('Generating parameters file')
     print('Need to go through {} files'.format(len(files)))
 
