@@ -68,7 +68,7 @@ def map_data_to_file(maindata, data, filename):
 def main():
     # data_queue = Queue.Queue()
     path = 'updated'
-        mapped_data = defaultdict(list)
+    mapped_data = defaultdict(list)
     print('Converting matlab data to updated structs and hdf5 format')
     if not os.path.exists(path):
         print('Converting')

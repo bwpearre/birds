@@ -7,7 +7,7 @@ import json
 
 
 def main():
-    if not glob.glob('*.pkl'):
+    if not os.path.exists('updated'):
         imp.load_source('generate_param_dump',
          os.path.expanduser('~/Documents/MATLAB/birds/py/generate_param_dump.py')).main()
         data = pickle.load(open(glob.glob('*.pkl')[0], 'rb'))
@@ -35,4 +35,5 @@ def open_json():
 
 
 if __name__=='__main__':
-    main()
+    data = main()
+    params = open_json()
