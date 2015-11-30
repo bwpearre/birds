@@ -62,14 +62,32 @@ for i = 1:length(d)
 end
 
 
-    
-    
+
+i=1;
+[~, sort_indices] = sort(respmean(:,2));
+polarities_sorted = d{1}.polarities(sort_indices);
+for p = 1:length(d{i}.polarities)
+    labels{p} = dec2bin(polarities_sorted(p), log2(max(polarities_sorted)));
+end
+
+subplot(2, most+1, most+1);
+errorbar(1:30, respmean(sort_indices, 1), respstd(sort_indices, 1));
+title('Mean\pm 1\sigma response current');
+xticklabel_rotate(1:length(polarities_sorted), 90, labels, 'Fontsize', 6);
+ylabel('i');
+
+subplot(2, most+1, 2*(most+1));
+errorbar(1:30, respmean(sort_indices, 2), respstd(sort_indices, 2));
+title('Mean\pm 1\sigma response voltage');
+xticklabel_rotate(1:length(polarities_sorted), 90, labels, 'Fontsize', 6);
+ylabel('V');
+
 for i = 1:length(d)
     
     [nfreqs ndurs npolarities] = size(d{i}.current_thresholds);
     polarity_indices = [1:npolarities];
     
-    [~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(1, 1, :)));
+    %[~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(1, 1, :)));
     
     % Need polarity_indices here for the buggy dataset lw85ry-2015-11-12:
     %[~, sort_indices] = sort(squeeze(d{i}.current_threshold_voltages(1, 1, polarity_indices)));
@@ -111,9 +129,6 @@ for i = 1:length(d)
                 sigfig(cor, 3)));
             
             
-            for p = 1:length(d{i}.polarities)
-                labels{p} = dec2bin(polarities_sorted(p), log2(max(polarities_sorted)));
-            end
             xticklabel_rotate(1:length(polarities_sorted), 90, labels, 'Fontsize', 6);
             ylabel('Min current');
             
@@ -147,16 +162,5 @@ for i = 1:length(d)
             end
         end
     end
-    subplot(2, most+1, most+1);
-    errorbar(1:30, respmean(sort_indices, 1), respstd(sort_indices, 1));
-    title('Mean response current');
-    xticklabel_rotate(1:length(polarities_sorted), 90, labels, 'Fontsize', 6);
-    ylabel('i');
-
-    subplot(2, most+1, 2*(most+1));
-    errorbar(1:30, respmean(sort_indices, 2), respstd(sort_indices, 2));
-    title('Mean response voltage');
-    xticklabel_rotate(1:length(polarities_sorted), 90, labels, 'Fontsize', 6);
-    ylabel('V');    
     
 end

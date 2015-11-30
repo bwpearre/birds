@@ -2222,7 +2222,7 @@ if exist('repeat_experiment', 'var')
 
     frequencies = repeatme.frequencies;
     durations = repeatme.durations;
-    %detrend_param = repeatme.detrend_param;
+    detrend_param = repeatme.detrend_param;
     polarities = repeatme.polarities;
     
     % This copies across frequency, repetitions, active electrodes, pulse
