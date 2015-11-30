@@ -113,13 +113,11 @@ if data.version < 19
     if isfield(data, 'tdt')
         [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
             = detrend_response(data.tdt, data, detrend_param);
-        [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
-            data, [], [], handles);
+        % look_for_spikes output format changed at v.22 or so, so that's
+        % down there...
      elseif isfield(data, 'ni')
         [ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
             = detrend_response(data.ni, data, detrend_param);
-        [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
-            data, [], [], handles);
      end
      
      data.current_uAmps = data.current;
@@ -163,6 +161,15 @@ if data.version < 22
      % These could be corrected if needed...
     data.time = 0;
     data.filename = '';
+    
+    if isfield(data, 'tdt')
+        [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
+            data, [], [], handles);
+     elseif isfield(data, 'ni')
+        [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
+            data, [], [], handles);
+     end
+
 end
 
 
