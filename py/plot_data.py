@@ -32,7 +32,11 @@ def plot(data, name, colors, y_range):
     plt.ylabel('Voltage (mV)')
     plt.xlim([-0.5, 5])
     plt.ylim(y_range)
-    plt.title('Current: {} N reps: {}'.format(int(data['stim']['current_uA'].value), int(data['stim']['n_repetitions'].value)))
+    plt.title('Current: {}uA; N reps: {};\nactive electrodes: {}; negative first: {}'
+       .format(int(data['stim']['current_uA'].value),
+       int(data['stim']['n_repetitions'].value),
+       ''.join(map(lambda a: str(int(a)), data['stim']['active_electrodes'].value.flatten())),
+       ''.join(map(lambda a: str(int(a)), data['stim']['negativefirst'].value.flatten()))))
     plt.savefig(name+'.png')
     plt.clf()
     plt.close()

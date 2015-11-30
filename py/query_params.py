@@ -17,8 +17,14 @@ def main():
     return data
 
 def cp_files(data, key):
+    if type(key[1]) == list:
+        print('Converting list to tuple')
+        key = (key[0], tuple(key[1]))
     flist = data[key]
-    folder_name = '_'.join(list(map(lambda a: str(a), key)))
+    if type(key[1]) == tuple:
+        folder_name = '_'.join([key[0], ''.join(map(lambda a: str(a), key[1]))])
+    else:
+        folder_name = '_'.join(list(map(lambda a: str(a), key)))
     print('Copying {} files to {}'.format(len(flist), folder_name))
     if not os.path.exists(folder_name):
         os.mkdir(folder_name)
@@ -26,7 +32,7 @@ def cp_files(data, key):
     for f in flist:
         shutil.copy2(f, folder_name)
 
-    return True
+    return os.path.join(os.path.abspath('.'), folder_name)
 
 def open_json():
     with open(glob.glob('*.json')[0], 'r') as sa:
