@@ -37,3 +37,4 @@ def open_json():
 if __name__=='__main__':
     data = main()
     params = open_json()
+    plt = imp.load_source('plt_data',os.path.join(os.path.expanduser('~'),'Documents/MATLAB/birds/py/plot_data.py'))
