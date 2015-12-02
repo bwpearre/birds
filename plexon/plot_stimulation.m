@@ -105,7 +105,7 @@ end
 %[spikes r] = look_for_spikes_xcorr(d, data, detrend_param);
 
 linewidths = 0.3*ones(1, nchannels);
-linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes)))) * 2;
+%linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes))));
 
 
 % get(handles.response_show_all, 'Value')
