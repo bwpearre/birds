@@ -5,6 +5,7 @@ import imp
 import pickle
 import json
 
+#TODO: use this interface in an ipython notebook instead of ipython terminal
 
 def main():
     if not os.path.exists('updated'):
