@@ -91,7 +91,7 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if true % For my X--HVC experiment
+if false % For my X--HVC experiment
     detrend_param.model = 'fourier8';
     detrend_param.range = [0.003 0.025];
     detrend_param.response_roi = [0.0035 0.007];
@@ -1455,7 +1455,7 @@ end
 function xscale_Callback(hObject, eventdata, handles)
 last_xlim = get(handles.axes1, 'XLim');
 set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
-set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
+%set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
 new_xlim = get(handles.axes1, 'XLim');
 % It seems that the whole graph isn't drawn--expanding the view region
 % results in blank areas. In this case, replot.
@@ -2090,22 +2090,34 @@ end
 
 
 
-function [best_current_so_far best_current_voltage stim_filename all_resp all_resp_filenames voltages ] ...
-    = find_threshold(hObject, handles)
+function [ out ] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
 global increase_step;
 
+ 
+    
+% [ out.best_current     out.best_current_voltage   out.stim_filename out.all_resp out.all_resp_filenames out.voltages ]
+% [ current_thresholds   current_threshold_voltages stim_filename
+
+            %[current_thresholds(frequency, dur, polarity) ...
+            %    current_threshold_voltages(frequency, dur, polarity), ...
+            %    data_filenames{frequency, dur, polarity}, ...
+            %    all_resp{frequency, dur, polarity}, ...
+            %    all_resp_filenames{frequency, dur, polarity}, ...
+            %    voltages{frequency, dur, polarity} ] = find_threshold(hObject, handles);
+            
+
 factor = increase_step;
 final_factor = 1.03;
-best_current_so_far = Inf;
-best_current_voltage = Inf;
-stim_filename = {};
+out.best_current = Inf;
+out.best_current_voltage = Inf;
+out.stim_filename = {};
 stim.current_uA = start_uAmps;
 
-all_resp = [];
-all_resp_filenames = {};
+out.all_resp = [];
+out.all_resp_filenames = {};
 
 done = false;
 found_lower_limit = false;
@@ -2131,14 +2143,14 @@ while ~done
             % Best stim so far? If so, save it.
             
             % (0) record it
-            if stim.current_uA < best_current_so_far
-                best_current_so_far = stim.current_uA;
-                best_current_voltage = voltage;
-                stim_filename = cellstr(data.filename);
+            if stim.current_uA < out.best_current
+                out.best_current = stim.current_uA;
+                out.best_current_voltage = voltage;
+                out.stim_filename = cellstr(data.filename);
             end
             
-            all_resp(:, end+1) = [ stim.current_uA; voltage ];
-            all_resp_filenames(end+1) = cellstr(data.filename);
+            out.all_resp(:, end+1) = [ stim.current_uA; voltage ];
+            out.all_resp_filenames(end+1) = cellstr(data.filename);
 
             % (1, 2)
             stim.current_uA = stim.current_uA / factor;
@@ -2180,8 +2192,8 @@ while ~done
             
             % If we don't have a best-case stim filename, save something
             % anyway. This will be the largest stim current used.
-            if isempty(stim_filename)
-                stim_filename = cellstr(data.filename);
+            if isempty(out.stim_filename)
+                out.stim_filename = cellstr(data.filename);
             end
             
 
@@ -2193,13 +2205,13 @@ while ~done
     
 end
 
-if isinf(best_current_so_far)
-    voltages = NaN * zeros(size(stim.active_electrodes));
+if isinf(out.best_current)
+    out.voltages = NaN * zeros(size(stim.active_electrodes));
 else
-    disp(sprintf('Best so far: %s. Mean: %s.', sigfig(best_current_so_far, 3), ...
-        sigfig(mean(all_resp(1, :)), 3)));
-    stim.current_uA = best_current_so_far;
-    voltages = check_all_stim_voltages(hObject, handles);
+    disp(sprintf('Best so far: %s. Mean: %s.', sigfig(out.best_current, 3), ...
+        sigfig(mean(out.all_resp(1, :)), 3)));
+    stim.current_uA = mean(out.all_resp(1, :));
+    out.voltages = check_all_stim_voltages(hObject, handles);
 end
 
 
@@ -2238,7 +2250,7 @@ update_monitor_electrodes(hObject, handles);
 function full_threshold_scan_Callback(hObject, eventdata, handles)
 global stim hardware detrend_param;
 global stop_button_pressed;
-global current_thresholds current_threshold_voltages; % add to plot_stim...?
+global response_thresholds;
 global datadir;
 global thewaitbar;
 global scriptdir;
@@ -2276,12 +2288,10 @@ if exist('repeat_experiment', 'var')
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
 else
-    frequencies = [25 25 25 ]
-    %frequencies = [30 30 30 ]
+    frequencies = [25 25  ]
     durations = [200e-6]
-    %polarities = 0:(2^sum(stim.active_electrodes)-1);
     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
-    polarities = polarities(1:min([length(polarities) 30]));
+    polarities = polarities(1:min([length(polarities) 2]));
     % Always test non-current-steering configurations!
     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
 end
@@ -2296,17 +2306,12 @@ if exist(fullfile(datadir, 'current_thresholds.mat', 'file'))
         fullfile(datadir, 'current_thresholds.mat'));
 end
 
-current_thresholds = zeros(length(frequencies), length(durations), length(polarities));
-current_threshold_voltages = zeros(length(frequencies), length(durations), length(polarities));
-data_filenames = cell(length(frequencies), length(durations), length(polarities));
-all_resp = cell(length(frequencies), length(durations), length(polarities));
-all_resp_filenames = cell(length(frequencies), length(durations), length(polarities));
-voltages = cell(length(frequencies), length(durations), length(polarities));
+response_thresholds = {};
 
 detrend_param
 
 % Track progress...
-nsearches = prod(size(current_thresholds));
+nsearches = length(frequencies) * length(durations) * length(polarities);
 nsearches_done = 0;
 start_time = tic;
 start_datetime = datenum(datetime('now'));
@@ -2317,8 +2322,7 @@ else
 end
 
 
-disp(sprintf('Doing %d threshold searches.', ...
-    prod(size(current_thresholds))));
+disp(sprintf('Doing %d threshold searches.', nsearches));
 
 freqs_completed = 0;
 
@@ -2345,34 +2349,8 @@ for frequency = 1:length(frequencies)
             end
             
             
+            response_thresholds{frequency, dur, polarity} = find_threshold(hObject, handles);
             
-            [current_thresholds(frequency, dur, polarity) ...
-                current_threshold_voltages(frequency, dur, polarity), ...
-                data_filenames{frequency, dur, polarity}, ...
-                all_resp{frequency, dur, polarity}, ...
-                all_resp_filenames{frequency, dur, polarity}, ...
-                voltages{frequency, dur, polarity} ] = find_threshold(hObject, handles);
-
-            % Now, with this stim config, check all channels' voltages:
-            current_found = current_thresholds(frequency, dur, polarity);
-            
-            
-            check_all_stim_voltages(hObject, handles)
-
-            
-            
-            
-            %fprintf('Stimulating: %s uA for %s us at %s Hz.\n', ...
-            %    sigfig(stim.current_uA, 3), ...
-            %    sigfig(stim.halftime_s*1e6, 2), ...
-            %    sigfig(stim.repetition_Hz, 2));
-            
-            %[a b c d e] = find_threshold(hObject, handles);
-            %current_thresholds(frequency, dur, polarity) = a;
-            %current_threshold_voltages(frequency, dur, polarity) = b;
-            %data_filenames{frequency, dur, polarity} = c;
-            %all_resp{frequency, dur, polarity} = d;
-            %all_resp_filenames{frequency, dur, polarity} = e;
             
             elapsed_time = toc(start_time);
             nsearches_done = nsearches_done + 1;
@@ -2385,26 +2363,30 @@ for frequency = 1:length(frequencies)
             end
             
             
-            save(fullfile(datadir, 'current_thresholds'), ...
-                'current_thresholds', 'current_threshold_voltages', ...
-                'data_filenames', ...
-                'all_resp', 'all_resp_filenames', ...
+            save(fullfile(datadir, 'response_thresholds'), ...
+                'response_thresholds', ...
                 'frequencies', 'durations', ...
-                'polarities', 'detrend_param', ...
-                'freqs_completed', 'voltages');
+                'polarities', 'detrend_param');
         end
     end
     
-    freqs_completed = freqs_completed + 1;
-    save(fullfile(datadir, 'current_thresholds'), ...
-        'current_thresholds', 'current_threshold_voltages', ...
-        'data_filenames', ...
-        'all_resp', 'all_resp_filenames', ...
-        'frequencies', 'durations', ...
-        'polarities', 'detrend_param', ...
-        'freqs_completed');
-
-    squeeze(current_threshold_voltages(:,1,:))'
+    % Let's see what we've got:
+    
+    for f = 1:frequency
+        for d = 1:length(durations)
+            for p = 1:length(polarities)
+                v(f,d,p,:) = response_thresholds{f,d,p}.voltages;
+            end
+        end
+    end
+    
+    % Probably want max per channel, actually...
+    channel_voltage_means = squeeze(mean(mean(v, 1), 2))
+    channel_voltage_stds = squeeze(std(v(:,1,:,:), 0, 1))
+    
+                
+    %squeeze(response_thresholds.best_current_voltages(:,1,:))'
+    disp(sprintf('Completed experiment %d of %d...', frequency, length(frequencies)));
 end
 
 delete(thewaitbar);
@@ -2427,7 +2409,7 @@ global stim hardware detrend_param;
 global datadir;
 
 
-voltages = check_all_stim_voltages(hObject, handles)
+voltages = check_all_stim_voltages(hObject, handles);
 
 
 polarity_string = '';
