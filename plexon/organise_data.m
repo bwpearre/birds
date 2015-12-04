@@ -95,8 +95,12 @@ if ~isempty(hardware.tdt)
         %plot(tddata);
     catch ME
         warning('Ignoring TDT-is-stupid error #546, WHICH IS ONLY OKAY IF YOU JUST PRESSED STOP!');
+        data = [];
+        response_detected = NaN;
+        voltage = NaN;
+        errors.val = bitor(errors.val, 256);
+        return;
     end
-
 else
     tdata = [];
     tddata = [];

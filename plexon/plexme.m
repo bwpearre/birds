@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 23-Nov-2015 15:33:11
+% Last Modified by GUIDE v2.5 04-Dec-2015 10:34:00
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -91,10 +91,10 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if false % For my X--HVC experiment
+if true % For my X--HVC experiment
     detrend_param.model = 'fourier8';
-    detrend_param.range = [0.003 0.025];
-    detrend_param.response_roi = [0.0035 0.007];
+    detrend_param.range = [0.002 0.025];
+    detrend_param.response_roi = [0.0025 0.008];
     detrend_param.response_baseline = [0.012 0.025];
     detrend_param.response_detection_threshold = 1e-10;
     voltage_limit = 3;
@@ -987,6 +987,13 @@ end
 
 enable_controls(handles);
 stop_button_pressed = false;
+
+global paused;
+
+if ~exist('paused', 'var')
+    paused = false;
+    set(handles.pause, 'BackgroundColor', [1 1 1]*0.94, 'String', 'Pause');
+end
 
 
 
@@ -2090,12 +2097,11 @@ end
 
 
 
-function [ out ] = find_threshold(hObject, handles)
+function [ out errors ] = find_threshold(hObject, handles)
 global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
 global increase_step;
-
  
     
 % [ out.best_current     out.best_current_voltage   out.stim_filename out.all_resp out.all_resp_filenames out.voltages ]
@@ -2124,6 +2130,10 @@ found_lower_limit = false;
     
 while ~done
     
+    while get(handles.pause, 'Value')
+        pause(1);
+    end
+    
     update_gui_values(hObject, handles);
     drawnow;
     
@@ -2132,9 +2142,21 @@ while ~done
     end
     
     data = [];
+    
+    errorcounter = 0;
+
     while isempty(data)
         [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+        errorcounter = errorcounter + 1;
+        if errorcounter > 5
+            a(0)
+        end
+        if exist('errors', 'var') & isfield(errors, 'val') & bitand(errors.val, 256)
+            return;
+        end
     end
+    
+
 
     switch response
         case 1
@@ -2227,6 +2249,11 @@ orig_monitor_electrode = stim.plexon_monitor_electrode;
 voltages = NaN * zeros(size(stim.active_electrodes));
 
 for i = find(stim.active_electrodes)
+    
+    while get(handles.pause, 'Value')
+        pause(1);
+    end
+
     stim.plexon_monitor_electrode = i;
     update_monitor_electrodes(hObject, handles);
     
@@ -2254,6 +2281,11 @@ global response_thresholds;
 global datadir;
 global thewaitbar;
 global scriptdir;
+global paused;
+
+if ~exist('pause', 'var')
+    paused = false;
+end
 
 disable_controls(hObject, handles);
 stop_button_pressed = false;
@@ -2288,10 +2320,12 @@ if exist('repeat_experiment', 'var')
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
 else
-    frequencies = [25 25  ]
+    NPOLARITIES = 30;
+    
+    frequencies = [ 25 25 25 25 25 ]
     durations = [200e-6]
     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
-    polarities = polarities(1:min([length(polarities) 2]));
+    polarities = polarities(1:min([length(polarities) NPOLARITIES]));
     % Always test non-current-steering configurations!
     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
 end
@@ -2335,6 +2369,11 @@ for frequency = 1:length(frequencies)
         handles = configure_acquisition_devices(hObject, handles);
  
         for polarity = randperm(length(polarities))
+            
+            while get(handles.pause, 'Value')
+                pause(1);
+            end
+            
             if stop_button_pressed
                 stop_button_pressed = false;
                 return;
@@ -2349,7 +2388,16 @@ for frequency = 1:length(frequencies)
             end
             
             
-            response_thresholds{frequency, dur, polarity} = find_threshold(hObject, handles);
+            [response_thresholds{frequency, dur, polarity}, errors] = find_threshold(hObject, handles);
+            
+            if exist('errors', 'var') & isfield(errors, 'val') & bitand(errors.val, 256)
+                return;
+            end
+
+
+            if stop_button_pressed
+                return;
+            end
             
             
             elapsed_time = toc(start_time);
@@ -2442,3 +2490,21 @@ if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColo
 end
 
 
+
+
+% --- Executes on button press in pause.
+function pause_Callback(hObject, eventdata, handles)
+global paused;
+
+if ~exist('paused', 'var')
+    paused = true;
+end
+
+
+if paused
+    paused = false;
+    set(handles.pause, 'BackgroundColor', [1 1 1]*0.94, 'String', 'Pause');
+else
+    paused = true;
+    set(handles.pause, 'BackgroundColor', [1 0 0], 'String', 'Resume');
+end
