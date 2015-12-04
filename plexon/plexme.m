@@ -2102,21 +2102,10 @@ global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
 global increase_step;
- 
-    
-% [ out.best_current     out.best_current_voltage   out.stim_filename out.all_resp out.all_resp_filenames out.voltages ]
-% [ current_thresholds   current_threshold_voltages stim_filename
-
-            %[current_thresholds(frequency, dur, polarity) ...
-            %    current_threshold_voltages(frequency, dur, polarity), ...
-            %    data_filenames{frequency, dur, polarity}, ...
-            %    all_resp{frequency, dur, polarity}, ...
-            %    all_resp_filenames{frequency, dur, polarity}, ...
-            %    voltages{frequency, dur, polarity} ] = find_threshold(hObject, handles);
             
 
 factor = increase_step;
-final_factor = 1.03;
+final_factor = 1.02;
 out.best_current = Inf;
 out.best_current_voltage = Inf;
 out.stim_filename = {};
@@ -2355,6 +2344,7 @@ else
     waitbar(0, thewaitbar, 'Time remaining: hundreds of years');
 end
 
+warning('Test the thing that says TESTME');
 
 disp(sprintf('Doing %d threshold searches.', nsearches));
 
@@ -2429,8 +2419,8 @@ for frequency = 1:length(frequencies)
     end
     
     % Probably want max per channel, actually...
-    channel_voltage_means = squeeze(mean(mean(v, 1), 2))
-    channel_voltage_stds = squeeze(std(v(:,1,:,:), 0, 1))
+    channel_voltage_means = squeeze(mean(mean(max(v, [], 4), 1), 2))
+    channel_voltage_stds = squeeze(std(max(v(:, 1, :, :), [], 4), 0, 1)) % TESTME
     
                 
     %squeeze(response_thresholds.best_current_voltages(:,1,:))'
