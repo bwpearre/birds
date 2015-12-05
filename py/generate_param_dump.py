@@ -65,17 +65,23 @@ def map_data_to_file(maindata, data, filename):
         maindata[(key, value)].append(filename)
     return maindata
 
+def is_updated():
+    return len(glob('*_v73.mat')) > 0
+
 def main():
     # data_queue = Queue.Queue()
     path = 'updated'
     mapped_data = defaultdict(list)
     print('Converting matlab data to updated structs and hdf5 format')
-    if not os.path.exists(path):
+    if not os.path.exists(path) and not glob('*_v73.mat'):
         print('Converting')
         convert_matlab()
     else:
         print('Files have already been converted to proper matlab format')
-    files = glob(os.path.join(path,'*.mat'))
+    if is_updated():
+        files = glob('*_v73.mat')
+    else:
+        files = glob(os.path.join(path,'*.mat'))
     print('Generating parameters file')
     print('Need to go through {} files'.format(len(files)))
 

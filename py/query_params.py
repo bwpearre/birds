@@ -7,12 +7,14 @@ import json
 
 
 def main():
-    if not os.path.exists('updated'):
+    if glob.glob('*_v73.mat') and not glob.glob('*.pkl'):
         imp.load_source('generate_param_dump',
          os.path.expanduser('~/Documents/MATLAB/birds/py/generate_param_dump.py')).main()
-        data = pickle.load(open(glob.glob('*.pkl')[0], 'rb'))
-    else:
-        data = pickle.load(open(glob.glob('*.pkl')[0], 'rb'))
+    elif not os.path.exists('updated') and not glob.glob('*_v73.mat'):
+        imp.load_source('generate_param_dump',
+         os.path.expanduser('~/Documents/MATLAB/birds/py/generate_param_dump.py')).main()
+
+    data = pickle.load(open(glob.glob('*.pkl')[0], 'rb'))
 
     return data
 
@@ -44,3 +46,4 @@ if __name__=='__main__':
     data = main()
     params = open_json()
     plt = imp.load_source('plt_data',os.path.join(os.path.expanduser('~'),'Documents/MATLAB/birds/py/plot_data.py'))
+    print('Vars are: data, plt, and params, check with who(s)')
