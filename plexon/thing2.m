@@ -70,6 +70,8 @@ for p = 1:length(d{i}.polarities)
     labels{p} = dec2bin(polarities_sorted(p), log2(max(polarities_sorted)));
 end
 
+figure(1);
+
 subplot(2, most+1, most+1);
 errorbar(1:30, respmean(sort_indices, 1), respstd(sort_indices, 1));
 title('Mean\pm 1\sigma response current');
@@ -164,3 +166,20 @@ for i = 1:length(d)
     end
     
 end
+
+
+confs = {'000000101010', '100100001000', '001000001011'};
+
+for i = 1:length(confs)
+    
+    foo = load(sprintf('all_stim_voltages_%s', confs{i}));
+    v(i,:) = foo.voltages;
+end
+
+figure(2);
+bar(v');
+title('Stimulation voltages for all active electrodes');
+xlabel('electrode');
+ylabel('V');
+grid;
+legend(confs);

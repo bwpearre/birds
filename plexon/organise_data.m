@@ -14,6 +14,7 @@ global axes2;
 global voltage_range_last_stim;
 global show_device;
 global voltage_limit;
+global stop_button_pressed;
 
 errors.val = 0;
 errors.name = {};
@@ -94,8 +95,12 @@ if ~isempty(hardware.tdt)
         %plot(tddata);
     catch ME
         warning('Ignoring TDT-is-stupid error #546, WHICH IS ONLY OKAY IF YOU JUST PRESSED STOP!');
+        data = [];
+        response_detected = NaN;
+        voltage = NaN;
+        errors.val = bitor(errors.val, 256);
+        return;
     end
-
 else
     tdata = [];
     tddata = [];
@@ -136,12 +141,19 @@ end
 %%%%%
 
 if ~isempty(hardware.tdt)
+%     if ~exist('tdata', 'var')
+%         data = [];
+%         response_detected = NaN;
+%         voltage = NaN;
+%         disp('No triggers found on NI. Aborting this run.');
+%         return;
+%     end
     [tdata_aligned, tdt_triggertime, n_repetitions_actual_tdt] = chop_and_align(tdata, ...
         tddata, ...
         tdt_TimeStamps, ...
         stim.n_repetitions, ...
         hardware.tdt.samplerate);
-    plot(axes2, tdt_TimeStamps - tdt_triggertime, tddata);
+    %plot(axes2, tdt_TimeStamps - tdt_triggertime, tddata);
 end
 
 if n_repetitions_actual_tdt == 0

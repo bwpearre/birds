@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 10-Nov-2015 11:48:05
+% Last Modified by GUIDE v2.5 30-Nov-2015 16:27:44
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -137,10 +137,11 @@ do_file(hObject, handles, file, true);
 
 function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
-global detrend_param;
+global detrend_param detrend_param_orig;
 
 %set(handles.listbox1, 'Enable', 'inactive');
 drawnow;
+
 
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
@@ -174,6 +175,7 @@ if isempty(detrend_param)
 end
 
 
+detrend_param_orig = data.detrend_param;
 
 if ~isequal(detrend_param, data.detrend_param)
     %data.detrend_param = detrend_param;
@@ -191,16 +193,8 @@ if ~isequal(detrend_param, data.detrend_param)
 end
 
 
+update_detrend_param_widgets(hObject, handles);
 
-set(handles.detrend_model, 'String', detrend_param.model);
-set(handles.fit0, 'String', sprintf('%g', detrend_param.range(1)*1000));
-set(handles.fit1, 'String', sprintf('%g', detrend_param.range(2)*1000));
-set(handles.roi0, 'String', sprintf('%g', detrend_param.response_roi(1)*1000));
-set(handles.roi1, 'String', sprintf('%g', detrend_param.response_roi(2)*1000));
-set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1)*1000));
-set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
-set(handles.response_detection_threshold, 'String', sprintf('%g', ...
-    detrend_param.response_detection_threshold));
 if isfield(data, 'tdt')
     for i = 1:16
         if any(data.tdt.index_recording == i)
@@ -254,6 +248,19 @@ guidata(hObject, handles);
 
 
 
+
+function [] = update_detrend_param_widgets(hObject, handles);
+global detrend_param;
+
+set(handles.detrend_model, 'String', detrend_param.model);
+set(handles.fit0, 'String', sprintf('%g', detrend_param.range(1)*1000));
+set(handles.fit1, 'String', sprintf('%g', detrend_param.range(2)*1000));
+set(handles.roi0, 'String', sprintf('%g', detrend_param.response_roi(1)*1000));
+set(handles.roi1, 'String', sprintf('%g', detrend_param.response_roi(2)*1000));
+set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1)*1000));
+set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
+set(handles.response_detection_threshold, 'String', sprintf('%g', ...
+    detrend_param.response_detection_threshold));
 
 
 
@@ -551,4 +558,14 @@ end
 function xscale_CreateFcn(hObject, eventdata, handles)
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
+end
+
+
+% --- Executes on button press in get_detrend_params_from_file.
+function get_detrend_params_from_file_Callback(hObject, eventdata, handles)
+global detrend_param detrend_param_orig;
+
+if exist('detrend_param_orig', 'var') & ~isempty(detrend_param_orig)
+    detrend_param = detrend_param_orig;
+    update_detrend_param_widgets(hObject, handles);
 end
