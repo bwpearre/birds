@@ -100,12 +100,12 @@ figure(2);
 clf;
 hold on;
 for i = 1:length(show)
-    if false
+    if true
         h = shadedErrorBar(timeaxis, squeeze(foo(show(i), :, v, 1)), ...
             squeeze(foo95(show(i), :, v, 1)), ...
             {'color', colours(i,:)}, 1);
         hh(show(i)) = h.mainLine;
-        title(sprintf('HVC responses with different Area X stimulation patterns: 95% confidence'));
+        title(sprintf('HVC responses with different Area X stimulation patterns: 95%% confidence'));
     else
         h = plot(timeaxis, squeeze(allthethings(show(i), :, v, 1)), 'Color', colours(i,:));
         hh(show(i)) = h(1);

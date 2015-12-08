@@ -659,7 +659,7 @@ if false
     if ~exist(datadir, 'dir')
         mkdir(datadir);
     end
-    save(fullfile(datadir, datafile_name), 'vvsi');
+    save(fullfile(datadir, datafile_name), 'vvsi', '-v7.3');
 end
 
 if ~isempty(hardware.tdt.device)
@@ -1847,7 +1847,7 @@ for i = save_vars
     eval(sprintf('saved.%s = %s;', char(i), char(i)));
 end
 
-save(savename, 'saved');
+save(savename, 'saved', '-v7.3');
 
 
 
@@ -2404,7 +2404,7 @@ for frequency = 1:length(frequencies)
             save(fullfile(datadir, 'response_thresholds'), ...
                 'response_thresholds', ...
                 'frequencies', 'durations', ...
-                'polarities', 'detrend_param');
+                'polarities', 'detrend_param', '-v7.3');
         end
     end
     
@@ -2455,7 +2455,7 @@ for i = find(stim.active_electrodes)
     polarity_string = strcat(polarity_string, sigfig(stim.negativefirst(i), 1));
 end
 save(fullfile(datadir, sprintf('voltages_%s.mat', polarity_string)), ...
-    'stim', 'voltages');
+    'stim', 'voltages', '-v7.3');
 
 
 
