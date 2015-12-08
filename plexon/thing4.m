@@ -22,7 +22,7 @@ end
 
 
 % Probably want max per channel, actually...
-channel_voltage = squeeze(max(vv, [], 4))
+channel_voltage = squeeze(max(vv, [], 4));
 channel_voltage_means = squeeze(mean(mean(max(vv, [], 4), 1), 2));
 channel_voltage_stds = squeeze(std(max(vv(:, 1, :, :), [], 4), 0, 1));
 channel_voltage_95 = channel_voltage_stds * 1.96 / sqrt(nfrequencies);
@@ -58,10 +58,10 @@ saveas(gcf, 'current_steering_voltages.fig');
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-if ~exist('allthethings', 'var') | true
+if ~exist('allthethings', 'var')
     totalsamples = zeros(1, npolarities);
     allthethings = [];
-    for f = 1:nfrequencies
+    for f = nfrequencies:-1:1
         for d = 1:ndurations
             for p = 1:npolarities
                 for r = 1:length(response_thresholds{f,d,p}.all_resp_filenames)
@@ -100,11 +100,12 @@ figure(2);
 clf;
 hold on;
 for i = 1:length(show)
-    if true
+    if false
         h = shadedErrorBar(timeaxis, squeeze(foo(show(i), :, v, 1)), ...
             squeeze(foo95(show(i), :, v, 1)), ...
-            {'color', colours(i,:)});
+            {'color', colours(i,:)}, 1);
         hh(show(i)) = h.mainLine;
+        title(sprintf('HVC responses with different Area X stimulation patterns: 95% confidence'));
     else
         h = plot(timeaxis, squeeze(allthethings(show(i), :, v, 1)), 'Color', colours(i,:));
         hh(show(i)) = h(1);
@@ -115,7 +116,6 @@ xlabel('milliseconds post-pulse');
 ylabel('microvolts');
 set(gca, 'XLim', [2e-3 data.tdt.times_aligned(max(v))]*1e3);
 legend(hh(show), labels(show), 'Location', 'NorthEast');
-title(sprintf('HVC responses with different Area X stimulation patterns'));
 
 set(gcf,'PaperPositionMode','auto'); 
 saveas(gcf, 'current_steering_hvc_responses.png');
