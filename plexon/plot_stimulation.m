@@ -105,7 +105,7 @@ end
 %[spikes r] = look_for_spikes_xcorr(d, data, detrend_param);
 
 linewidths = 0.3*ones(1, nchannels);
-linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes)))) * 2;
+%linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes))));
 
 
 % get(handles.response_show_all, 'Value')
@@ -241,8 +241,8 @@ legend(handles.axes3, legend_handles, legend_names);
 xlabel(handles.axes3, 'ms');
 set(get(axes3yy(1),'Ylabel'),'String','V')
 set(get(axes3yy(2),'Ylabel'),'String','\mu A')
-title(handles.axes3, sprintf('Stimulation (%sV)', sigfig(data.voltage, 3)));
-
+title(handles.axes3, sprintf('Stimulation (%sV, %snC)', sigfig(data.voltage, 3), ...
+    sigfig(data.stim.current_uA * data.stim.halftime_s * 1e3, 3)));
 
 xtick = get(handles.axes1, 'XTick');
 set(handles.axes1, 'XTick', xtick(1):0.001:aftertrigger);
