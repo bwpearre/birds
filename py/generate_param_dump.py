@@ -44,7 +44,7 @@ def generate_data_summary(f):
     struct = {}
     matfile = h5py.File(f, 'r')
     try:
-        struct['current'] = round(float(matfile['data']['stim']['current_uA'].value), 3)
+        struct['current'] = float(matfile['data']['stim']['current_uA'].value)
         struct['current_approx'] = int(matfile['data']['stim']['current_uA'].value)
         struct['negative_first'] = tuple(map(lambda a: int(a), matfile['data']['stim']['negativefirst'].value))
         struct['stim_electrodes'] = tuple(map(lambda a: int(a), matfile['data']['stim']['active_electrodes'].value))
