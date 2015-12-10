@@ -5,8 +5,6 @@ import imp
 import pickle
 import json
 
-#TODO: use this interface in an ipython notebook instead of ipython terminal
-
 def main():
     if glob.glob('*_v73.mat') and not glob.glob('*.pkl'):
         imp.load_source('generate_param_dump',
