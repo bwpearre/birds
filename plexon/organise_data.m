@@ -304,7 +304,7 @@ if saving_stimulations
         mkdir(datadir);
     end
 
-    save(fullfilename, 'data');
+    save(fullfilename, 'data', '-v7.3');
 end
 
 response_detected = any(data.tdt.spikes);
