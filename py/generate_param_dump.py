@@ -18,7 +18,7 @@ def old_matlab_version(f):
         g = h5py.File(f, 'r')
         g.close()
         return False
-    except:
+    except IOError as e:
         return True
 
 def convert_matlab():
