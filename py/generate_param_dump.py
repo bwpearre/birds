@@ -18,7 +18,7 @@ def old_matlab_version(f):
         g = h5py.File(f, 'r')
         g.close()
         return False
-    except:
+    except IOError as e:
         return True
 
 def convert_matlab():
@@ -72,14 +72,18 @@ def main():
     # data_queue = Queue.Queue()
     path = 'updated'
     mapped_data = defaultdict(list)
+    files = glob('*.mat')
+    is_old_matlab = old_matlab_version(files[0])
     print('Converting matlab data to updated structs and hdf5 format')
-    if not os.path.exists(path) and not glob('*_v73.mat'):
+    if not os.path.exists(path) and not glob('*_v73.mat') and is_old_matlab:
         print('Converting')
         convert_matlab()
     else:
         print('Files have already been converted to proper matlab format')
     if is_updated():
         files = glob('*_v73.mat')
+    elif not is_old_matlab:
+        print('Files are already in hdf5 format')
     else:
         files = glob(os.path.join(path,'*.mat'))
     print('Generating parameters file')

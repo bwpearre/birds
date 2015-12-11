@@ -5,4 +5,4 @@ then
 else
   echo "Notebook exists"
 fi
-ipython notebook plottingNotebook.ipynb
+jupyter notebook plottingNotebook.ipynb
