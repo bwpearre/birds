@@ -23,9 +23,10 @@ end
 
 % Probably want max per channel, actually...
 channel_voltage = squeeze(max(vv, [], 4));
-channel_voltage_means = squeeze(mean(mean(max(vv, [], 4), 1), 2));
-channel_voltage_stds = squeeze(std(max(vv(:, 1, :, :), [], 4), 0, 1));
-channel_voltage_95 = channel_voltage_stds * 1.96 / sqrt(nfrequencies);
+channel_voltage_means = squeeze(nanmean(nanmean(max(vv, [], 4), 1), 2));
+channel_voltage_stds = squeeze(nanstd(max(vv(:, 1, :, :), [], 4), 0, 1));
+channel_voltage_counts = sum(~isnan(channel_voltage));
+channel_voltage_95 = channel_voltage_stds * 1.96 ./ sqrt(channel_voltage_counts');
 
 [~, sortorder] = sort(channel_voltage_means);
 
@@ -83,16 +84,17 @@ allthethings(find(allthethings==0)) = NaN;
 %    & data.tdt.times_aligned < data.detrend_param.range(2));
 %v = find(data.tdt.times_aligned >= data.detrend_param.range(1) ...
 %    & data.tdt.times_aligned <= data.detrend_param.range(2));
-v = find(data.tdt.times_aligned >= 2e-3 ...
-    & data.tdt.times_aligned <= data.detrend_param.response_roi(2) + 0.005);
+v = find(data.tdt.times_aligned >= data.detrend_param.range(1) ...
+    & data.tdt.times_aligned <= data.detrend_param.response_roi(2) + 0.01);
 timeaxis = data.tdt.times_aligned(v)*1e3;
 
 foo = nanmean(allthethings, 2);
 foostd = nanstd(allthethings, 0, 2);
-fooste = foostd / sqrt(min(totalsamples));
+fooste = foostd ./ repmat(sqrt(totalsamples'), ...
+    1, ndurations, nsamples, nchannels);
 foo95 = fooste * 1.96;
 
-show = [ 4 8 21 25 ];
+show = [ 1:npolarities ];
 colours = distinguishable_colors(length(show));
 hh = [];
 
@@ -102,10 +104,10 @@ hold on;
 for i = 1:length(show)
     if true
         h = shadedErrorBar(timeaxis, squeeze(foo(show(i), :, v, 1)), ...
-            squeeze(foo95(show(i), :, v, 1)), ...
+            squeeze(fooste(show(i), :, v, 1)), ...
             {'color', colours(i,:)}, 1);
         hh(show(i)) = h.mainLine;
-        title(sprintf('HVC responses with different Area X stimulation patterns: 95%% confidence'));
+        title(sprintf('HVC responses with different Area X stimulation patterns: stderr'));
     else
         h = plot(timeaxis, squeeze(allthethings(show(i), :, v, 1)), 'Color', colours(i,:));
         hh(show(i)) = h(1);
