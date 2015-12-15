@@ -160,14 +160,17 @@ end
 % through.
 show_avg = get(handles.response_show_avg, 'Value');
 show_all = get(handles.response_show_all, 'Value');
+show_raw = get(handles.response_show_raw, 'Value');
 show_detrended = get(handles.response_show_detrended, 'Value');
 show_trend = get(handles.response_show_trend, 'Value');
+
+clear h; % Handles for plot -- if empty, there will be no legend, title, etc 
 
 for channel = show_channels
     
     % Raw (or filtered) response
-    if show_all | show_avg
-        foo = plot(handles.axes1, ...
+    if show_raw
+        h = plot(handles.axes1, ...
             times_aligned(u), ...
             reshape(response_plot(:,u,channel), [size(response_plot, 1) length(u)])', ...
             'Color', colours(channel, :), 'LineWidth', linewidths(channel));
@@ -175,43 +178,51 @@ for channel = show_channels
     % Detrended
     if show_detrended
         if show_avg
-            foo = plot(handles.axes1, roitimes, ...
+            h = plot(handles.axes1, roitimes, ...
                 reshape(mean(d.response_detrended(:, roii, channel), 1), [1 length(roii)])', ...
                 'Color', colours(channel, :), 'LineWidth', linewidths(channel));
         else
-            foo = plot(handles.axes1, roitimes, ...
+            h = plot(handles.axes1, roitimes, ...
                 reshape(d.response_detrended(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
                 'Color', colours(channel, :), 'LineWidth', linewidths(channel));
         end
     end
     if show_trend
-        plot(handles.axes1, roitimes, ...
-            reshape(d.response_trend(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
-            'Color', colours(channel,:), 'LineStyle', ':');
+        if show_avg
+            plot(handles.axes1, roitimes, ...
+                reshape(mean(d.response_trend(:, roii, channel), 1), [1 length(roii)])', ...
+                'Color', colours(channel,:), 'LineStyle', ':');
+        else
+            plot(handles.axes1, roitimes, ...
+                reshape(d.response_trend(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
+                'Color', colours(channel,:), 'LineStyle', ':');
+        end
         axes1legend{end+1} = 'Trend';
     end
 
-    if exist('foo')
-        legend_handles(end+1) = foo(1);
+    if exist('h', 'var')
+        legend_handles(end+1) = h(1);
         legend_names(end+1) = strcat(d.names(channel), ' (', sigfig(d.spikes_r(channel), 2), ')');
     end
 end
 hold(handles.axes1, 'off');
 %legend_names = d.names(d.show);
-try
-    legend(handles.axes1, legend_handles, legend_names);
-catch ME
-    disp('Legend error: inconsistent legend state.');
+if exist('h', 'var')
+    try
+        legend(handles.axes1, legend_handles, legend_names);
+    catch ME
+        disp('Legend error: inconsistent legend state.');
+    end
+
+    title(handles.axes1, 'Response');
+    xl = get(handles.axes1, 'XLim');
+    xl(1) = beforetrigger;
+    set(handles.axes1, ...
+        'XLim', [beforetrigger aftertrigger], ...
+        'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+    ylabel(handles.axes1, 'volts');
+    grid(handles.axes1, 'on');
 end
-    
-title(handles.axes1, 'Response');
-xl = get(handles.axes1, 'XLim');
-xl(1) = beforetrigger;
-set(handles.axes1, ...
-    'XLim', [beforetrigger aftertrigger], ...
-    'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
-ylabel(handles.axes1, 'volts');
-grid(handles.axes1, 'on');
 
 
 v = find(data.ni.times_aligned >= -0.0002 ...

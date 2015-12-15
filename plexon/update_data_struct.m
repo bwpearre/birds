@@ -69,7 +69,9 @@ end
 
 
 
-if data.version < 13
+
+
+if data.version < 14
     data.stim_duration = 2 * data.halftime_us / 1e6 + data.interpulse_s;
     if isfield(data, 'tdt')
         stim_start_i = find(data.tdt.times_aligned >= 0, 1) - 1;
@@ -78,11 +80,7 @@ if data.version < 13
         data.tdt.stim_active = 0 * data.tdt.times_aligned;
         data.tdt.stim_active(data.tdt.stim_active_indices) = ones(size(data.tdt.stim_active_indices));
     end
-end
 
-
-
-if data.version < 14
     data.current = floor(data.current);
 end
 

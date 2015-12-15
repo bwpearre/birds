@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 30-Nov-2015 16:27:44
+% Last Modified by GUIDE v2.5 15-Dec-2015 13:06:11
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -111,7 +111,7 @@ global tdt_show_now tdt_show_last_chosen tdt_show_data tdt_show_data_last;
 global file;
 tdt_show_now = tdt_show_last_chosen;
 for i = 1:16
-    set(handles.tdt_show{i}, 'Value', tdt_show_now(i));
+    set(handles.tdt_show_buttons{i}, 'Value', tdt_show_now(i));
 end
 if ~isempty(file)
     do_file(hObject, handles, file, true);
@@ -405,29 +405,28 @@ function response_show_avg_Callback(hObject, eventdata, handles)
 if get(hObject, 'Value')
     set(handles.response_show_all, 'Value', 0);
 end
-listbox1_Callback(handles.listbox1, eventdata, handles);
+plot_stimulation([], handles, true);
 
-% --- Executes on button press in response_show_trend.
+
+function response_show_raw_Callback(hObject, eventdata, handles)
+plot_stimulation([], handles, true);
+
 function response_show_trend_Callback(hObject, eventdata, handles)
-listbox1_Callback(handles.listbox1, eventdata, handles);
+plot_stimulation([], handles, true);
 
-
-% --- Executes on button press in response_show_detrend_paramed.
 function response_show_detrended_Callback(hObject, eventdata, handles)
-listbox1_Callback(handles.listbox1, eventdata, handles);
+plot_stimulation([], handles, true);
 
 
-% --- Executes on button press in response_filter.
 function response_filter_Callback(hObject, eventdata, handles)
-listbox1_Callback(handles.listbox1, eventdata, handles);
+plot_stimulation([], handles, true);
 
 
-% --- Executes on button press in response_show_all.
 function response_show_all_Callback(hObject, eventdata, handles)
 if get(hObject, 'Value')
     set(handles.response_show_avg, 'Value', 0);
 end
-listbox1_Callback(handles.listbox1, eventdata, handles);
+plot_stimulation([], handles, true);
 
 
 
@@ -569,3 +568,5 @@ if exist('detrend_param_orig', 'var') & ~isempty(detrend_param_orig)
     detrend_param = detrend_param_orig;
     update_detrend_param_widgets(hObject, handles);
 end
+
+

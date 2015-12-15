@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 04-Dec-2015 10:34:00
+% Last Modified by GUIDE v2.5 15-Dec-2015 13:17:50
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -91,7 +91,7 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if true % For my X--HVC experiment
+if false % For my X--HVC experiment
     detrend_param.model = 'fourier8';
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
@@ -109,7 +109,7 @@ end
 
 currently_reconfiguring = true;
 
-max_uAmps = 25;
+max_uAmps = 100;
 min_uAmps = 0.05;
 increase_step = 1.1;
 start_uAmps = 10;
@@ -1495,6 +1495,9 @@ if get(hObject, 'Value')
 end
 plot_stimulation([], handles, true);
 
+function response_show_raw_Callback(hObject, eventdata, handles)
+plot_stimulation([], handles, true);
+
 function response_show_trend_Callback(hObject, eventdata, handles)
 plot_stimulation([], handles, true);
 
@@ -2286,6 +2289,8 @@ stop_button_pressed = false;
 %repeat_experiment = strcat(scriptdir, '/lw95rhp-2015-11-19/current_thresholds_8.mat');
 %repeat_stim_file = strcat(scriptdir, '/lw95rhp-2015-11-19/stim_20151119_175100.405.mat');
 
+%% WIN
+
 if exist('repeat_experiment', 'var')
     if ~exist(repeat_experiment, 'file') | ~exist(repeat_stim_file, 'file')
         error('continue:wrongfiles', 'You are trying to continue an experiment, but the files are not found.');
@@ -2498,3 +2503,5 @@ else
     paused = true;
     set(handles.pause, 'BackgroundColor', [1 0 0], 'String', 'Resume');
 end
+
+
