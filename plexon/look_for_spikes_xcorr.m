@@ -114,5 +114,5 @@ xccow = max(cow, [], 2);
 %mean(xccow, 3)
 
 %r = (mean(xcfoo, 3) ./ mean(xccow, 3))';
-r = mean(xcfoo, 3)';
+r = median(xcfoo, 3)';
 spikes = r >= detrend_param.response_detection_threshold;

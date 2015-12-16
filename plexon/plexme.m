@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 15-Dec-2015 13:17:50
+% Last Modified by GUIDE v2.5 16-Dec-2015 12:38:09
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -2504,4 +2504,66 @@ else
     set(handles.pause, 'BackgroundColor', [1 0 0], 'String', 'Resume');
 end
 
+
+
+
+function xcorr_threshold_auto_Callback(hObject, eventdata, handles)
+global stim hardware detrend_param;
+global datadir;
+global cow ste wayout;
+global stop_button_pressed;
+
+% Set stim to the minimum (30 nA),  stimulate a bunch of times, and get a
+% range of xcorrelation values, per valid recording channel. How many
+
+stim.current_uA = 0.03;
+
+nactive = sum(stim.tdt_valid);
+
+colours = distinguishable_colors(nactive);
+tdt_valid_mapping = find(stim.tdt_valid);
+
+% One goes first. Given the way for loops work, this is easiest.
+data = stimulate(stim, hardware, detrend_param, handles);
+clear cow ste wayout;
+for i = 1:20
+    if stop_button_pressed
+        stop_button_pressed = false;
+        break;
+    end
+    
+    data = stimulate(stim, hardware, detrend_param, handles);
+
+    cow(i,:) = data.tdt.spikes_r;
+    if i > 1
+        wayout(i,:) = mean(cow)+3*std(cow);
+        ste(i,:) = std(cow) / sqrt(i);
+        detrend_param.response_detection_threshold = mean(cow) + 3*std(cow);
+
+        for j = 1:size(wayout, 2)
+            pchan = tdt_valid_mapping(j);
+            h = eval(sprintf('handles.maxi%d', pchan));
+            set(h, 'String', sprintf('%s', sigfig(wayout(i,j))));
+        end
+        
+        axes(handles.axes2);
+        cla;
+        hold on;
+        for j = 1:nactive
+            scatter(repmat(j, 1, i), cow(:,j), 5, colours(j,:));
+            % Plot the 95%-confidence estimate of the mean:
+            %shadedErrorBar(1:i, ste(1:i, j), ...
+            %    ste(1:i, j), ...
+            %    {'color', colours(j,:)}, 1);
+            % Plot the best guess for the 3*sigma threshold:
+            %plot(handles.axes2, 1:i, wayout(1:i,j), 'Color', colours(j,:));
+            xlabel('trial');
+            ylabel('xcorr');
+            title('Channel response thresholds');
+        end
+        hold off;
+        set(handles.axes2, 'XLim', [0 j+1]);
+
+    end
+end
 
