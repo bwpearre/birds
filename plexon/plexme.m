@@ -986,7 +986,6 @@ if ~isempty(vvsi)
 end
 
 enable_controls(handles);
-stop_button_pressed = false;
 
 global paused;
 
@@ -2314,7 +2313,7 @@ if exist('repeat_experiment', 'var')
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
 else
-    NPOLARITIES = 30;
+    NPOLARITIES = 20;
     
     frequencies = [ 25 25 25 25 25 ]
     durations = [200e-6]
@@ -2516,17 +2515,22 @@ global stop_button_pressed;
 % Set stim to the minimum (30 nA),  stimulate a bunch of times, and get a
 % range of xcorrelation values, per valid recording channel. How many
 
-stim.current_uA = 0.03;
+stim.current_uA = 0.5;
+stim.tdt_valid = ones(1, 16);
+stim.tdt_show = stim.tdt_valid;
+detrend_param.response_detection_threshold = zeros(size(stim.tdt_valid));
 
 nactive = sum(stim.tdt_valid);
 
 colours = distinguishable_colors(nactive);
 tdt_valid_mapping = find(stim.tdt_valid);
 
+xcorr_min_threshold = 5e-11;
+
 % One goes first. Given the way for loops work, this is easiest.
 data = stimulate(stim, hardware, detrend_param, handles);
 clear cow ste wayout;
-for i = 1:20
+for i = 1:100
     if stop_button_pressed
         stop_button_pressed = false;
         break;
@@ -2538,7 +2542,10 @@ for i = 1:20
     if i > 1
         wayout(i,:) = mean(cow)+3*std(cow);
         ste(i,:) = std(cow) / sqrt(i);
-        detrend_param.response_detection_threshold = mean(cow) + 3*std(cow);
+        
+        m = mean(cow);
+        m(find(m <= xcorr_min_threshold)) = Inf;
+        detrend_param.response_detection_threshold = m + 3*std(cow);
 
         for j = 1:size(wayout, 2)
             pchan = tdt_valid_mapping(j);
@@ -2546,24 +2553,46 @@ for i = 1:20
             set(h, 'String', sprintf('%s', sigfig(wayout(i,j))));
         end
         
-        axes(handles.axes2);
-        cla;
-        hold on;
+        %axes(handles.axes2);
+        cla(handles.axes2);
+        hold(handles.axes2, 'on');
         for j = 1:nactive
-            scatter(repmat(j, 1, i), cow(:,j), 5, colours(j,:));
+            scatter(handles.axes2, repmat(j, 1, i), cow(:,j), 5, colours(j,:));
+            scatter(handles.axes2, j, m(j), 10, colours(j,:), '+');
             % Plot the 95%-confidence estimate of the mean:
             %shadedErrorBar(1:i, ste(1:i, j), ...
             %    ste(1:i, j), ...
             %    {'color', colours(j,:)}, 1);
             % Plot the best guess for the 3*sigma threshold:
             %plot(handles.axes2, 1:i, wayout(1:i,j), 'Color', colours(j,:));
-            xlabel('trial');
-            ylabel('xcorr');
-            title('Channel response thresholds');
+            xlabel(handles.axes2, 'trial');
+            ylabel(handles.axes2, 'xcorr');
+            title(handles.axes2, 'Channel response thresholds');
         end
-        hold off;
+        hold(handles.axes2, 'off');
         set(handles.axes2, 'XLim', [0 j+1]);
 
     end
 end
+
+m = mean(cow);
+stim.tdt_valid = m > xcorr_min_threshold;
+stim.tdt_show = stim.tdt_valid;
+
+detrend_param.response_detection_threshold ...
+    = m(find(stim.tdt_valid)) + 3*std(cow(find(stim.tdt_valid)));
+
+for i = 1:16
+    if stim.tdt_valid(i)
+        foo = 'on';
+    else
+        foo = 'off';
+    end
+    set(handles.tdt_valid_buttons{i}, 'Value', stim.tdt_valid(i));
+    set(handles.tdt_show_buttons{i}, 'Value', stim.tdt_show(i), 'Enable', foo);
+end
+
+datafile_name = sprintf('corr_thresholds_%suA.mat', sigfig(stim.current_uA));
+save(fullfile(datadir, datafile_name), 'cow', '-v7.3');
+
 

@@ -115,4 +115,11 @@ xccow = max(cow, [], 2);
 
 %r = (mean(xcfoo, 3) ./ mean(xccow, 3))';
 r = median(xcfoo, 3)';
+
 spikes = r >= detrend_param.response_detection_threshold;
+if any(spikes) & false
+    channels = find(spikes)
+    responses = r(spikes)
+    thresholds = detrend_param.response_detection_threshold(spikes)
+end
+
