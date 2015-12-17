@@ -106,8 +106,8 @@ if exist('handles') & false
 end
 
 % For each stimXstim pair, find maximum xcorrelation over the time interval xcorr_nsamples
-xcfoo = max(foo, [], 2);
-xccow = max(cow, [], 2);
+xcfoo = log10(max(foo, [], 2));
+xccow = log10(max(cow, [], 2));
 
 % Average over stimXstim pairs
 %mean(xcfoo, 3)

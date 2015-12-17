@@ -139,9 +139,8 @@ if any(d.spikes)
 else
     set(handles.response_indicator, 'BackgroundColor', 0.94 * [1 1 1], 'String', 'Response?');
 end
-drawnow;
 
-for ch = 1:length(d.show)
+for ch = 1:length(d.index_recording)
     chr = d.index_recording(ch);
     if d.spikes(ch)
         set(handles.tdt_show_buttons{chr}, 'BackgroundColor', [1 0 1]);
@@ -202,7 +201,7 @@ for channel = show_channels
 
     if exist('h', 'var')
         legend_handles(end+1) = h(1);
-        legend_names(end+1) = strcat(d.names(channel), ' (', sigfig(d.spikes_r(channel), 2), ')');
+        legend_names(end+1) = strcat(d.names(channel), ' (', sigfig(d.spikes_r(channel), 4), ')');
     end
 end
 hold(handles.axes1, 'off');
@@ -281,4 +280,4 @@ if false
 end
 
 
-
+drawnow;

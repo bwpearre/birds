@@ -33,13 +33,15 @@ channel_voltage_95 = channel_voltage_stds * 1.96 ./ sqrt(channel_voltage_counts'
 % overvoltage)
 [~, sortorder] = sort(channel_voltage_counts, 'descend');
 % Sort the complete ones in voltage ascending order, for prettiness
+something = mean(channel_voltage(:,sortorder));
 [~, pos] = sort(something(1:n_valid));
 sortorder(1:n_valid) = sortorder(pos);
 % Sort the not-totally-valid ones in the same way?
 %[~, pos] = sort(something(n_valid+1:end));
 %sortorder(n_valid+1:end) = sortorder(pos+n_valid);
-% Actually, sort these ones by number of valid points:
-sortorder(n_valid+1:end) = sortorder(end:-1:n_valid+1);
+% Actually, sort these ones by number of valid points, worst-to-best:
+% (Why?)
+%  sortorder(n_valid+1:end) = sortorder(end:-1:n_valid+1);
 
 figure(1);
 clf;

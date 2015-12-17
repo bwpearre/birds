@@ -2313,9 +2313,9 @@ if exist('repeat_experiment', 'var')
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
 else
-    NPOLARITIES = 20;
+    NPOLARITIES = 6;
     
-    frequencies = [ 25 25 25 25 25 ]
+    frequencies = [ 20 20 20 ]
     durations = [200e-6]
     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
     polarities = polarities(1:min([length(polarities) NPOLARITIES]));
@@ -2405,13 +2405,13 @@ for frequency = 1:length(frequencies)
             end
             
             
-            save(fullfile(datadir, 'response_thresholds'), ...
-                'response_thresholds', ...
-                'frequencies', 'durations', ...
-                'polarities', 'detrend_param', '-v7.3');
         end
     end
     
+    save(fullfile(datadir, 'response_thresholds'), ...
+        'response_thresholds', ...
+        'frequencies', 'durations', ...
+        'polarities', 'detrend_param', '-v7.3');
     % Let's see what we've got:
     
     for f = 1:frequency
@@ -2525,7 +2525,7 @@ nactive = sum(stim.tdt_valid);
 colours = distinguishable_colors(nactive);
 tdt_valid_mapping = find(stim.tdt_valid);
 
-xcorr_min_threshold = 5e-11;
+xcorr_min_threshold = -10.1; % Is this even reasonable?
 
 % One goes first. Given the way for loops work, this is easiest.
 data = stimulate(stim, hardware, detrend_param, handles);
@@ -2540,17 +2540,19 @@ for i = 1:100
 
     cow(i,:) = data.tdt.spikes_r;
     if i > 1
-        wayout(i,:) = mean(cow)+3*std(cow);
-        ste(i,:) = std(cow) / sqrt(i);
-        
         m = mean(cow);
+        wayout(i,:) = m + 3*std(cow);
+        ste95 = std(cow) * 1.96 / sqrt(i);
+        
         m(find(m <= xcorr_min_threshold)) = Inf;
-        detrend_param.response_detection_threshold = m + 3*std(cow);
+        
+        % This just lets us monitor progress: shouldn't see pinkness by end
+        detrend_param.response_detection_threshold = m + ste95 + 3*std(cow);
 
         for j = 1:size(wayout, 2)
             pchan = tdt_valid_mapping(j);
             h = eval(sprintf('handles.maxi%d', pchan));
-            set(h, 'String', sprintf('%s', sigfig(wayout(i,j))));
+            set(h, 'String', sprintf('%s', sigfig(wayout(i,j), 4)));
         end
         
         %axes(handles.axes2);
@@ -2568,6 +2570,7 @@ for i = 1:100
             xlabel(handles.axes2, 'trial');
             ylabel(handles.axes2, 'xcorr');
             title(handles.axes2, 'Channel response thresholds');
+            set(handles.axes2, 'YLim', [-11 -9]);
         end
         hold(handles.axes2, 'off');
         set(handles.axes2, 'XLim', [0 j+1]);
@@ -2580,7 +2583,13 @@ stim.tdt_valid = m > xcorr_min_threshold;
 stim.tdt_show = stim.tdt_valid;
 
 detrend_param.response_detection_threshold ...
-    = m(find(stim.tdt_valid)) + 3*std(cow(find(stim.tdt_valid)));
+    = m(find(stim.tdt_valid)) + ste95(find(stim.tdt_valid)) + 3*std(cow(find(stim.tdt_valid)));
+
+for j = 1:size(wayout, 2)
+    pchan = tdt_valid_mapping(j);
+    h = eval(sprintf('handles.maxi%d', pchan));
+    set(h, 'String', sprintf('%s', sigfig(wayout(i,j), 4)));
+end
 
 for i = 1:16
     if stim.tdt_valid(i)
