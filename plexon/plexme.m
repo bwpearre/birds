@@ -2312,11 +2312,20 @@ if exist('repeat_experiment', 'var')
 
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
-else
+elseif false
     NPOLARITIES = 6;
     
     frequencies = [ 20 20 20 ]
     durations = [200e-6]
+    polarities = randperm(2^sum(stim.active_electrodes)) - 1;
+    polarities = polarities(1:min([length(polarities) NPOLARITIES]));
+    % Always test non-current-steering configurations!
+    polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
+else
+    NPOLARITIES = 6;
+    
+    frequencies = [ 27 27 27 27 27 ]
+    durations = [150 200 300]*1e-6;
     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
     polarities = polarities(1:min([length(polarities) NPOLARITIES]));
     % Always test non-current-steering configurations!
@@ -2515,7 +2524,7 @@ global stop_button_pressed;
 % Set stim to the minimum (30 nA),  stimulate a bunch of times, and get a
 % range of xcorrelation values, per valid recording channel. How many
 
-stim.current_uA = 0.5;
+stim.current_uA = 200;
 stim.tdt_valid = ones(1, 16);
 stim.tdt_show = stim.tdt_valid;
 detrend_param.response_detection_threshold = zeros(size(stim.tdt_valid));
@@ -2530,7 +2539,7 @@ xcorr_min_threshold = -10.1; % Is this even reasonable?
 % One goes first. Given the way for loops work, this is easiest.
 data = stimulate(stim, hardware, detrend_param, handles);
 clear cow ste wayout;
-for i = 1:100
+for i = 1:20
     if stop_button_pressed
         stop_button_pressed = false;
         break;
