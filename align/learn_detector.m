@@ -18,25 +18,11 @@ elseif 0
         MIC_DATA = audio.data;
         agg_audio.fs = audio.fs;
 elseif 0
-        load('~/r/data/wintest25/out_MANUALCLUST/extracted_data');
-        MIC_DATA = agg_audio.data;
-elseif 0
-        BIRD='lg373rblk';
-        load('/Users/bwpearre/r/data/lg373rblk_2015_01_14/wav/out_MANUALCLUST/extracted_data.mat');
-        MIC_DATA = agg_audio.data;
-elseif 0
         BIRD='lw27ry';
         load('~/r/data/lw27ry_extracted_data');
         agg_audio.data = agg_audio.data(1:24000,:);
         clear agg_data;
         MIC_DATA = agg_audio.data;
-elseif 0
-        BIRD='lg373rblk';
-        load('/Users/Shared/lg373rblk/2cntnerve/2015-03-23/mat/lg373_MANUALCLUST/extracted_data.mat');
-        MIC_DATA = agg_audio.data;
-else
-        load aggregated_data;
-        agg_audio.fs = fs;
 end
 
 %%% Code snippet to create songs for audio device input
@@ -69,7 +55,7 @@ NTRAIN = 1000;
 
 %% Add some non-matching sound fragments and songs and such from another
 %% bird... try around 10% of the training corpus?
-NONSINGING_FRACTION = 1;
+NONSINGING_FRACTION = 2;
 nonmatchingbird = 'lblk121rr';
 if strcmp(BIRD, nonmatchingbird)
         fprintf('ERROR: using the same bird--%s--for training and for nonmatching data!\n', BIRD);
@@ -128,7 +114,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.003;                        % seconds
+FFT_TIME_SHIFT = 0.002;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -189,7 +175,7 @@ colorbar;
 
 %% Cut out a region of the spectrum (in space and time) to save on compute
 %% time:
-freq_range = [2000 7000]; % TUNE
+freq_range = [1000 8000]; % TUNE
 time_window = 0.03; % TUNE
 %%%%%%%%%%%%
 
@@ -232,7 +218,9 @@ else % TUNE
         %times_of_interest = 0.78;
         %times_of_interest = [ 0.28 0.775 ];
         %times_of_interest = 0.325;
-        times_of_interest = [0.325];
+        times_of_interest = [0.115 0.2 0.325];
+        %times_of_interest = 0.115;
+        %times_of_interest = [0.1 0.2 0.3 0.4];
         %times_of_interest = 0.45:0.01:0.48;
         %times_of_interest = [ 0.2:0.01:0.35 ];
         %times_of_interest = 0.5;
@@ -279,12 +267,13 @@ colorbar;
 % Draw the syllables of interest:
 line(repmat(times_of_interest, 2, 1)*1000, repmat([freqs(1) freqs(end)]/1000, ntsteps_of_interest, 1)', 'Color', [1 0 0]);
 
-windowrect = rectangle('Position', [(times_of_interest(1) - time_window)*1000 ...
-                                    freq_range(1)/1000 ...
-                                    time_window(1)*1000 ...
-                                    (freq_range(2)-freq_range(1))/1000], ...
-                       'EdgeColor', [1 0 0]);
-
+for i = 1:ntsteps_of_interest
+    windowrect = rectangle('Position', [(times_of_interest(i) - time_window)*1000 ...
+        freq_range(1)/1000 ...
+        time_window(1)*1000 ...
+        (freq_range(2)-freq_range(1))/1000], ...
+        'EdgeColor', [1 0 0]);
+end
 drawnow;
 
 
@@ -384,8 +373,9 @@ fprintf('Training network with %s...\n', net.trainFcn);
 % Once the validation set performance stops improving, it doesn't seem to
 % get better, so keep this small.
 net.trainParam.max_fail = 2;
-if training_set_MB < 10000
-        parallelise_training = 'no'; % Actually slows down training??
+if training_set_MB < 10000 & false
+        parallelise_training = 'yes'; % Actually slows down training??
+        disp('   ...parallelising...');
 else
         parallelise_training = 'no';
 end
@@ -425,7 +415,7 @@ trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         MATCH_PLUSMINUS, ...
         timestep, ...
         time_window_steps, ...
-        songs_with_hits);
+        songs_with_hits)
 
 
 SHOW_THRESHOLDS = true;
@@ -433,52 +423,53 @@ SORT_BY_ALIGNMENT = true;
 % For each timestep of interest, draw that output unit's response to all
 % timesteps for all songs:
 for i = 1:ntsteps_of_interest
-        figure(4);
-        subplot(ntsteps_of_interest+1,1,i+1);
-        foo = reshape(testout(i,:,:), [], nsongs);
-        barrr = zeros(time_window_steps-1, nsongs);
-
-        if SHOW_THRESHOLDS
-                img = power_img * 0.8;
-                fooo = trigger(foo', trigger_thresholds(i), 0.1, timestep);
-                fooo = [barrr' fooo];
-                [val pos] = max(fooo,[],2);
-
-                img(1:ntrainsongs, :, 1) = img(1:ntrainsongs, :, 1) - fooo(1:ntrainsongs,:);
-                img(1:ntrainsongs, :, 2) = img(1:ntrainsongs, :, 2) + fooo(1:ntrainsongs,:);
-                img(1:ntrainsongs, :, 3) = img(1:ntrainsongs, :, 3) + fooo(1:ntrainsongs,:);
-                img(ntrainsongs+1:end, :, 1) = img(ntrainsongs+1:end, :, 1) + fooo(ntrainsongs+1:end,:);
-                img(ntrainsongs+1:end, :, 2) = img(ntrainsongs+1:end, :, 2) - fooo(ntrainsongs+1:end,:);
-                img(ntrainsongs+1:end, :, 3) = img(ntrainsongs+1:end, :, 3) - fooo(ntrainsongs+1:end,:);
-                
-                img(1:ntrainsongs, 1:time_window_steps, 3) = 1;
-                img(1:ntrainsongs, 1:time_window_steps, 2) = 1;
-                img(1:ntrainsongs, 1:time_window_steps, 1) = 0;
-                img(ntrainsongs+1:end, 1:time_window_steps, 2) = 0;
-                img(ntrainsongs+1:end, 1:time_window_steps, 1) = 1;
-                img(ntrainsongs+1:end, 1:time_window_steps, 3) = 0;
-
-                if SORT_BY_ALIGNMENT
-                        %[~, new_world_order] = sort(target_offsets);
-                        [~, new_world_order] = sort(pos);
-                        img = img(new_world_order,:,:);
-                end
-                image([times(1) times(end)]*1000, [1 nsongs], img);
-        else
-                barrr(:, 1:ntrainsongs) = max(max(foo))/2;
-                barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
-                foo = [barrr' foo'];
-                imagesc([times(1) times(end)]*1000, [1 nsongs], foo);
+    figure(4);
+    subplot(ntsteps_of_interest+1,1,i+1);
+    foo = reshape(testout(i,:,:), [], nsongs);
+    barrr = zeros(time_window_steps-1, nsongs);
+    
+    if SHOW_THRESHOLDS
+        % "img" is a tricolour image
+        img = power_img * 0.8;
+        fooo = trigger(foo', trigger_thresholds(i), 0.1, timestep);
+        fooo = [barrr' fooo];
+        [val pos] = max(fooo,[],2);
+        
+        img(1:ntrainsongs, :, 1) = img(1:ntrainsongs, :, 1) - fooo(1:ntrainsongs,:);
+        img(1:ntrainsongs, :, 2) = img(1:ntrainsongs, :, 2) + fooo(1:ntrainsongs,:);
+        img(1:ntrainsongs, :, 3) = img(1:ntrainsongs, :, 3) + fooo(1:ntrainsongs,:);
+        img(ntrainsongs+1:end, :, 1) = img(ntrainsongs+1:end, :, 1) + fooo(ntrainsongs+1:end,:);
+        img(ntrainsongs+1:end, :, 2) = img(ntrainsongs+1:end, :, 2) - fooo(ntrainsongs+1:end,:);
+        img(ntrainsongs+1:end, :, 3) = img(ntrainsongs+1:end, :, 3) - fooo(ntrainsongs+1:end,:);
+        
+        img(1:ntrainsongs, 1:time_window_steps, 3) = 1;
+        img(1:ntrainsongs, 1:time_window_steps, 2) = 1;
+        img(1:ntrainsongs, 1:time_window_steps, 1) = 0;
+        img(ntrainsongs+1:end, 1:time_window_steps, 2) = 0;
+        img(ntrainsongs+1:end, 1:time_window_steps, 1) = 1;
+        img(ntrainsongs+1:end, 1:time_window_steps, 3) = 0;
+        
+        if SORT_BY_ALIGNMENT
+            %[~, new_world_order] = sort(target_offsets);
+            [~, new_world_order] = sort(pos);
+            img = img(new_world_order,:,:);
         end
-        xlabel('Time (ms)');
-        ylabel('Song (random order)');
-        if ~SORT_BY_ALIGNMENT
-                text(time_window/2*1000, ntrainsongs/2, 'train', ...
-                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-                text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
-                        'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-        end
-        colorbar; % If nothing else, this makes it line up with the spectrogram.
+        image([times(1) times(end)]*1000, [1 nsongs], img);
+    else
+        barrr(:, 1:ntrainsongs) = max(max(foo))/2;
+        barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
+        foo = [barrr' foo'];
+        imagesc([times(1) times(end)]*1000, [1 nsongs], foo);
+    end
+    xlabel('Time (ms)');
+    ylabel('Song (random order)');
+    if ~SORT_BY_ALIGNMENT
+        text(time_window/2*1000, ntrainsongs/2, 'train', ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+        text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+    end
+    colorbar; % If nothing else, this makes it line up with the spectrogram.
 end
 
 % Draw the hidden units' weights.  Let the user make these square or not

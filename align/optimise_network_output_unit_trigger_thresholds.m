@@ -33,39 +33,41 @@ nsubfigs = size(testout, 1);
 ntestpts = 1000;
 
 for i = 1:length(tstep_of_interest)
-        responses = squeeze(testout(i, :, :))';
-        positive_interval = tstep_of_interest_shifted(i)-ACTIVE_TIMESTEPS_BEFORE:...
-                tstep_of_interest_shifted(i)+ACTIVE_TIMESTEPS_AFTER;
-        positive_interval = positive_interval(find(positive_interval > 0 & positive_interval <= nwindows_per_song));
-        
-        f = @(threshold)trigger_threshold_cost(threshold, ...
-                responses, ...
-                positive_interval, ...
-                FALSE_POSITIVE_COST, ...
-                songs_with_hits);
-        
-        % Find optimal threshold on the interval [0.001 1]
-        % optimal_thresholds = fminbnd(f, 0.001, 1);
-        %% Actually, fminbnd is useless at jumping out of local minima, and it's quick enough to brute-force it.
-        best = Inf;
-        testpts = linspace(Y_NEGATIVE, 1, ntestpts);
-        truepos = zeros(1, length(tstep_of_interest));
-        falsepos = zeros(1, length(tstep_of_interest));
-        for j = 1:ntestpts
-                [ outval truepos(j) falsepos(j) ] = f(testpts(j));
-                if outval < best
-                        best = outval;
-                        bestparam = testpts(j);
-                end
+    responses = squeeze(testout(i, :, :))';
+    positive_interval = tstep_of_interest_shifted(i)-ACTIVE_TIMESTEPS_BEFORE:...
+        tstep_of_interest_shifted(i)+ACTIVE_TIMESTEPS_AFTER;
+    positive_interval = positive_interval(find(positive_interval > 0 & positive_interval <= nwindows_per_song));
+    
+    f = @(threshold)trigger_threshold_cost(threshold, ...
+        responses, ...
+        positive_interval, ...
+        FALSE_POSITIVE_COST, ...
+        songs_with_hits);
+    
+    % Find optimal threshold on the interval [0.001 1]
+    % optimal_thresholds = fminbnd(f, 0.001, 1);
+    %% Actually, fminbnd is useless at jumping out of local minima, but brute-forcing the search is quick.
+    best = Inf;
+    testpts = linspace(Y_NEGATIVE, 1, ntestpts);
+    trueposrate = zeros(1, length(tstep_of_interest));
+    falseposrate = zeros(1, length(tstep_of_interest));
+    for j = 1:ntestpts
+        [ outval trueposrate(j) falseposrate(j) ] = f(testpts(j));
+        if outval < best
+            best = outval;
+            bestparam = testpts(j);
+            bestperf = [trueposrate(j) falseposrate(j)];
         end
-        optimal_thresholds(i) = bestparam;
-        
-        ROCintegral = truepos(1:end-1) * (falsepos(1:end-1)-falsepos(2:end))';
-        subplot(1, nsubfigs, i);
-        plot(falsepos, truepos);
-        xlabel('false positives');
-        ylabel('true positives');
-        title(sprintf('ROC at %g ms; integral = %.3g', times_of_interest(i)*1000, ROCintegral));
-        axis square;
+    end
+    optimal_thresholds(i) = bestparam;
+    
+    ROCintegral = trueposrate(1:end-1) * (falseposrate(1:end-1)-falseposrate(2:end))';
+    subplot(1, nsubfigs, i);
+    plot(falseposrate, trueposrate);
+    xlabel('false positives');
+    ylabel('true positives');
+    title(sprintf('ROC at %g ms; integral = %.3g', times_of_interest(i)*1000, ROCintegral));
+    axis square;
+    disp(sprintf('True positive rate %s%%, false positive rate %s%%', sigfig(bestperf(1)*100), sigfig(bestperf(2)*100)));
 end
 
