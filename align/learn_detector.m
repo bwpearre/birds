@@ -8,10 +8,17 @@ global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
 if 1
+        BIRD='lny64';
+        load('~/Desktop/lny64/roboaggregate.mat');
+        MIC_DATA = audio.data;
+        agg_audio.fs = audio.fs;
+        times_of_interest = [0.315]; % 0.402
+elseif 0
         BIRD='lg373rblk';
         load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
         MIC_DATA = audio.data;
         agg_audio.fs = audio.fs;
+        times_of_interest = [0.115 0.2 0.325];
 elseif 0
         BIRD='lw8rhp';
         load('/Users/bwpearre/Desktop/Will/test_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -52,6 +59,8 @@ clear agg_data;
 [nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
 NTRAIN = 1000;
+
+disp(sprintf('Found %d songs.  Using %d.', nmatchingsongs, min(nmatchingsongs, NTRAIN)));
 
 %% Add some non-matching sound fragments and songs and such from another
 %% bird... try around 10% of the training corpus?
@@ -114,7 +123,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.002;                        % seconds
+FFT_TIME_SHIFT = 0.003;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -200,8 +209,10 @@ if 0
         fprintf('\n    NOT PERMUTING TRAINING SONGS\n\n');
 end
 
+disp(sprintf('%d training songs.  %d remain for test.', ntrainsongs, ntestsongs));
 trainsongs = randomsongs(1:ntrainsongs);
-testsongs = randomsongs(1:ntestsongs);
+testsongs = randomsongs(ntrainsongs+1:end);
+size_of_testsongs = size(testsongs)
 
 if 0
         disp('Looking for promising syllables...');
@@ -214,19 +225,12 @@ if 0
                 ntimes, ...
                 freq_range_ds);
         times_of_interest = tstep_of_interest * timestep
-else % TUNE
-        %times_of_interest = 0.78;
-        %times_of_interest = [ 0.28 0.775 ];
-        %times_of_interest = 0.325;
-        times_of_interest = [0.115 0.2 0.325];
-        %times_of_interest = 0.115;
-        %times_of_interest = [0.1 0.2 0.3 0.4];
-        %times_of_interest = 0.45:0.01:0.48;
-        %times_of_interest = [ 0.2:0.01:0.35 ];
-        %times_of_interest = 0.5;
-        
-        tstep_of_interest = round(times_of_interest / timestep);
+elseif exist('times_of_interest', 'var') % TUNE
+    tstep_of_interest = round(times_of_interest / timestep);
+else
+    disp('You must define a timestep in which you are interested');
 end
+
 
 if any(times_of_interest < time_window)
         error('learn_detector:invalid_time', ...
@@ -283,13 +287,16 @@ disp(sprintf('Creating training set from %d songs...', ntrainsongs));
 % This loop also shuffles the songs according to randomsongs, so we can use
 % contiguous blocks for training / testing
 
+% The following uses nsongs rather than ntrainsongs: build the complete dataset for the neural
+% network to make testing easier.  However, only ntrainsongs will be given to train()
+
 training_set_MB = 8 * nsongs * nwindows_per_song * layer0sz / (2^20);
 
 disp(sprintf('   ...(Allocating %g MB for training set X.)', training_set_MB));
 nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
 nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 
-%% MANUAL PER-SYLLABLE TUNING!
+%% OPTIONAL: MANUAL PER-SYLLABLE TUNING!
 
 % Some syllables are really hard to pinpoint to within the frame rate, so
 % the network has to try to learn "image A is a hit, and this thing that
@@ -385,6 +392,8 @@ tic
 % Oh yeah, the line above was the hard part.
 disp(sprintf('   ...training took %g minutes.', toc/60));
 % Test on all the data:
+
+%% Why not test just on the non-training data???????????????????????????? FIXME 
 testout = sim(net, nnsetX);
 testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
 
@@ -406,6 +415,7 @@ FALSE_POSITIVE_COST = 1 % TUNE
 songs_with_hits = [ones(1, nmatchingsongs) zeros(1, nsongs - nmatchingsongs)]';
 songs_with_hits = songs_with_hits(randomsongs);
 
+%% This should not use the holdout test set????????????????????? FIXME
 trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout, ...
         nwindows_per_song, ...
