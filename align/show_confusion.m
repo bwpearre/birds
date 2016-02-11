@@ -1,4 +1,4 @@
-function [ optimal_thresholds ] = optimise_network_output_unit_trigger_thresholds(...
+function [ ] = show_confusion(...
         testout, ...
         nwindows_per_song, ...
         FALSE_POSITIVE_COST, ...
@@ -7,7 +7,8 @@ function [ optimal_thresholds ] = optimise_network_output_unit_trigger_threshold
         MATCH_PLUSMINUS, ...
         timestep, ...
         time_window_steps, ...
-        songs_with_hits);
+        songs_with_hits, ...
+        trigger_thresholds);
 
 global Y_NEGATIVE;
 
@@ -51,23 +52,10 @@ for i = 1:length(tstep_of_interest)
     testpts = linspace(Y_NEGATIVE, 1, ntestpts);
     trueposrate = zeros(1, length(tstep_of_interest));
     falseposrate = zeros(1, length(tstep_of_interest));
-    for j = 1:ntestpts
-        [ outval trueposrate(j) falseposrate(j) ] = f(testpts(j));
-        if outval < best
-            best = outval;
-            bestparam = testpts(j);
-            bestperf = [trueposrate(j) falseposrate(j)];
-        end
-    end
-    optimal_thresholds(i) = bestparam;
-    
-    % ROC should really use the test set...
-    ROCintegral = trueposrate(1:end-1) * (falseposrate(1:end-1)-falseposrate(2:end))';
-    subplot(1, nsubfigs, i);
-    plot(falseposrate, trueposrate);
-    xlabel('false positives');
-    ylabel('true positives');
-    title(sprintf('ROC at %g ms; integral = %.3g', times_of_interest(i)*1000, ROCintegral));
-    axis square;
+    [ outval trueposrate falseposrate ] = f(trigger_thresholds(i));
+
+    disp(sprintf('Confusion:      True positive    negative'));
+    disp(sprintf('     output pos      %.4f%%     %s%%', trueposrate*100, sigfig(falseposrate*100)));
+    disp(sprintf('            neg       %s%%     %.4f%%', sigfig((1-trueposrate)*100), (1-falseposrate)*100));
 end
 
