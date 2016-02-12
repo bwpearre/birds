@@ -54,8 +54,13 @@ for i = 1:length(tstep_of_interest)
     falseposrate = zeros(1, length(tstep_of_interest));
     [ outval trueposrate falseposrate ] = f(trigger_thresholds(i));
 
-    disp(sprintf('Confusion:      True positive    negative'));
-    disp(sprintf('     output pos      %.4f%%     %s%%', trueposrate*100, sigfig(falseposrate*100)));
-    disp(sprintf('            neg       %s%%     %.4f%%', sigfig((1-trueposrate)*100), (1-falseposrate)*100));
+    if true
+        disp(sprintf('Confusion:      True positive    negative'));
+        disp(sprintf('     output pos      %.4f%%     %s%%', trueposrate*100, sigfig(falseposrate*100)));
+        disp(sprintf('            neg       %s%%     %.4f%%', sigfig((1-trueposrate)*100), (1-falseposrate)*100));
+    else
+        fprintf('\\vspace{4pt}\n\\begin{tabular}{r|cc}\n  & \\multicolumn{2}{c}{True} \\\\ \n  & pos & neg \\\\ \n  \\hline  Detected pos & %.3f\\%% & %.3f\\%%\\\\ \n  neg & %.3f\\%% & %.3f\\%%\\\\ \n \\end{tabular}\n', ...
+            trueposrate*100, falseposrate*100, (1-trueposrate)*100, (1-falseposrate)*100);
+    end
 end
 

@@ -12,7 +12,7 @@ if 1
         load('~/Desktop/lny64/roboaggregate.mat');
         MIC_DATA = audio.data;
         agg_audio.fs = audio.fs;
-        times_of_interest = [0.315]; % 0.402
+        times_of_interest = [0.15 0.315 0.402]
 elseif 0
         BIRD='lg373rblk';
         load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -123,7 +123,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.003;                        % seconds
+FFT_TIME_SHIFT = 0.002;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -170,7 +170,6 @@ imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_
 axis xy;
 xlabel('Time (ms)');
 ylabel('Frequency (kHz)');
-colorbar;
 
 % Construct "ds" (downsampled) dataset.  This is heavily downsampled to save on computational
 % resources.  This would better be done by modifying the spectrogram's
@@ -262,11 +261,10 @@ end
 %% Draw the pretty full-res spectrogram and the targets
 figure(4);
 subplot(ntsteps_of_interest+1,1,1);
-imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
+specfig = imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
 axis xy;
 xlabel('Time (ms)');
 ylabel('Frequency (kHz)');
-colorbar;
 % Draw the syllables of interest:
 line(repmat(times_of_interest, 2, 1)*1000, repmat([freqs(1) freqs(end)]/1000, ntsteps_of_interest, 1)', 'Color', [1 0 0]);
 
@@ -368,7 +366,7 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([4 * ntsteps_of_interest])); % TUNE
+net = feedforwardnet(ceil([1.3*ntsteps_of_interest]+1)); % TUNE
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
@@ -409,7 +407,7 @@ power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
 disp('Computing optimal output thresholds...');
 
 % How many seconds on either side of the tstep_of_interest is an acceptable match?
-MATCH_PLUSMINUS = 0.025;
+MATCH_PLUSMINUS = 0.02;
 % Cost of false positives is relative to that of false negatives.
 FALSE_POSITIVE_COST = 0.01 % TUNE
 
@@ -447,9 +445,12 @@ show_confusion(...
 
 
 SHOW_THRESHOLDS = true;
+SHOW_ONLY_TRUE_HITS = true;
 SORT_BY_ALIGNMENT = true;
 % For each timestep of interest, draw that output unit's response to all
 % timesteps for all songs:
+
+specdims = get(get(specfig, 'Parent'), 'Position');
 for i = 1:ntsteps_of_interest
     figure(4);
     subplot(ntsteps_of_interest+1,1,i+1);
@@ -476,13 +477,23 @@ for i = 1:ntsteps_of_interest
         img(ntrainsongs+1:end, 1:time_window_steps, 2) = 0;
         img(ntrainsongs+1:end, 1:time_window_steps, 1) = 1;
         img(ntrainsongs+1:end, 1:time_window_steps, 3) = 0;
+
+        if SHOW_ONLY_TRUE_HITS
+            img = img(find(songs_with_hits), :, :);
+            pos = pos(find(songs_with_hits));
+        end
         
         if SORT_BY_ALIGNMENT
             %[~, new_world_order] = sort(target_offsets);
             [~, new_world_order] = sort(pos);
             img = img(new_world_order,:,:);
         end
-        image([times(1) times(end)]*1000, [1 nsongs], img);
+        
+        if SHOW_ONLY_TRUE_HITS
+            imh = image([times(1) times(end)]*1000, [1 sum(songs_with_hits)], img);
+        else
+            imh = image([times(1) times(end)]*1000, [1 nsongs], img);
+        end
     else
         barrr(:, 1:ntrainsongs) = max(max(foo))/2;
         barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
@@ -490,14 +501,13 @@ for i = 1:ntsteps_of_interest
         imagesc([times(1) times(end)]*1000, [1 nsongs], foo);
     end
     xlabel('Time (ms)');
-    ylabel('Song (random order)');
+    ylabel('Song');
     if ~SORT_BY_ALIGNMENT
         text(time_window/2*1000, ntrainsongs/2, 'train', ...
             'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
         text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
             'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
     end
-    colorbar; % If nothing else, this makes it line up with the spectrogram.
 end
 
 % Draw the hidden units' weights.  Let the user make these square or not
