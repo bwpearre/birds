@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 16-Dec-2015 12:38:09
+% Last Modified by GUIDE v2.5 15-Feb-2016 13:39:22
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -61,7 +61,10 @@ handles.output = hObject;
 
 global bird;
 
+global offsiteTest;
+
 global hardware stim;
+global safeParams;
 
 global homedir datadir intandir;
 global change;
@@ -106,6 +109,9 @@ else
     detrend_param.response_detection_threshold = 3e-9;
     voltage_limit = 7;
 end
+
+% Offsite testing? (Cannot use the DAQ boards or other hardware)
+offsiteTest = true;
 
 currently_reconfiguring = true;
 
@@ -187,7 +193,10 @@ increase_type = 'current'; % or 'time'
 default_halftime_s = 200e-6;
 stim.halftime_s = default_halftime_s;
 stim.interpulse_s = 0;
+stim.prepulse_s = zeros(1,16); % Number of seconds that this electrode's pulse will be delayed
+stim.electrode_stim_scaling = ones(1,16); % Factor to multiply current_uA with to get this electrode's stimulation current
 stim.plexon_monitor_electrode = 1;
+safeParams.max_current = 150; % Maximum (or negative of minimum) allowed current
 electrode_last_stim = 0;
 max_current = NaN * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
@@ -255,14 +264,20 @@ axis off;
 
 
 set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
-handles = configure_acquisition_devices(hObject, handles);
-if isfield(hardware, 'tdt')
-    % This should not be in the TDT init code, as that may be called on
-    % reconfiguration and this should only appear once.
-    for i = 1:16
+if (~offsiteTest)
+    handles = configure_acquisition_devices(hObject, handles);
+    
+    if isfield(hardware, 'tdt')
+        % This should not be in the TDT init code, as that may be called on
+        % reconfiguration and this should only appear once.
+        for i = 1:16
             eval(sprintf('handles.disable_on_run{end+1} = handles.tdt_valid_buttons{%d};', i));
+        end
     end
+else
+    handles = configure_acquisition_devices_OFFSITE(hObject, handles);
 end
+
 
 
 update_gui_values(hObject, handles);
@@ -270,22 +285,28 @@ update_gui_values(hObject, handles);
 guidata(hObject, handles);
 
 
+function [handles] = configure_acquisition_devices_OFFSITE(hObject, handles);
+global hardware;
+
+% TDT fake initializations
+hardware.tdt.device = []; % Set empty so that parts of the code are skipped over
 
 
 function [handles] = configure_acquisition_devices(hObject, handles);
 global currently_reconfiguring;
+global offsiteTest;
 
 currently_reconfiguring = true;
+
 
 init_ni(hObject, handles);
 handles = init_tdt(hObject, handles);
 init_plexon(hObject, handles);
 
+
 guidata(hObject, handles);
 
 currently_reconfiguring = false;
-
-
 
 
 
@@ -399,7 +420,7 @@ channel_labels{end+1} = 'Trigger';
 
 hardware.ni.channel_labels = channel_labels;
 
-daq.reset;
+% daq.reset;
 hardware.ni.session = daq.createSession('ni');
 hardware.ni.session.Rate = 100000;
 hardware.ni.session.IsContinuous = 0;
@@ -477,7 +498,6 @@ switch hardware.stim_trigger
 end
 
 prepare(hardware.ni.session);
-
 
 
 
@@ -1228,9 +1248,25 @@ guidata(hObject, handles);
 
 
 
+function stim = safety_check(stim,safeParams)
+% Check magnitude of current delivered
+for i = 1:16
+    stim.electrode_stim_scaling(i) = check_current_magnitude(stim.electrode_stim_scaling(i), stim.current_uA, safeParams);
+end
+
+function newScale = check_current_magnitude(scale, current_uA, safeParams)
+newScale = scale;
+if (newScale*current_uA > safeParams.max_current)
+    % Stim current is too high, bring it back down to max value
+    newScale = safeParams.max_current/current_uA;
+elseif (newScale*current_uA < -safeParams.max_current)
+    % Stim current is too far negative, bring it back up to min value
+    newScale = -safeParams.max_current/current_uA;
+end
 
 function plexon_control_timer_callback_2(obj, event, hObject, handles)
 global hardware stim;
+global safeParams;
 % The above are not used in this function, but in stimulate(), which this
 % calls.
 
@@ -1266,7 +1302,7 @@ if false
     queueOutputData(hardware.ni.session, outputSignal);
 end
 
-
+stim = safety_check(stim,safeParams); % Check stimulation for being safe
 [ data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
 if isempty(data)
     disp('timer callback: stimulate() did not capture any data.');
@@ -1619,13 +1655,56 @@ guidata(hObject, handles);
 
 
     
-function negfirst_toggle_all_Callback(hObject, eventdata, handles)
-global valid_electrodes stim;
-for i = find(stim.active_electrodes)
-    % Toggle all valid?  Or just toggle all active?
-    h = eval(sprintf('handles.negfirst%d', i));
-    stim.negativefirst(i) = ~get(h, 'Value');
-    set(h, 'Value', stim.negativefirst(i));
+function stimscale_reset_all_Callback(hObject, eventdata, handles)
+% global valid_electrodes stim;
+% for i = find(stim.active_electrodes)
+%     % Toggle all valid?  Or just toggle all active?
+%     h = eval(sprintf('handles.negfirst%d', i));
+%     stim.negativefirst(i) = ~get(h, 'Value');
+%     set(h, 'Value', stim.negativefirst(i));
+% end
+
+for i = 1:16
+   % Return every electrode's scale to 1
+   tag = ['stimscale' num2str(i)];
+   set(handles.(tag), 'String', num2str(1));
+end
+
+% Call universal callback to set stim structure as well
+stimscaling_universal_callback(handles);
+
+function stimscaling_universal_callback(handles)
+global stim safeParams;
+% Go through each electrode and check value (allows function to be called
+% anywhere, not just as a callback)
+for i = 1:16
+   % Go through each stimscale edit box, check its value, and extract it to
+   % stim
+   
+   % Generate this edit box's tag
+   thisStimScaleTag = ['stimscale' num2str(i)];
+   
+   % Get the value
+   newVal = str2double(get(handles.(thisStimScaleTag), 'String'));
+   
+   % Make sure it's a number
+   if isnan(newVal)
+       % If it is not a number, replace the editbox's contents with its old
+       % value (taken from stim.electrode_stim_scaling)
+       newVal = stim.electrode_stim_scaling(i);
+   end
+   
+   % Make sure the new scaling value is within bounds
+   newVal = check_current_magnitude(newVal, stim.current_uA, safeParams);
+   
+   % Set this (potentially changed) value back to the edit box, and save it
+   % to stim
+   set(handles.(thisStimScaleTag), 'String', num2str(newVal));
+   stim.electrode_stim_scaling(i) = newVal;
+   
+   % If the stimulation current is negative, implying that the first
+   % part of the pulse will be negative, record that (possibly legacy)
+   stim.negativefirst(i) = (stim.electrode_stim_scaling(i)*stim.current_uA < 0);
 end
 
 function negfirst_universal_callback(hObject, handles)
@@ -1639,54 +1718,53 @@ stim.negativefirst(whichone) = value;
 % *_universal_callback, but all that clicking in guide would kill me.  I
 % could do it programmatically (at the risk of confusing guide in the
 % future), but apparently writing this comment is marginally easier...
-function negfirst1_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale1_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst2_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale2_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst3_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale3_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst4_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale4_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst5_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale5_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst6_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale6_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst7_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale7_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst8_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale8_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst9_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale9_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst10_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale10_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst11_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale11_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst15_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale12_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst16_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale13_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst14_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale14_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst12_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale15_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
-function negfirst13_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
-
+function stimscale16_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(handles)
 
 
 
@@ -1697,7 +1775,7 @@ globalVars = who('global');
 for iVar = 1:numel(globalVars)
   eval(sprintf('global %s', globalVars{iVar}));  % [EDITED]
 end
-a(0)
+% a(0)
 
 
 
@@ -2612,5 +2690,3 @@ end
 
 datafile_name = sprintf('corr_thresholds_%suA.mat', sigfig(stim.current_uA));
 save(fullfile(datadir, datafile_name), 'cow', '-v7.3');
-
-
