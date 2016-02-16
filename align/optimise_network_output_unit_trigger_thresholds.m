@@ -28,8 +28,9 @@ ACTIVE_TIMESTEPS_AFTER = floor(MATCH_PLUSMINUS / timestep);
 % the time window.  So we need to align those:
 tstep_of_interest_shifted = tstep_of_interest - time_window_steps + 1;
 
-figure(7);
-nsubfigs = size(testout, 1);
+%figure(7);
+%nsubfigs = size(testout, 1);
+
 ntestpts = 1000;
 
 for i = 1:length(tstep_of_interest)
@@ -60,14 +61,17 @@ for i = 1:length(tstep_of_interest)
         end
     end
     optimal_thresholds(i) = bestparam;
-    
-    % ROC should really use the test set...
-    ROCintegral = trueposrate(1:end-1) * (falseposrate(1:end-1)-falseposrate(2:end))';
-    subplot(1, nsubfigs, i);
-    plot(falseposrate, trueposrate);
-    xlabel('false positives');
-    ylabel('true positives');
-    title(sprintf('ROC at %g ms; integral = %.3g', times_of_interest(i)*1000, ROCintegral));
-    axis square;
+
+    %% Plot the ROC curve.  It's, frankly, not very exciting.
+    if false
+        % ROC should probably use the test set...
+        ROCintegral = trueposrate(1:end-1) * (falseposrate(1:end-1)-falseposrate(2:end))';
+        subplot(1, nsubfigs, i);
+        plot(falseposrate, trueposrate);
+        xlabel('false positives');
+        ylabel('true positives');
+        title(sprintf('ROC at %g ms; integral = %.3g', times_of_interest(i)*1000, ROCintegral));
+        axis square;
+    end
 end
 

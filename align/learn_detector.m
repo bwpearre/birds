@@ -2,6 +2,9 @@ clear;
 
 rng('shuffle');
 
+p = fileparts(mfilename('fullpath'));
+addpath(sprintf('%s/../lib', p));
+
 % What is the value of a non-hit on the training data?  0 or -1 would be
 % good choices... should make no difference at all--this is for debugging.
 global Y_NEGATIVE;
@@ -63,8 +66,8 @@ NTRAIN = 1000;
 disp(sprintf('Found %d songs.  Using %d.', nmatchingsongs, min(nmatchingsongs, NTRAIN)));
 
 %% Add some non-matching sound fragments and songs and such from another
-%% bird... try around 10% of the training corpus?
-NONSINGING_FRACTION = 2;
+%% bird...
+NONSINGING_FRACTION = 1;
 nonmatchingbird = 'lblk121rr';
 if strcmp(BIRD, nonmatchingbird)
         fprintf('ERROR: using the same bird--%s--for training and for nonmatching data!\n', BIRD);
@@ -123,7 +126,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.002;                        % seconds
+FFT_TIME_SHIFT = 0.0015;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -244,7 +247,7 @@ disp('Computing target jitter compensation...');
 
 % We'll look for this long around the timestep, to compute the canonical
 % song
-time_buffer = 0.04;
+time_buffer = 0.01;
 tstep_buffer = round(time_buffer / timestep);
 
 % For alignment: which is the most stereotypical song at each target?
@@ -255,6 +258,11 @@ for i = 1:ntsteps_of_interest
         [val canonical_songs(i)] = max(foo);
         [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
 end
+
+
+fprintf('\n               ***** KILLING TARGET JITTER COMPENSATION FOR TESTING PURPOSES *****\n\n');
+target_offsets = 0 * target_offsets;
+sample_offsets = 0 * sample_offsets;
 
 %hist(target_offsets', 40);
 
@@ -305,7 +313,7 @@ nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
 % This only indirectly affects final timing precision, since thresholds are
 % optimally tuned based on the window defined in MATCH_PLUSMINUS.
 shotgun_max_sec = 0.02;
-shotgun_sigma = 0.003; % TUNE
+shotgun_sigma = 0.002; % TUNE
 shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
 shotgun = shotgun / max(shotgun);
 shotgun = shotgun(find(shotgun>0.1));
@@ -409,7 +417,7 @@ disp('Computing optimal output thresholds...');
 % How many seconds on either side of the tstep_of_interest is an acceptable match?
 MATCH_PLUSMINUS = 0.02;
 % Cost of false positives is relative to that of false negatives.
-FALSE_POSITIVE_COST = 0.01 % TUNE
+FALSE_POSITIVE_COST = 1 % TUNE
 
 % Which songs should have hits?  The first nmatchingsongs, but permuted to the same order as the
 % training/test sets, as given by randomsongs.
