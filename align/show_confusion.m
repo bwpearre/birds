@@ -29,8 +29,9 @@ ACTIVE_TIMESTEPS_AFTER = floor(MATCH_PLUSMINUS / timestep);
 % the time window.  So we need to align those:
 tstep_of_interest_shifted = tstep_of_interest - time_window_steps + 1;
 
-figure(7);
-nsubfigs = size(testout, 1);
+%figure(7);
+%nsubfigs = size(testout, 1);
+
 ntestpts = 1000;
 
 for i = 1:length(tstep_of_interest)

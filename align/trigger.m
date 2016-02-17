@@ -1,5 +1,7 @@
 function [ trigger_now ] = trigger(responses, threshold, schmidt_trigger_down, timestep);
 
+% De-bounce the signal
+
 % This just returns the first one per song...
 [ val pos ] = max(responses > threshold, [], 2);
 %pos = pos(find(pos == 1)) = ;

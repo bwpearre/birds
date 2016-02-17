@@ -15,7 +15,7 @@ if 1
         load('~/Desktop/lny64/roboaggregate.mat');
         MIC_DATA = audio.data;
         agg_audio.fs = audio.fs;
-        times_of_interest = [0.15 0.315 0.402]
+        times_of_interest = [0.15 0.315 0.405]
 elseif 0
         BIRD='lg373rblk';
         load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -259,10 +259,15 @@ for i = 1:ntsteps_of_interest
         [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
 end
 
-
-fprintf('\n               ***** KILLING TARGET JITTER COMPENSATION FOR TESTING PURPOSES *****\n\n');
-target_offsets = 0 * target_offsets;
-sample_offsets = 0 * sample_offsets;
+if 1
+    fprintf('\n               ***** DISCARDING TARGET JITTER COMPENSATION *****\n\n');
+    target_offsets = 0 * target_offsets;
+    sample_offsets = 0 * sample_offsets;
+elseif 0
+    fprintf('\n               ***** REVERSING TARGET JITTER COMPENSATION *****\n\n');
+    target_offsets = -1 * target_offsets;
+    sample_offsets = -1 * sample_offsets;
+end
 
 %hist(target_offsets', 40);
 
@@ -374,7 +379,7 @@ nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
 
 
 
-net = feedforwardnet(ceil([1.3*ntsteps_of_interest]+1)); % TUNE
+net = feedforwardnet([3*ntsteps_of_interest]); % TUNE
 %net = feedforwardnet([ntsteps_of_interest]);
 %net = feedforwardnet([]);
 
@@ -400,7 +405,7 @@ tic
 disp(sprintf('   ...training took %g minutes.', toc/60));
 % Test on all the data:
 
-%% Why not test just on the non-training data?  Compute them all, and then only count ntestsongs for statistics (later)
+% Why not test just on the non-training data?  Compute them all, and then only count ntestsongs for statistics (later)
 testout = sim(net, nnsetX);
 testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
 
@@ -461,13 +466,14 @@ SORT_BY_ALIGNMENT = true;
 specdims = get(get(specfig, 'Parent'), 'Position');
 for i = 1:ntsteps_of_interest
     figure(4);
-    subplot(ntsteps_of_interest+1,1,i+1);
+    subplot(ntsteps_of_interest+1, 1, i+1);
     foo = reshape(testout(i,:,:), [], nsongs);
     barrr = zeros(time_window_steps-1, nsongs);
     
     if SHOW_THRESHOLDS
         % "img" is a tricolour image
         img = power_img * 0.8;
+        % de-bounce:
         fooo = trigger(foo', trigger_thresholds(i), 0.1, timestep);
         fooo = [barrr' fooo];
         [val pos] = max(fooo,[],2);
