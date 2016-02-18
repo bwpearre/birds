@@ -2026,8 +2026,10 @@ for i = 1:16
     eval(sprintf('set(handles.electrode%d, ''Value'', %d);', i, valid_electrodes(i)));
     eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, foo));
     eval(sprintf('set(handles.stim%d, ''Value'', %d);', i, stim.active_electrodes(i)));
-    eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, foo));
-    eval(sprintf('set(handles.negfirst%d, ''Value'', %d);', i, stim.negativefirst(i)));
+    eval(sprintf('set(handles.stimscale%d, ''Enable'', ''%s'');', i, foo));
+    eval(sprintf('set(handles.stimscale%d, ''Value'', %d);', i, stim.electrode_stim_scaling(i)));
+    %     eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, foo));
+    %     eval(sprintf('set(handles.negfirst%d, ''Value'', %d);', i, stim.negativefirst(i)));
 end
 set(handles.datadir_box, 'String', datadir);
 set(handles.birdname, 'String', bird, 'BackgroundColor', [0 0.8 0]);
