@@ -16,6 +16,7 @@ if 1
         MIC_DATA = audio.data;
         agg_audio.fs = audio.fs;
         times_of_interest = [0.15 0.315 0.405]
+        %times_of_interest = 0.315
 elseif 0
         BIRD='lg373rblk';
         load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -420,7 +421,7 @@ power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
 disp('Computing optimal output thresholds...');
 
 % How many seconds on either side of the tstep_of_interest is an acceptable match?
-MATCH_PLUSMINUS = 0.02;
+MATCH_PLUSMINUS = 0.01;
 % Cost of false positives is relative to that of false negatives.
 FALSE_POSITIVE_COST = 1 % TUNE
 
@@ -472,7 +473,7 @@ for i = 1:ntsteps_of_interest
     
     if SHOW_THRESHOLDS
         % "img" is a tricolour image
-        img = power_img * 0.8;
+        img = power_img;
         % de-bounce:
         fooo = trigger(foo', trigger_thresholds(i), 0.1, timestep);
         fooo = [barrr' fooo];
@@ -545,6 +546,8 @@ if net.numLayers > 1
         end
 end
 drawnow;
+
+save learn_detector_latest
 
 %% Save input file for the LabView detector
 % Extract data from net structure, because LabView is too fucking stupid to
