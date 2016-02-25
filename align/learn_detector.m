@@ -10,19 +10,20 @@ addpath(sprintf('%s/../lib', p));
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 1
+if 0
         BIRD='lny64';
         load('~/Desktop/lny64/roboaggregate.mat');
         MIC_DATA = audio.data;
         agg_audio.fs = audio.fs;
         times_of_interest = [0.15 0.315 0.405]
-        %times_of_interest = 0.315
-elseif 0
+        times_of_interest = 0.315
+elseif 1
         BIRD='lg373rblk';
         load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
         MIC_DATA = audio.data;
         agg_audio.fs = audio.fs;
-        times_of_interest = [0.115 0.2 0.325];
+        times_of_interest = [0.115 0.2 0.325]
+        times_of_interest = 0.325
 elseif 0
         BIRD='lw8rhp';
         load('/Users/bwpearre/Desktop/Will/test_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -36,6 +37,8 @@ elseif 0
         MIC_DATA = agg_audio.data;
 end
 
+disp(sprintf('Bird: %s', BIRD));
+
 %%% Code snippet to create songs for audio device input
 %some_songs = reshape(MIC_DATA(:, 1:50), [], 1);
 %
@@ -46,7 +49,7 @@ end
 [nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
 %% Downsample the data
-samplerate = 20000;
+samplerate = 44100;
 if agg_audio.fs ~= samplerate
         disp(sprintf('Resampling data from %g Hz to %g Hz...', agg_audio.fs, samplerate));
         [a b] = rat(samplerate/agg_audio.fs);
@@ -79,7 +82,7 @@ l = dir(sprintf('%s/%s', nonmatchingloc, nonmatchingbird));
 nonmatchingsongs = zeros(round(size(MIC_DATA) .* [1 NONSINGING_FRACTION]));
 need_n_songs = size(nonmatchingsongs, 2);
 
-fprintf('Borrowing some non-matching songs from ''%s/%s''...\n', nonmatchingloc, nonmatchingbird);
+fprintf('Borrowing %d non-matching songs from ''%s/%s''...\n', need_n_songs, nonmatchingloc, nonmatchingbird);
 
 % incorporate nonmatching data
 done = false;
@@ -144,13 +147,19 @@ timestep = (times(end)-times(1))/(length(times)-1);
 
 %% Define training set
 % Hold some data out for final testing.
-ntrainsongs = min(floor(nsongs*8/10), NTRAIN) * (1 + NONSINGING_FRACTION);
+ntrainsongs = min(floor(nsongs*8/10), NTRAIN);
 ntestsongs = nsongs - ntrainsongs;
 % On each run of this program, change the presentation order of the
 % data, so we get (a) a different subset of the data than last time for
 % training vs. final testing and (b) different training data presentation
 % order.
-randomsongs = randperm(nsongs);
+if 1
+    randomsongs = randperm(nsongs);
+else
+    randomsongs = 1:nsongs;
+    fprintf('\n    NOT PERMUTING TRAINING SONGS\n\n');
+end
+
 
 
 spectrograms = zeros([nsongs nfreqs ntimes]);
@@ -207,11 +216,6 @@ layer0sz = length(freq_range_ds) * time_window_steps;
 nwindows_per_song = ntimes - time_window_steps + 1;
 
 
-if 0
-        randomsongs = 1:nsongs;
-        fprintf('\n    NOT PERMUTING TRAINING SONGS\n\n');
-end
-
 disp(sprintf('%d training songs.  %d remain for test.', ntrainsongs, ntestsongs));
 trainsongs = randomsongs(1:ntrainsongs);
 testsongs = randomsongs(ntrainsongs+1:end);
@@ -260,7 +264,9 @@ for i = 1:ntsteps_of_interest
         [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
 end
 
-if 1
+target_offsets_2 = target_offsets;
+sample_offsets_2 = sample_offsets;
+if 0
     fprintf('\n               ***** DISCARDING TARGET JITTER COMPENSATION *****\n\n');
     target_offsets = 0 * target_offsets;
     sample_offsets = 0 * sample_offsets;
@@ -444,8 +450,14 @@ trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
 
 % Now that we've computed the thresholds using just the training set, print the confusion matrices
 % using just the holdout test set.
+CONFUSION_ALL = true;
+if CONFUSION_ALL
+    foo = 1:size(testout, 3);
+else
+    foo = ntrainsongs+1:size(testout, 3);
+end
 show_confusion(...
-    testout(:,:,ntrainsongs+1:end), ...
+    testout(:, :, foo), ...
     nwindows_per_song, ...
     FALSE_POSITIVE_COST, ...
     times_of_interest, ...
@@ -453,7 +465,7 @@ show_confusion(...
     MATCH_PLUSMINUS, ...
     timestep, ...
     time_window_steps, ...
-    songs_with_hits(ntrainsongs+1:end), ...
+    songs_with_hits(foo), ...
     trigger_thresholds);
 
 
@@ -466,8 +478,8 @@ SORT_BY_ALIGNMENT = true;
 
 specdims = get(get(specfig, 'Parent'), 'Position');
 for i = 1:ntsteps_of_interest
-    figure(4);
-    subplot(ntsteps_of_interest+1, 1, i+1);
+    figure(6);
+    subplot(ntsteps_of_interest, 1, i);
     foo = reshape(testout(i,:,:), [], nsongs);
     barrr = zeros(time_window_steps-1, nsongs);
     
@@ -475,7 +487,7 @@ for i = 1:ntsteps_of_interest
         % "img" is a tricolour image
         img = power_img;
         % de-bounce:
-        fooo = trigger(foo', trigger_thresholds(i), 0.1, timestep);
+        fooo = trigger_all(foo', trigger_thresholds(i), 0.1, timestep);
         fooo = [barrr' fooo];
         [val pos] = max(fooo,[],2);
         
@@ -504,6 +516,7 @@ for i = 1:ntsteps_of_interest
             img = img(new_world_order,:,:);
         end
         
+        % Make sure the image handle has the correct axes
         if SHOW_ONLY_TRUE_HITS
             imh = image([times(1) times(end)]*1000, [1 sum(songs_with_hits)], img);
         else
@@ -512,7 +525,7 @@ for i = 1:ntsteps_of_interest
     else
         barrr(:, 1:ntrainsongs) = max(max(foo))/2;
         barrr(:, ntrainsongs+1:end) = 3*max(max(foo))/4;
-        foo = [barrr' foo'];
+        foo = [barrr' foo'];        
         imagesc([times(1) times(end)]*1000, [1 nsongs], foo);
     end
     xlabel('Time (ms)');
@@ -583,7 +596,7 @@ for i = 1:nsongs
         if new_songs_with_hits(i)
                 % The baseline signal is recorded only for the first sample
                 % of interest:
-                hits(samples_of_interest(1) + sample_offsets(1, newrand(i)), i) = 1;
+                hits(samples_of_interest(1) + sample_offsets_2(1, newrand(i)), i) = 1;
         end
 end
 hits = reshape(hits, [], 1);
