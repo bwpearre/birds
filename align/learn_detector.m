@@ -58,6 +58,8 @@ if agg_audio.fs ~= samplerate
         MIC_DATA = resample(MIC_DATA, a, b);
 end
 %MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
+
+% FIXME Zscore?
 MIC_DATA = MIC_DATA / max(max(max(MIC_DATA)), -min(min(MIC_DATA)));
 
 clear agg_audio.data;
@@ -120,7 +122,7 @@ nsongs = size(MIC_DATA, 2);
 
 disp('Bandpass-filtering the data...');
 [B A] = butter(4, [0.03 0.9]);
-MIC_DATA = filter(B, A, MIC_DATA);
+MIC_DATA = filtfilt(B, A, MIC_DATA);
 
 
 % Compute the spectrogram using original parameters (probably far from
@@ -130,7 +132,7 @@ MIC_DATA = filter(B, A, MIC_DATA);
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
 FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.0015;                        % seconds
+FFT_TIME_SHIFT = 0.002;                        % seconds
 NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
 fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
 
@@ -153,7 +155,7 @@ ntestsongs = nsongs - ntrainsongs;
 % data, so we get (a) a different subset of the data than last time for
 % training vs. final testing and (b) different training data presentation
 % order.
-if 1
+if 0
     randomsongs = randperm(nsongs);
 else
     randomsongs = 1:nsongs;
@@ -252,10 +254,14 @@ disp('Computing target jitter compensation...');
 
 % We'll look for this long around the timestep, to compute the canonical
 % song
-time_buffer = 0.01;
+time_buffer = 0.04;
 tstep_buffer = round(time_buffer / timestep);
 
 % For alignment: which is the most stereotypical song at each target?
+
+%[B A] = butter(4, [0.01 0.05]);
+%MIC_DATA2 = filtfilt(B, A, double(MIC_DATA));
+
 for i = 1:ntsteps_of_interest
         range = tstep_of_interest(i)-tstep_buffer:tstep_of_interest(i)+tstep_buffer;
         range = range(find(range>0&range<=ntimes));
@@ -263,6 +269,32 @@ for i = 1:ntsteps_of_interest
         [val canonical_songs(i)] = max(foo);
         [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
 end
+
+n=10;
+w = [canonical_songs(1) ceil(rand(1, n-1)*600)];
+for i = 1:length(w)
+    subplot(n,1,i);
+    plot(MIC_DATA(:,w(i)));
+    grid on;
+    set(gca, 'ylim', [-0.4 0.4], 'xlim', [13000 17000]);
+    title(sprintf('Sample offset %d', sample_offsets(w(i))));
+end
+
+
+disp('Creating spectral power image...');
+
+% Create an image on which to superimpose the results...
+power_img = squeeze((sum(spectrograms, 2)));
+power_img(find(isinf(power_img))) = 0;
+
+pn = 1:636;
+[vt pt] = sort(target_offsets);
+[vs ps] = sort(sample_offsets);
+figure(4);
+subplot(1,1,1);
+power_img = power_img(1:636,:);
+imagesc(power_img(pt,:));
+
 
 target_offsets_2 = target_offsets;
 sample_offsets_2 = sample_offsets;
@@ -279,21 +311,24 @@ end
 %hist(target_offsets', 40);
 
 %% Draw the pretty full-res spectrogram and the targets
-figure(4);
-subplot(ntsteps_of_interest+1,1,1);
-specfig = imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
-axis xy;
-xlabel('Time (ms)');
-ylabel('Frequency (kHz)');
-% Draw the syllables of interest:
-line(repmat(times_of_interest, 2, 1)*1000, repmat([freqs(1) freqs(end)]/1000, ntsteps_of_interest, 1)', 'Color', [1 0 0]);
-
-for i = 1:ntsteps_of_interest
-    windowrect = rectangle('Position', [(times_of_interest(i) - time_window)*1000 ...
-        freq_range(1)/1000 ...
-        time_window(1)*1000 ...
-        (freq_range(2)-freq_range(1))/1000], ...
-        'EdgeColor', [1 0 0]);
+if 0
+    figure(4);
+    subplot(1,1,1);
+    %subplot(ntsteps_of_interest+1,1,1);
+    specfig = imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
+    axis xy;
+    xlabel('Time (ms)');
+    ylabel('Frequency (kHz)');
+    % Draw the syllables of interest:
+    line(repmat(times_of_interest, 2, 1)*1000, repmat([freqs(1) freqs(end)]/1000, ntsteps_of_interest, 1)', 'Color', [1 0 0]);
+    
+    for i = 1:ntsteps_of_interest
+        windowrect = rectangle('Position', [(times_of_interest(i) - time_window)*1000 ...
+            freq_range(1)/1000 ...
+            time_window(1)*1000 ...
+            (freq_range(2)-freq_range(1))/1000], ...
+            'EdgeColor', [1 0 0]);
+    end
 end
 drawnow;
 
@@ -350,11 +385,12 @@ for song = 1:nsongs
             % If the index is from the non-song region of the corpus, do not mark a hit.  This
             % cannot simply be moved to the outer loop because we still need to put it in nnsetX.
             continue;
-        end
-        for interesting = 1:ntsteps_of_interest
-            if tstep == tstep_of_interest(interesting)
-                nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - shothalf + 2 : ...
-                    (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + shothalf) = shotgun;
+        else
+            for interesting = 1:ntsteps_of_interest
+                if tstep == tstep_of_interest(interesting)
+                    nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - shothalf + 2 : ...
+                        (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + shothalf) = shotgun;
+                end
             end
         end
     end
@@ -416,18 +452,14 @@ disp(sprintf('   ...training took %g minutes.', toc/60));
 testout = sim(net, nnsetX);
 testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
 
-disp('Creating spectral power image...');
-
-% Create an image on which to superimpose the results...
-power_img = squeeze((sum(spectrograms, 2)));
-power_img(find(isinf(power_img))) = 0;
+% Update the each-song image
 power_img = power_img(randomsongs,:);
 power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
 
 disp('Computing optimal output thresholds...');
 
 % How many seconds on either side of the tstep_of_interest is an acceptable match?
-MATCH_PLUSMINUS = 0.01;
+MATCH_PLUSMINUS = 0.02;
 % Cost of false positives is relative to that of false negatives.
 FALSE_POSITIVE_COST = 1 % TUNE
 
@@ -487,7 +519,7 @@ for i = 1:ntsteps_of_interest
         % "img" is a tricolour image
         img = power_img;
         % de-bounce:
-        fooo = trigger_all(foo', trigger_thresholds(i), 0.1, timestep);
+        fooo = trigger_max(foo', trigger_thresholds(i), 0.1, timestep);
         fooo = [barrr' fooo];
         [val pos] = max(fooo,[],2);
         
@@ -511,8 +543,8 @@ for i = 1:ntsteps_of_interest
         end
         
         if SORT_BY_ALIGNMENT
-            %[~, new_world_order] = sort(target_offsets);
-            [~, new_world_order] = sort(pos);
+            [a, new_world_order] = sort(sample_offsets(randomsongs(1:636)));
+            %[~, new_world_order] = sort(pos);
             img = img(new_world_order,:,:);
         end
         
