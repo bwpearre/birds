@@ -62,6 +62,7 @@ handles.output = hObject;
 global bird;
 
 global hardware stim;
+global in_stim_loop;
 
 global homedir datadir intandir;
 global change;
@@ -96,18 +97,19 @@ if true % For my X--HVC experiment
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
     detrend_param.response_baseline = [0.012 0.025];
-    detrend_param.response_detection_threshold = 1e-10;
+    detrend_param.response_detection_threshold = Inf * ones(1, 16);
     voltage_limit = 3;
 else
     detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
     detrend_param.range = [0.0007 0.02];
     detrend_param.response_roi = [0.0007 0.002];
     detrend_param.response_baseline = [0.005 0.02];
-    detrend_param.response_detection_threshold = 3e-9;
+    detrend_param.response_detection_threshold = Inf * ones(1, 16);
     voltage_limit = 7;
 end
 
 currently_reconfiguring = true;
+in_stim_loop = false;
 
 max_uAmps = 100;
 min_uAmps = 0.05;
@@ -488,7 +490,6 @@ function [handles] = init_tdt(hObject, handles)
 global hardware stim;
 global scriptdir;
 global recording_time;
-global stim_timer;
 
 
 if ~isfield(handles, 'tdt_valid_buttons')
@@ -552,18 +553,7 @@ set(handles.audio_monitor_gain, 'String', sprintf('%d', round(hardware.tdt.devic
 %disp(sprintf('TDT buffer %d, need %d', tdt.GetTagVal('dbuffer_size'), hardware.tdt.nsamples));
 tdt_dbuffer_size = hardware.tdt.device.GetTagVal('dbuffer_size');
 
-if ceil(hardware.tdt.nsamples*1.1) > tdt_dbuffer_size
-    if ~isempty(stim_timer)
-        if isvalid(stim_timer)
-            %if timer_running(stim_timer)
-            disp('Stopping timer from tdt_configure...');
-            stop(stim_timer); % this also stops and closes the Plexon box
-            %end
-        else
-            disp('*** The timer was invalid!');
-        end
-    end
-    
+if ceil(hardware.tdt.nsamples*1.1) > tdt_dbuffer_size    
     uiwait(msgbox({'The TDT buffer is too small for your chosen recording duration.  Increase Averaging Hz or decrease Averaging Pulses.', ...
         '', sprintf('Maximum recording duration is %g s.', tdt_dbuffer_size/1.1/hardware.tdt.samplerate)}, 'modal'));
     
@@ -623,19 +613,11 @@ function gui_close_callback(hObject, callbackdata, handles)
 global hardware stim;
 global vvsi;
 global datadir;
-global stim_timer;
 
 disp('Shutting down...');
 
 stop_everything(handles);
 
-if ~isempty(stim_timer)
-    if isvalid(stim_timer)
-        stop(stim_timer);
-        delete(stim_timer);
-    end
-    stim_timer = [];
-end
 
 if ~isempty(hardware.ni.session)
     stop(hardware.ni.session);
@@ -859,31 +841,65 @@ set(hObject, 'BackgroundColor', [0.8 0.2 0.1]);
 
 
 
-function start_timer(hObject, handles)
-global stim_timer inter_trial_s;
 
-% Clean up any stopped timers
-if isempty(stim_timer)
-    stim_timer = timer('Period', inter_trial_s, 'ExecutionMode', 'fixedSpacing');
-    stim_timer.TimerFcn = {@plexon_control_timer_callback_2, hObject, handles};
-    stim_timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
-    stim_timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
-    stim_timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
-else
-    stim_timer.Period = inter_trial_s;
+
+
+function ready = sufficient_active_electrodes
+global stim
+ready = true;
+
+if ~(sum(stim.active_electrodes) > 0)
+    disp('No active electrode selected');
+    ready = false;
+    return;
 end
 
-if ~timer_running(stim_timer)
+if stim.active_electrodes(stim.plexon_monitor_electrode) == 0
+    disp('Monitoring electrode not active');
+    ready = false;
+    return;
+end
+
+
+
+
+
+function stim_loop(hObject, handles)
+global stop_button_pressed;
+global in_stim_loop;
+
+if in_stim_loop
+   return; 
+end
+
+if ~sufficient_active_electrodes
+    return;
+end
+
+try
+    in_stim_loop = true;
     disable_controls(hObject, handles);
-    start(stim_timer);
+    save_globals;
+
+    stim_loop_init(hObject, handles);
+
+    while ~stop_button_pressed
+        disp('Stimulating now')
+        stim_loop_execute(hObject, handles)
+    end
+catch ME
+    in_stim_loop = false;
 end
-guidata(hObject, handles);
+
+stop_button_pressed = false;
+in_stim_loop = false;
+enable_controls(handles);
 
 
 
-% Stupid fucking matlab uses a string, not a boolean
-function s = timer_running(t)
-s = strcmp(t.running, 'on');
+
+
+
 
 
 % --- Executes on button press in increase.
@@ -896,7 +912,7 @@ global default_halftime_s;
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = increase_step;
-start_timer(hObject, handles);
+stim_loop(hObject, handles); % This will return if we're in_stim_loop, but 'change' is updated already
 
 guidata(hObject, handles);
 
@@ -911,7 +927,7 @@ global default_halftime_s;
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = 1/increase_step;
-start_timer(hObject, handles);
+stim_loop(hObject, handles); % This will return if we're in_stim_loop, but 'change' is updated already
 
 guidata(hObject, handles);
 
@@ -926,7 +942,7 @@ global default_halftime_s;
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = 1;
-start_timer(hObject, handles);
+stim_loop(hObject, handles); % This will return if we're in_stim_loop, but 'change' is updated already
 
 guidata(hObject, handles);
 
@@ -940,28 +956,14 @@ stop_everything(handles);
 
 function stop_everything(handles);
 global vvsi;
-global hardware stim;
-global axes1;
-global increase_type;
-global stim_timer;
+global stim;
 global thewaitbar;
-global stop_button_pressed;
 
 if ~isempty(thewaitbar)
     delete(thewaitbar);
     thewaitbar = [];
 end
 
-%PS_StopStimAllChannels(hardware.plexon.id);
-
-if ~isempty(stim_timer)
-    if isvalid(stim_timer)
-        disp('Stopping timer for true...');
-        stop(stim_timer);
-    else
-        disp('*** The timer was invalid!');
-    end
-end
 
 disp('Stopping everything...');
 
@@ -1050,68 +1052,49 @@ end
 
 % When any of the "start sequence" buttons is pressed, open the Plexon box
 % and do some basic error checking.  Set all channels to nil.
-function plexon_start_timer_callback(obj, event, hObject, handles)
+function stim_loop_init(hObject, handles)
 global hardware stim;
-global stim_timer;
 
 save_globals;
 
-%try
-    NullPattern.W1 = 0;
-    NullPattern.W2 = 0;
-    NullPattern.A1 = 0;
-    NullPattern.A2 = 0;
-    NullPattern.Delay = 0;
+NullPattern.W1 = 0;
+NullPattern.W2 = 0;
+NullPattern.A1 = 0;
+NullPattern.A2 = 0;
+NullPattern.Delay = 0;
 
-    % Set up all non-stimulating channels to nil
-    for channel = find(~stim.active_electrodes)
-        % We will be using the rectangular pattern
-        err = PS_SetPatternType(hardware.plexon.id, channel, 0);
-        if err
-            ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
-            throw(ME);
-        end
-
-        % Set these channels to nothing.
-        err = PS_SetRectParam2(hardware.plexon.id, channel, NullPattern);
-        if err
-                ME = MException('plexon:pattern', 'Could not set NULL pattern parameters on channel %d', channel);
-                throw(ME);
-        end
-
-        err = PS_SetRepetitions(hardware.plexon.id, channel, 1);
-        if err
-            ME = MException('plexon:pattern', 'Could not set repetition on channel %d', channel);
-            throw(ME);
-        end
-
-        err = PS_LoadChannel(hardware.plexon.id, channel);
-        if err
-            ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', hardware.plexon.id, channel, PS_GetExtendedErrorInfo(err));    
-            throw(ME);
-        end
+% Set up all non-stimulating channels to nil
+for channel = find(~stim.active_electrodes)
+    % We will be using the rectangular pattern
+    err = PS_SetPatternType(hardware.plexon.id, channel, 0);
+    if err
+        ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
+        throw(ME);
     end
-%catch ME
-%    if timer_running(stim_timer)
-%        stop(stim_timer);
-%    end
-%    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
-%    report = getReport(ME)
-%    PS_StopStimAllChannels(hardware.plexon.id);
-%    guidata(hObject, handles);
-%    rethrow(ME);
-%end
+    
+    % Set these channels to nothing.
+    err = PS_SetRectParam2(hardware.plexon.id, channel, NullPattern);
+    if err
+        ME = MException('plexon:pattern', 'Could not set NULL pattern parameters on channel %d', channel);
+        throw(ME);
+    end
+    
+    err = PS_SetRepetitions(hardware.plexon.id, channel, 1);
+    if err
+        ME = MException('plexon:pattern', 'Could not set repetition on channel %d', channel);
+        throw(ME);
+    end
+    
+    err = PS_LoadChannel(hardware.plexon.id, channel);
+    if err
+        ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', hardware.plexon.id, channel, PS_GetExtendedErrorInfo(err));
+        throw(ME);
+    end
+end
 
 guidata(hObject, handles);
 
 
-function plexon_stop_timer_callback(obj, event, hObject, handles)
-enable_controls(handles);
-save_globals;
-
-function plexon_error_timer_callback(obj, event, hObject, handles)
-stop_everything(handles);
-save_globals;
 
 function stim_universal_callback(hObject, eventdata, handles)
 global hardware stim;
@@ -1229,7 +1212,7 @@ guidata(hObject, handles);
 
 
 
-function plexon_control_timer_callback_2(obj, event, hObject, handles)
+function stim_loop_execute(hObject, handles)
 global hardware stim;
 % The above are not used in this function, but in stimulate(), which this
 % calls.
@@ -1239,12 +1222,7 @@ global detrend_param;
 global increase_type;
 global max_uAmps min_uAmps;
 global default_halftime_s;
-global max_current;
-global max_halftime;
 global change;
-global voltage_range_last_stim;
-global electrode_last_stim;
-global stim_timer;
 
 switch increase_type
     case 'current'
@@ -1269,7 +1247,7 @@ end
 
 [ data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
 if isempty(data)
-    disp('timer callback: stimulate() did not capture any data.');
+    disp('stimulate() did not capture any data.  Trying again...');
     return;
 end
 
@@ -1277,10 +1255,7 @@ if errors.val ~= 0
     for i = 1:length(errors.name)
         disp(errors.name{i});
     end
-    
-    if timer_running(stim_timer)
-        stop(stim_timer);
-    end
+    stop_callback(hObject, handles);
 end
 
 
@@ -1317,7 +1292,6 @@ global change;
 global hardware stim;
 global max_halftime;
 global valid_electrodes;
-global stim_timer;
 global start_uAmps;
 global inter_trial_s;
 
@@ -1338,9 +1312,6 @@ for i = find(valid_electrodes)
     set(handles.monitor_electrode_control, 'Value', i);
         
     start_timer(hObject, handles);
-    while timer_running(stim_timer)
-        pause(0.1);
-    end
 end
 
 stim.halftime_s = default_halftime_s;
@@ -1390,7 +1361,6 @@ global start_uAmps;
 global change;
 global max_current;
 global valid_electrodes;
-global stim_timer;
 global inter_trial_s;
 
 max_current = NaN * ones(1, 16);
@@ -1409,9 +1379,6 @@ for i = find(valid_electrodes)
     set(handles.monitor_electrode_control, 'Value', i);
         
     start_timer(hObject, handles);
-    while timer_running(stim_timer)
-        pause(0.1);
-    end
 end
 
 
