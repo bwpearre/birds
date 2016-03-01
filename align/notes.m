@@ -75,3 +75,15 @@ Confusion:      True positive    negative
 At 315 ms:        True positive    negative
      output pos      99.72588%     1.55e-3%
             neg       0.274%     99.99845%
+
+
+Another run:
+At 150 ms:        True positive    negative
+     output pos      97.67184%     2.88e-3%
+            neg       2.33%     99.99712%
+At 315 ms:        True positive    negative
+     output pos      99.61197%     6.65e-4%
+            neg       0.388%     99.99933%
+At 405 ms:        True positive    negative
+     output pos      99.16851%     3.22e-3%
+            neg       0.831%     99.99678%
