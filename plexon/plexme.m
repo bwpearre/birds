@@ -91,7 +91,7 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if false % For my X--HVC experiment
+if true % For my X--HVC experiment
     detrend_param.model = 'fourier8';
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
@@ -2087,7 +2087,8 @@ function response_indicator_Callback(hObject, eventdata, handles)
 
 function response_detection_threshold_Callback(hObject, eventdata, handles)
 global detrend_param;
-detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
+%detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
+disp('Don''t touch that!');
 
 function response_detection_threshold_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -2312,17 +2313,17 @@ if exist('repeat_experiment', 'var')
 
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
-elseif false
-    NPOLARITIES = 6;
+elseif true
+    NPOLARITIES = 14;
     
-    frequencies = [ 20 20 20 ]
+    frequencies = [ 24 24 24 24 24 24 24 24 ]
     durations = [200e-6]
     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
     polarities = polarities(1:min([length(polarities) NPOLARITIES]));
     % Always test non-current-steering configurations!
     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
 else
-    NPOLARITIES = 6;
+    NPOLARITIES = 20;
     
     frequencies = [ 27 27 27 27 27 ]
     durations = [150 200 300]*1e-6;
@@ -2518,50 +2519,59 @@ end
 function xcorr_threshold_auto_Callback(hObject, eventdata, handles)
 global stim hardware detrend_param;
 global datadir;
-global cow ste wayout;
+global cow ste;
 global stop_button_pressed;
 
-% Set stim to the minimum (30 nA),  stimulate a bunch of times, and get a
+stop_button_pressed = false;
+
+% Set stim to something that should not generate a response (say 3 uA),
+% stimulate a bunch of times, and get a
 % range of xcorrelation values, per valid recording channel. How many
 
-stim.current_uA = 200;
+STIM_CURRENT_NO_RESPONSE = 1;
+
+stim.current_uA = STIM_CURRENT_NO_RESPONSE;
 stim.tdt_valid = ones(1, 16);
 stim.tdt_show = stim.tdt_valid;
-detrend_param.response_detection_threshold = zeros(size(stim.tdt_valid));
+detrend_param.response_detection_threshold = zeros(1,16);
 
 nactive = sum(stim.tdt_valid);
 
 colours = distinguishable_colors(nactive);
-tdt_valid_mapping = find(stim.tdt_valid);
 
-xcorr_min_threshold = -10.1; % Is this even reasonable?
+xcorr_min_threshold = -0.8; % Is this even reasonable?
 
 % One goes first. Given the way for loops work, this is easiest.
 data = stimulate(stim, hardware, detrend_param, handles);
-clear cow ste wayout;
-for i = 1:20
+clear cow ste;
+for i = 1:40
+    % Vary the current a little, just in case
+    stim.current_uA = STIM_CURRENT_NO_RESPONSE * (exp(rand)-0.7);
+    disp(sprintf('In loop, iteration %d, stim %s', i, sigfig(stim.current_uA)));
+    
+
     if stop_button_pressed
+        disp('Stop button was pressed. Aborting.');
         stop_button_pressed = false;
         break;
     end
+    
     
     data = stimulate(stim, hardware, detrend_param, handles);
 
     cow(i,:) = data.tdt.spikes_r;
     if i > 1
         m = mean(cow);
-        wayout(i,:) = m + 3*std(cow);
         ste95 = std(cow) * 1.96 / sqrt(i);
         
-        m(find(m <= xcorr_min_threshold)) = Inf;
+        %m(find(m <= xcorr_min_threshold)) = Inf;
         
         % This just lets us monitor progress: shouldn't see pinkness by end
-        detrend_param.response_detection_threshold = m + ste95 + 3*std(cow);
+        detrend_param.response_detection_threshold = mean(cow) + 3*std(cow);
 
-        for j = 1:size(wayout, 2)
-            pchan = tdt_valid_mapping(j);
+        for pchan = 1:16
             h = eval(sprintf('handles.maxi%d', pchan));
-            set(h, 'String', sprintf('%s', sigfig(wayout(i,j), 4)));
+            set(h, 'String', sprintf('%s', sigfig(detrend_param.response_detection_threshold(pchan), 4)));
         end
         
         %axes(handles.axes2);
@@ -2579,7 +2589,7 @@ for i = 1:20
             xlabel(handles.axes2, 'trial');
             ylabel(handles.axes2, 'xcorr');
             title(handles.axes2, 'Channel response thresholds');
-            set(handles.axes2, 'YLim', [-11 -9]);
+            set(handles.axes2, 'YLim', [-1.1 0]);
         end
         hold(handles.axes2, 'off');
         set(handles.axes2, 'XLim', [0 j+1]);
@@ -2591,13 +2601,12 @@ m = mean(cow);
 stim.tdt_valid = m > xcorr_min_threshold;
 stim.tdt_show = stim.tdt_valid;
 
-detrend_param.response_detection_threshold ...
-    = m(find(stim.tdt_valid)) + ste95(find(stim.tdt_valid)) + 3*std(cow(find(stim.tdt_valid)));
+detrend_param.response_detection_threshold = mean(cow) + 3*std(cow);
+detrend_param.response_detection_threshold
 
-for j = 1:size(wayout, 2)
-    pchan = tdt_valid_mapping(j);
+for pchan = 1:16
     h = eval(sprintf('handles.maxi%d', pchan));
-    set(h, 'String', sprintf('%s', sigfig(wayout(i,j), 4)));
+    set(h, 'String', sprintf('%s', sigfig(detrend_param.response_detection_threshold(pchan), 4)));
 end
 
 for i = 1:16
