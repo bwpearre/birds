@@ -97,14 +97,14 @@ if true % For my X--HVC experiment
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
     detrend_param.response_baseline = [0.012 0.025];
-    detrend_param.response_detection_threshold = 1e-10;
+    detrend_param.response_detection_threshold = Inf * ones(1, 16);
     voltage_limit = 3;
 else
     detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
     detrend_param.range = [0.0007 0.02];
     detrend_param.response_roi = [0.0007 0.002];
     detrend_param.response_baseline = [0.005 0.02];
-    detrend_param.response_detection_threshold = 3e-9;
+    detrend_param.response_detection_threshold = Inf * ones(1, 16);
     voltage_limit = 7;
 end
 
@@ -876,16 +876,19 @@ if ~sufficient_active_electrodes
     return;
 end
 
+try
+    in_stim_loop = true;
+    disable_controls(hObject, handles);
+    save_globals;
 
-in_stim_loop = true;
-disable_controls(hObject, handles);
-save_globals;
+    stim_loop_init(hObject, handles);
 
-stim_loop_init(hObject, handles);
-
-while ~stop_button_pressed
-    disp('Stimulating now')
-    stim_loop_execute(hObject, handles)
+    while ~stop_button_pressed
+        disp('Stimulating now')
+        stim_loop_execute(hObject, handles)
+    end
+catch ME
+    in_stim_loop = false;
 end
 
 stop_button_pressed = false;
@@ -1252,6 +1255,7 @@ if errors.val ~= 0
     for i = 1:length(errors.name)
         disp(errors.name{i});
     end
+    stop_callback(hObject, handles);
 end
 
 
