@@ -175,3 +175,8 @@ if data.version < 23
     data.voltage = max(max(abs(data.ni.stim(:, :, 1))));
 end
 
+if data.version < 24
+    if length(data.detrend_param.response_detection_threshold) == 1
+        data.detrend_param.response_detection_threshold = ones(1, 16) * data.detrend_param.response_detection_threshold;
+    end
+end

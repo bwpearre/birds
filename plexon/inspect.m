@@ -58,7 +58,7 @@ global tdt_show_now tdt_show_data tdt_show_data_last tdt_show_last_chosen;
 global detrend_param;
 
 
-clear detrend_param;
+clear global detrend_param;
 
 tdt_show_now = zeros(1, 16);
 tdt_show_last_chosen = ones(1, 16);
@@ -87,47 +87,11 @@ for i = 1:16
                         'Callback',{@tdt_show_channel_Callback});
 end
 
+do_file(hObject, handles, 1, true);
 
 guidata(hObject, handles);
 
 
-
-function tdt_show_channel_Callback(hObject, eventData, handles)
-global tdt_show_now tdt_show_last_chosen tdt_show_data tdt_show_data_last;
-global file;
-tdt_show_now(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
-tdt_show_last_chosen = tdt_show_now;
-handles = guidata(hObject);
-if ~isempty(file)
-    do_file(hObject, handles, file, true);
-end
-
-
-% If I choose what channels to show, but loading a file with a different
-% set of channels tosses my chosen result, pressing this button will
-% restore my chosen ones.
-function restore_show_Callback(hObject, eventdata, handles)
-global tdt_show_now tdt_show_last_chosen tdt_show_data tdt_show_data_last;
-global file;
-tdt_show_now = tdt_show_last_chosen;
-for i = 1:16
-    set(handles.tdt_show_buttons{i}, 'Value', tdt_show_now(i));
-end
-if ~isempty(file)
-    do_file(hObject, handles, file, true);
-end
-
-
-function varargout = inspect_OutputFcn(hObject, ~, handles) 
-varargout{1} = handles.output;
-
-
-% --- Executes on selection change in listbox1.
-function listbox1_Callback(hObject, ~, handles)
-global file;
-
-file = handles.sorted_index(get(hObject,'Value'));
-do_file(hObject, handles, file, true);
 
 
 
@@ -141,7 +105,6 @@ global detrend_param detrend_param_orig;
 
 %set(handles.listbox1, 'Enable', 'inactive');
 drawnow;
-
 
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
@@ -174,7 +137,6 @@ if isempty(detrend_param)
     detrend_param = data.detrend_param;
 end
 
-
 detrend_param_orig = data.detrend_param;
 
 if ~isequal(detrend_param, data.detrend_param)
@@ -205,8 +167,6 @@ if isfield(data, 'tdt')
         set(handles.tdt_show_buttons{i}, 'Enable', foo);
     end
 end
-            
-
 
 
 
@@ -261,6 +221,45 @@ set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1
 set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
 set(handles.response_detection_threshold, 'String', sprintf('%g', ...
     detrend_param.response_detection_threshold));
+
+
+
+function tdt_show_channel_Callback(hObject, eventData, handles)
+global tdt_show_now tdt_show_last_chosen tdt_show_data tdt_show_data_last;
+global file;
+tdt_show_now(str2double(get(hObject, 'String'))) = get(hObject, 'Value');
+tdt_show_last_chosen = tdt_show_now;
+handles = guidata(hObject);
+if ~isempty(file)
+    do_file(hObject, handles, file, true);
+end
+
+
+% If I choose what channels to show, but loading a file with a different
+% set of channels tosses my chosen result, pressing this button will
+% restore my chosen ones.
+function restore_show_Callback(hObject, eventdata, handles)
+global tdt_show_now tdt_show_last_chosen tdt_show_data tdt_show_data_last;
+global file;
+tdt_show_now = tdt_show_last_chosen;
+for i = 1:16
+    set(handles.tdt_show_buttons{i}, 'Value', tdt_show_now(i));
+end
+if ~isempty(file)
+    do_file(hObject, handles, file, true);
+end
+
+
+function varargout = inspect_OutputFcn(hObject, ~, handles) 
+varargout{1} = handles.output;
+
+
+% --- Executes on selection change in listbox1.
+function listbox1_Callback(hObject, ~, handles)
+global file;
+
+file = handles.sorted_index(get(hObject,'Value'));
+do_file(hObject, handles, file, true);
 
 
 
@@ -543,7 +542,8 @@ function response_indicator_Callback(hObject, eventdata, handles)
 
 function response_detection_threshold_Callback(hObject, eventdata, handles)
 global detrend_param;
-detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
+%detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
+disp('Deactivated because... well... look for sdklfjg in inspect.m');
 
 function response_detection_threshold_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
