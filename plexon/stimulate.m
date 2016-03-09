@@ -34,7 +34,7 @@ for i = 1:16
     % Create a file for each electrode
     filenames{i} = strrep(strcat(scriptdir, sprintf('/stimElectrode%0.2d.pat',i)), '/', filesep); % Not entirely sure what's going on with this line, or if I'm doing it right. 'filesep' does not seem to be defined
     
-    plexon_write_rectangular_pulse_file(filenames{i},StimParams{i});
+    plexon_write_rectangular_pulse_file(filenames{i},StimParams);
 end
 
 %
@@ -236,7 +236,9 @@ fprintf(fid, 'variable\n');
 
 % Write pre-delay
 if isfield(StimParam,'PreDelay')
-    fprintf(fid, '%d\n%d\n', 0, round(StimParam.PreDelay));
+    if StimParam.PreDelay > 0
+        fprintf(fid, '%d\n%d\n', 0, round(StimParam.PreDelay));
+    end
 end
 
 % Write first square

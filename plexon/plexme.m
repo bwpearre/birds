@@ -62,6 +62,7 @@ handles.output = hObject;
 global bird;
 
 global offsiteTest;
+global in_stim_loop
 
 global hardware stim;
 global safeParams;
@@ -111,9 +112,11 @@ else
 end
 
 % Offsite testing? (Cannot use the DAQ boards or other hardware)
-offsiteTest = true;
+offsiteTest = false;
 
 currently_reconfiguring = true;
+
+in_stim_loop = false;
 
 max_uAmps = 100;
 min_uAmps = 0.05;
@@ -208,8 +211,6 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 ni_response_channels = [ 0 0 0 0 0 0 0 ];
-
-
 
 %handles.TerminalConfig = 'SingleEnded';
 vvsi = [];
@@ -905,6 +906,48 @@ guidata(hObject, handles);
 function s = timer_running(t)
 s = strcmp(t.running, 'on');
 
+function ready = sufficient_active_electrodes
+global stim
+ready = true;
+
+if ~(sum(stim.active_electrodes) > 0)
+    disp('No active electrode selected');
+    ready = false;
+    return;
+end
+
+if stim.active_electrodes(stim.plexon_monitor_electrode) == 0
+    disp('Monitoring electrode not active');
+    ready = false;
+    return;
+end
+
+
+function stim_loop(hObject, handles)
+global stop_button_pressed
+global in_stim_loop
+
+if in_stim_loop
+   return; 
+end
+
+if ~sufficient_active_electrodes
+    return;
+end
+
+in_stim_loop = true;
+
+plexon_start_timer_callback([], [], hObject, handles);
+
+while ~stop_button_pressed
+    disp('Stimulating now')
+    plexon_control_timer_callback_2([], [], hObject, handles)
+end
+
+stop_button_pressed = false;
+in_stim_loop = false;
+enable_controls(handles);
+
 
 % --- Executes on button press in increase.
 function increase_Callback(hObject, eventdata, handles)
@@ -916,7 +959,8 @@ global default_halftime_s;
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = increase_step;
-start_timer(hObject, handles);
+% start_timer(hObject, handles);
+stim_loop(hObject, handles);
 
 guidata(hObject, handles);
 
@@ -931,7 +975,8 @@ global default_halftime_s;
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = 1/increase_step;
-start_timer(hObject, handles);
+% start_timer(hObject, handles);
+stim_loop(hObject, handles);
 
 guidata(hObject, handles);
 
@@ -946,7 +991,9 @@ global default_halftime_s;
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = 1;
-start_timer(hObject, handles);
+% start_timer(hObject, handles);
+stim_loop(hObject, handles);
+% disp('Stim_loop done')
 
 guidata(hObject, handles);
 
@@ -1302,6 +1349,9 @@ if false
     queueOutputData(hardware.ni.session, outputSignal);
 end
 
+% % TESTING PREPULSE DELAY - SAM
+% stim.prepulse_s(1) = 1e-6;
+
 stim = safety_check(stim,safeParams); % Check stimulation for being safe
 [ data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
 if isempty(data)
@@ -1314,7 +1364,7 @@ if errors.val ~= 0
         disp(errors.name{i});
     end
     
-    if timer_running(stim_timer)
+    if ~isempty(stim_timer) & timer_running(stim_timer)
         stop(stim_timer);
     end
 end
