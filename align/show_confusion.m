@@ -29,8 +29,9 @@ ACTIVE_TIMESTEPS_AFTER = floor(MATCH_PLUSMINUS / timestep);
 % the time window.  So we need to align those:
 tstep_of_interest_shifted = tstep_of_interest - time_window_steps + 1;
 
-figure(7);
-nsubfigs = size(testout, 1);
+%figure(7);
+%nsubfigs = size(testout, 1);
+
 ntestpts = 1000;
 
 for i = 1:length(tstep_of_interest)
@@ -55,12 +56,12 @@ for i = 1:length(tstep_of_interest)
     [ outval trueposrate falseposrate ] = f(trigger_thresholds(i));
 
     if true
-        disp(sprintf('Confusion:      True positive    negative'));
-        disp(sprintf('     output pos      %.4f%%     %s%%', trueposrate*100, sigfig(falseposrate*100)));
-        disp(sprintf('            neg       %s%%     %.4f%%', sigfig((1-trueposrate)*100), (1-falseposrate)*100));
+        disp(sprintf('At %d ms:        True positive    negative', times_of_interest(i) * 1000));
+        disp(sprintf('     output pos      %.5f%%     %s%%', trueposrate*100, sigfig(falseposrate*100)));
+        disp(sprintf('            neg       %s%%       %.5f%%', sigfig((1-trueposrate)*100), (1-falseposrate)*100));
     else
-        fprintf('\\vspace{4pt}\n\\begin{tabular}{r|cc}\n  & \\multicolumn{2}{c}{True} \\\\ \n  & pos & neg \\\\ \n  \\hline  Detected pos & %.3f\\%% & %.3f\\%%\\\\ \n  neg & %.3f\\%% & %.3f\\%%\\\\ \n \\end{tabular}\n', ...
-            trueposrate*100, falseposrate*100, (1-trueposrate)*100, (1-falseposrate)*100);
+        fprintf('\\vspace{8pt}\\par\\noindent\n\\begin{tabular}{r|cc}\n  {\\bf At %d ms} & \\multicolumn{2}{c}{True} \\\\ \n  & pos & neg \\\\ \n  \\hline  Detected pos & %.5f\\%% & %.5f\\%%\\\\ \n  neg & %.5f\\%% & %.5f\\%%\\\\ \n\\end{tabular}\n', ...
+            times_of_interest(i) * 1000, trueposrate*100, falseposrate*100, (1-trueposrate)*100, (1-falseposrate)*100);
     end
 end
 

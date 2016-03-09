@@ -159,9 +159,16 @@ end
 % through.
 show_avg = get(handles.response_show_avg, 'Value');
 show_all = get(handles.response_show_all, 'Value');
+
 show_raw = get(handles.response_show_raw, 'Value');
-show_detrended = get(handles.response_show_detrended, 'Value');
 show_trend = get(handles.response_show_trend, 'Value');
+show_detrended = get(handles.response_show_detrended, 'Value');
+
+if ~(show_raw | show_trend | show_detrended)
+    set(handles.response_show_raw, 'Value', 1);
+    show_raw = true;
+end
+
 
 clear h; % Handles for plot -- if empty, there will be no legend, title, etc 
 

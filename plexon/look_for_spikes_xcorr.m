@@ -24,7 +24,7 @@ baseline(2) = min(baseline(2), maxendtime);
 
 roii = find(times > roi(1) & times < roi(2));
 baselinei = find(times > baseline(1) & times < baseline(2));
-validi = find(times > roi(1) & times < baseline(2));
+%validi = find(times > roi(1) & times < baseline(2));
 
 
 
@@ -78,11 +78,11 @@ if exist('handles') & false
 end
 
 
-xcorr_nsamples = round(0.001 * d.fs);
+xcorr_nsamples = ceil(0.0002 * d.fs);
 parfor channel = 1:nchannels
     % foo dimensions: [ channel time_offset stimXstim ]
-    foo(channel,:,:) = xcorr(response_detrended(:, roii, channel)', xcorr_nsamples, 'unbiased');
-    cow(channel,:,:) = xcorr(response_detrended(:, baselinei, channel)', xcorr_nsamples, 'unbiased');
+    foo(channel,:,:) = xcorr(response_detrended(:, roii, channel)', xcorr_nsamples, 'coeff');
+    cow(channel,:,:) = xcorr(response_detrended(:, baselinei, channel)', xcorr_nsamples, 'coeff');
     %foo(channel,:,:) = cov(response_detrended(:, roii, channel)');
     %cow(channel,:,:) = cov(response_detrended(:, baselinei, channel)');
 end
@@ -117,16 +117,12 @@ xccow = log10(max(cow, [], 2));
 r = median(xcfoo, 3)';
 
 if isempty(detrend_param.response_detection_threshold)
+    disp('look_for_spikes_xcorr: no thresholds defined');
     spikes = 0 * r;
 end
 try
-    spikes = r >= detrend_param.response_detection_threshold;
+    spikes = r >= detrend_param.response_detection_threshold(find(data.stim.tdt_valid));
 catch ME
-    spikes = r >= mean(detrend_param.response_detection_threshold);
+    disp('look_for_spikes_xcorr: using mean of response_detection_threshold');
+    spikes = r >= mean(detrend_param.response_detection_threshold(find(data.stim.tdt_valid)));
 end
-if any(spikes) & false
-    channels = find(spikes)
-    responses = r(spikes)
-    thresholds = detrend_param.response_detection_threshold(spikes)
-end
-
