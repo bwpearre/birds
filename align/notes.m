@@ -87,3 +87,49 @@ At 315 ms:        True positive    negative
 At 405 ms:        True positive    negative
      output pos      99.16851%     3.22e-3%
             neg       0.831%     99.99678%
+            
+            
+---- after much futzing with alignment: ----
+With JeffAlign:
+At 150 ms:        True positive    negative
+     output pos      99.89354%     3.28e-3%
+            neg       0.106%       99.99672%
+At 200 ms:        True positive    negative
+     output pos      99.96451%     5.96e-4%
+            neg       0.0355%       99.99940%
+At 250 ms:        True positive    negative
+     output pos      99.39674%     1.64e-3%
+            neg       0.603%       99.99836%
+At 300 ms:        True positive    negative
+     output pos      87.47339%     0.0640%
+            neg       12.5%       99.93604%
+At 350 ms:        True positive    negative
+     output pos      99.82257%     1.49e-4%
+            neg       0.177%       99.99985%
+At 400 ms:        True positive    negative
+     output pos      99.21930%     2.68e-3%
+            neg       0.781%       99.99732%
+
+            
+Without JeffAlign:
+At 150 ms:        True positive    negative
+     output pos      99.96451%     2.98e-4%
+            neg       0.0355%       99.99970%
+At 200 ms:        True positive    negative
+     output pos      99.92903%     5.96e-4%
+            neg       0.0710%       99.99940%
+At 250 ms:        True positive    negative
+     output pos      99.68062%     1.94e-3%
+            neg       0.319%       99.99806%
+At 300 ms:        True positive    negative
+     output pos      99.82257%     2.39e-3%
+            neg       0.177%       99.99761%
+At 350 ms:        True positive    negative
+     output pos      99.78708%     0.00%
+            neg       0.213%       100.00000%
+At 400 ms:        True positive    negative
+     output pos      99.71611%     5.52e-3%
+            neg       0.284%       99.99448%
+
+
+

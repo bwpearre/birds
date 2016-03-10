@@ -10,46 +10,79 @@ addpath(sprintf('%s/../lib', p));
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 1
-        BIRD='lny64';
-        load('~/Desktop/lny64/roboaggregate.mat');
-        MIC_DATA = audio.data;
-        agg_audio.fs = audio.fs;
-        %times_of_interest = [0.15 0.315 0.405]
-        times_of_interest_loop = [ 0.15 0.2 0.25 0.3 0.35 0.4 ];
+if 0
+    BIRD='lny64';
+    load('~/Desktop/lny64/roboaggregate.mat');
+    MIC_DATA = audio.data;
+    agg_audio.fs = audio.fs;
+    %times_of_interest = [0.15 0.315 0.405]
+    times_of_interest_separate = [ 0.3 0.15 0.2 0.25 0.35 0.4 ];
+    times_of_interest_separate = 0.3
+    %times_of_interest_separate = NaN;
+    %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
 elseif 0
-        BIRD='lg373rblk';
-        load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
-        MIC_DATA = audio.data;
-        agg_audio.fs = audio.fs;
-        times_of_interest = [0.115 0.2 0.325]
-        times_of_interest = 0.190
+    BIRD='lg373rblk';
+    load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
+    MIC_DATA = audio.data;
+    agg_audio.fs = audio.fs;
+    %times_of_interest = [0.115 0.2 0.325]
+    times_of_interest_separate = 0.2;
 elseif 0
-        BIRD='lw8rhp';
-        load('/Users/bwpearre/Desktop/Will/test_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
-        MIC_DATA = audio.data;
-        agg_audio.fs = audio.fs;
+    BIRD='lw8rhp';
+    load('/Users/bwpearre/Desktop/Will/test_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
+    MIC_DATA = audio.data;
+    agg_audio.fs = audio.fs;
 elseif 0
-        BIRD='lw27ry';
-        load('~/r/data/lw27ry_extracted_data');
-        agg_audio.data = agg_audio.data(1:24000,:);
-        clear agg_data;
-        MIC_DATA = agg_audio.data;
+    BIRD='lw27ry';
+    load('~/r/data/lw27ry_extracted_data');
+    agg_audio.data = agg_audio.data(1:24000,:);
+    clear agg_data;
+    MIC_DATA = agg_audio.data;
+elseif 1
+    BIRD = 'delta';
+    agg_audio.fs = 44100;
+    times_of_interest_separate = 0.3;
+    samples_of_interest = round(times_of_interest_separate * agg_audio.fs);
+    MIC_DATA = rand([20000, 100])/100;
+    MIC_DATA(samples_of_interest - round((0.005 * agg_audio.fs)), :) = rand([1, 100])/100 + 1;
 end
 
 disp(sprintf('Bird: %s', BIRD));
 
-%%% Code snippet to create songs for audio device input
-%some_songs = reshape(MIC_DATA(:, 1:50), [], 1);
-%
-%audiowrite('birdsongs.ogg', ...
-%        some_songs / max([max(max(some_songs)) abs(min(min(some_songs)))]), ...
-%        44100);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%% Parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+samplerate = 44100;
+ntrain = 200;
+nhidden_per_output = 3;
+fft_size = 256;
+fft_time_shift_seconds = 0.0015;
+noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
+nonsinging_fraction = 0;
+use_jeff_realignment_train = false;
+use_jeff_realignment_test = false;
+use_nn_realignment_test = false;
+confusion_all = false;
+
+% Region of the spectrum (in space and time) to examine:
+freq_range = [1000 8000];
+time_window = 0.03;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 [nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
+
 %% Downsample the data
-samplerate = 44100;
+
 if agg_audio.fs ~= samplerate
         disp(sprintf('Resampling data from %g Hz to %g Hz...', agg_audio.fs, samplerate));
         [a b] = rat(samplerate/agg_audio.fs);
@@ -59,7 +92,6 @@ if agg_audio.fs ~= samplerate
 end
 %MIC_DATA = MIC_DATA(1:raw_time_ds:end,:);
 
-% FIXME Zscore?
 MIC_DATA = MIC_DATA / max(max(max(MIC_DATA)), -min(min(MIC_DATA)));
 
 clear agg_audio.data;
@@ -67,22 +99,10 @@ clear agg_data;
 
 [nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
-NTRAIN = 1000;
-NHIDDEN_PER_OUTPUT = 4;
-FFT_SIZE = 256;
-FFT_TIME_SHIFT = 0.0015;                        % seconds
-NOVERLAP = FFT_SIZE - (floor(samplerate * FFT_TIME_SHIFT));
-NONSINGING_FRACTION = 1;
-USE_JEFF_REALIGNMENT_TRAIN = false;
-USE_JEFF_REALIGNMENT_TEST = false;
-USE_NN_REALIGNMENT = false;
-%% Region of the spectrum (in space and time) to examine:
-freq_range = [1000 8000]; % TUNE
-time_window = 0.03; % TUNE
 
 
 
-ntrain_match = min(nmatchingsongs, NTRAIN);
+ntrain_match = min(nmatchingsongs, ntrain);
 
 disp(sprintf('Found %d songs.  Using %d.', nmatchingsongs, ntrain_match));
 
@@ -95,7 +115,7 @@ if strcmp(BIRD, nonmatchingbird)
 end
 nonmatchingloc = '/Volumes/disk2/winData';
 l = dir(sprintf('%s/%s', nonmatchingloc, nonmatchingbird));
-nonmatchingsongs = zeros(round(size(MIC_DATA) .* [1 NONSINGING_FRACTION]));
+nonmatchingsongs = zeros(round(size(MIC_DATA) .* [1 nonsinging_fraction]));
 need_n_songs = size(nonmatchingsongs, 2);
 
 fprintf('Borrowing %d non-matching songs from ''%s/%s''...\n', need_n_songs, nonmatchingloc, nonmatchingbird);
@@ -144,17 +164,17 @@ MIC_DATA = single(filtfilt(B, A, MIC_DATA));
 % optimal but I have not played with them).  Compute one to get size, then
 % preallocate memory and compute the rest in parallel.
 
-% SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],NOVERLAP=500)
+% SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],noverlap=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
-fprintf('FFT time shift = %g s\n', FFT_TIME_SHIFT);
+fprintf('FFT time shift = %g s\n', fft_time_shift_seconds);
 
-window = hamming(FFT_SIZE);
+window = hamming(fft_size);
 
-[speck freqs times] = spectrogram(MIC_DATA(:,1), window, NOVERLAP, [], samplerate);
+[speck freqs times] = spectrogram(MIC_DATA(:,1), window, noverlap, [], samplerate);
 [nfreqs, ntimes] = size(speck);
 speck = speck + eps;
 
-% This _should_ be the same as FFT_TIME_SHIFT, but let's use this because
+% This _should_ be the same as fft_time_shift_seconds, but let's use this because
 % round-off error is a possibility.  This is actually seconds/timestep.
 timestep = (times(end)-times(1))/(length(times)-1);
 
@@ -162,7 +182,7 @@ timestep = (times(end)-times(1))/(length(times)-1);
 %% Define training set
 % Hold some data out for final testing.  This includes both matching and non-matching IF THE SONGS
 % ARE IN RANDOM ORDER
-ntrainsongs = min(floor(nsongs*8/10), NTRAIN);
+ntrainsongs = min(floor(nsongs*8/10), ntrain);
 ntestsongs = nsongs - ntrainsongs;
 % On each run of this program, change the presentation order of the
 % data, so we get (a) a different subset of the data than last time for
@@ -181,7 +201,7 @@ spectrograms = zeros([nsongs nfreqs ntimes]);
 spectrograms(1, :, :) = speck;
 disp('Computing spectrograms...');
 parfor i = 2:nsongs
-        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), window, NOVERLAP, [], samplerate) + eps;
+        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), window, noverlap, [], samplerate) + eps;
 end
 
 spectrograms = single(spectrograms);
@@ -234,9 +254,13 @@ testsongs = randomsongs(ntrainsongs+1:end);
 
 %%%%%%%%%% Loop over times_of_interest_loop
 
-for times_of_interest = times_of_interest_loop
+for times_of_interest = times_of_interest_separate
     
-    disp(sprintf('Working on time %dms', times_of_interest*1000));
+    if exist('times_of_interest_simultaneous', 'var')
+        times_of_interest = times_of_interest_simultaneous;
+    end
+    
+    disp(sprintf('Working on time %d ms', times_of_interest*1000));
     
     if 0
         disp('Looking for promising syllables...');
@@ -286,16 +310,6 @@ for times_of_interest = times_of_interest_loop
         [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
     end
     
-    n=10;
-    w = [canonical_songs(1) ceil(rand(1, n-1)*600)];
-    for i = 1:length(w)
-        subplot(n,1,i);
-        plot(MIC_DATA(:,w(i)));
-        grid on;
-        set(gca, 'ylim', [-0.4 0.4], 'xlim', [13000 17000]);
-        title(sprintf('Sample offset %d', sample_offsets(w(i))));
-    end
-    
     
     disp('Creating spectral power image...');
     
@@ -312,17 +326,17 @@ for times_of_interest = times_of_interest_loop
     imagesc(power_img(pt,:));
     
     
-    target_offsets_out = target_offsets;
-    sample_offsets_out = sample_offsets;
-    if ~USE_JEFF_REALIGNMENT_TRAIN
+    target_offsets_test = target_offsets;
+    sample_offsets_test = sample_offsets;
+    if ~use_jeff_realignment_train
         fprintf('\n               ***** DISCARDING TARGET JITTER COMPENSATION FOR TRAINING *****\n\n');
         target_offsets = 0 * target_offsets;
         sample_offsets = 0 * sample_offsets;
     end
-    if ~USE_JEFF_REALIGNMENT_TEST
+    if ~use_jeff_realignment_test
         fprintf('\n               ***** DISCARDING TARGET JITTER COMPENSATION FOR TEST FILE *****\n\n');
-        target_offsets_out = 0 * target_offsets_out;
-        sample_offsets_out = 0 * sample_offsets_out;
+        target_offsets_test = 0 * target_offsets_test;
+        sample_offsets_test = 0 * sample_offsets_test;
     end
     
     %hist(target_offsets', 40);
@@ -347,6 +361,8 @@ for times_of_interest = times_of_interest_loop
                 'EdgeColor', [1 0 0]);
         end
     end
+    
+    set(gca, 'YLim', [0 10]);
     drawnow;
     
     
@@ -395,7 +411,7 @@ for times_of_interest = times_of_interest_loop
                 = reshape(spectrograms(randomsongs(song), ...
                 freq_range_ds, ...
                 tstep - time_window_steps + 1  :  tstep), ...
-                [], 1);
+                layer0sz, 1);
             
             % Fill in the positive hits, if appropriate...
             if randomsongs(song) > nmatchingsongs
@@ -418,8 +434,8 @@ for times_of_interest = times_of_interest_loop
     nnsetY = single(nnsetY);
     
     %% Shape only?  Let's try normalising the training inputs:
-    nnsetX = normc(nnsetX);
-    
+    nnsetX = zscore(nnsetX);
+    %nnsetX = normc(nnsetX);
     %yy=reshape(nnsetY, nwindows_per_song, nsongs);
     %imagesc(yy');
     
@@ -439,7 +455,8 @@ for times_of_interest = times_of_interest_loop
     
     
     
-    net = feedforwardnet([NHIDDEN_PER_OUTPUT * ntsteps_of_interest]); % TUNE
+    net = feedforwardnet([nhidden_per_output * ntsteps_of_interest]);
+    net.inputs{1}.processFcns={'mapstd'};
     %net = feedforwardnet([ntsteps_of_interest]);
     %net = feedforwardnet([]);
     
@@ -452,15 +469,10 @@ for times_of_interest = times_of_interest_loop
     % Once the validation set performance stops improving, it doesn't seem to
     % get better, so keep this small.
     net.trainParam.max_fail = 2;
-    if training_set_MB < 10000 & false
-        parallelise_training = 'yes'; % Actually slows down training??
-        disp('   ...parallelising...');
-    else
-        parallelise_training = 'no';
-    end
+        
     tic
     %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
-    [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), 'UseParallel', parallelise_training);
+    [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
     % Oh yeah, the line above was the hard part.
     disp(sprintf('   ...training took %g minutes.', toc/60));
     % Test on all the data:
@@ -499,8 +511,7 @@ for times_of_interest = times_of_interest_loop
     
     % Now that we've computed the thresholds using just the training set, print the confusion matrices
     % using just the holdout test set.
-    CONFUSION_ALL = true;
-    if CONFUSION_ALL
+    if confusion_all
         foo = 1:size(testout, 3);
     else
         foo = ntrainsongs+1:size(testout, 3);
@@ -544,13 +555,13 @@ for times_of_interest = times_of_interest_loop
             [targets_with_offsets, target_offsets_net_tmp] = find(trigger_img);
             
             target_offsets_net(i,targets_with_offsets) = target_offsets_net_tmp' - tstep_of_interest(i) + 1;
-            sample_offsets_net(i,:) = target_offsets_net(i,:) * FFT_TIME_SHIFT * samplerate;
+            sample_offsets_net(i,:) = target_offsets_net(i,:) * fft_time_shift_seconds * samplerate;
             
-            figure(7);
+            %figure(7);
             %hist([target_offsets_2 ; target_offsets_net]', 50);
-            hist([sample_offsets_out ; sample_offsets_net]', 50);
-            target_offset_mean_difference = mean(target_offsets_out) - mean(target_offsets_net)
-            figure(6);
+            %hist([sample_offsets_test ; sample_offsets_net]', 50);
+            %target_offset_mean_difference = mean(target_offsets_test) - mean(target_offsets_net)
+            %figure(6);
             
             % img is RGB.  Here I'm playing with colouring the image with triggers
             img(1:ntrainsongs, :, 1) = img(1:ntrainsongs, :, 1) - trigger_img(1:ntrainsongs, :);
@@ -605,275 +616,25 @@ for times_of_interest = times_of_interest_loop
     drawnow;
     
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%% ROUND 2 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if USE_NN_REALIGNMENT
-        %[target_offsets(i,:) sample_offsets(i,:)] =
-        
-        target_offsets = target_offsets_net;
-        sample_offsets = sample_offsets_net;
-        target_offsets_out = target_offsets_net;
-        sample_offsets_out = sample_offsets_net;
-        
-        
-        
-        
-        %% Create the training set
-        disp(sprintf('Creating training set from %d songs...', ntrainsongs));
-        % This loop also shuffles the songs according to randomsongs, so we can use
-        % contiguous blocks for training / testing
-        
-        % The following uses nsongs rather than ntrainsongs: build the complete dataset for the neural
-        % network to make testing easier.  However, only ntrainsongs will be given to train()
-        
-        training_set_MB = 8 * nsongs * nwindows_per_song * layer0sz / (2^20);
-        
-        disp(sprintf('   ...(Allocating %g MB for training set X.)', training_set_MB));
-        nnsetX = zeros(layer0sz, nsongs * nwindows_per_song);
-        nnsetY = Y_NEGATIVE * ones(ntsteps_of_interest, nsongs * nwindows_per_song);
-        
-        
-        power_img = squeeze((sum(spectrograms, 2)));
-        power_img(find(isinf(power_img))) = 0;
-        
-        
-        % Populate the training data.  Infinite RAM makes this so much easier!
-        for song = 1:nsongs
-            
-            for tstep = time_window_steps : ntimes
-                
-                nnsetX(:, (song-1)*nwindows_per_song + tstep - time_window_steps + 1) ...
-                    = reshape(spectrograms(randomsongs(song), ...
-                    freq_range_ds, ...
-                    tstep - time_window_steps + 1  :  tstep), ...
-                    [], 1);
-                
-                % Fill in the positive hits, if appropriate...
-                if randomsongs(song) > nmatchingsongs
-                    % If the index is from the non-song region of the corpus, do not mark a hit.  This
-                    % cannot simply be moved to the outer loop because we still need to put it in nnsetX.
-                    continue;
-                else
-                    for interesting = 1:ntsteps_of_interest
-                        if tstep == tstep_of_interest(interesting)
-                            nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - shothalf + 2 : ...
-                                (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + shothalf) = shotgun;
-                        end
-                    end
-                end
-            end
-        end
-        
-        disp('Converting neural net data to singles...');
-        nnsetX = single(nnsetX);
-        nnsetY = single(nnsetY);
-        
-        %% Shape only?  Let's try normalising the training inputs:
-        nnsetX = normc(nnsetX);
-        
-        %yy=reshape(nnsetY, nwindows_per_song, nsongs);
-        %imagesc(yy');
-        
-        % original order: spectrograms, spectrograms_ds, song_montage
-        %   indices into original order: trainsongs, testsongs
-        % shuffled: nnsetX, nnsetY, testout
-        %   indices into shuffled arrays: nnset_train, nnset_test
-        
-        % These are contiguous blocks, since the spectrograms have already been
-        % shuffled.
-        nnset_train = 1:(ntrainsongs * nwindows_per_song);
-        nnset_test = ntrainsongs * nwindows_per_song + 1 : size(nnsetX, 2);
-        
-        % Create the network.  The parameter is the number of units in each hidden
-        % layer.  [8] means one hidden layer with 8 units.  [] means a simple
-        % perceptron.
-        
-        
-        
-        net = feedforwardnet([NHIDDEN_PER_OUTPUT * ntsteps_of_interest]); % TUNE
-        %net = feedforwardnet([ntsteps_of_interest]);
-        %net = feedforwardnet([]);
-        
-        %net.trainParam.goal=1e-3;
-        
-        %net.trainFcn = 'trainbfg';
-        
-        fprintf('Training network with %s...\n', net.trainFcn);
-        
-        % Once the validation set performance stops improving, it doesn't seem to
-        % get better, so keep this small.
-        net.trainParam.max_fail = 2;
-        if training_set_MB < 10000 & false
-            parallelise_training = 'yes'; % Actually slows down training??
-            disp('   ...parallelising...');
-        else
-            parallelise_training = 'no';
-        end
-        tic
-        %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
-        [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), 'UseParallel', parallelise_training);
-        % Oh yeah, the line above was the hard part.
-        disp(sprintf('   ...training took %g minutes.', toc/60));
-        % Test on all the data:
-        
-        % Why not test just on the non-training data?  Compute them all, and then only count ntestsongs for statistics (later)
-        testout = sim(net, nnsetX);
-        testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
-        
-        % Update the each-song image
-        power_img = power_img(randomsongs,:);
-        power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
-        
-        disp('Computing optimal output thresholds...');
-        
-        % How many seconds on either side of the tstep_of_interest is an acceptable match?
-        MATCH_PLUSMINUS = 0.02;
-        % Cost of false positives is relative to that of false negatives.
-        FALSE_POSITIVE_COST = 1 % TUNE
-        
-        % Which songs should have hits?  The first nmatchingsongs, but permuted to the same order as the
-        % training/test sets, as given by randomsongs.
-        songs_with_hits = [ones(1, nmatchingsongs) zeros(1, nsongs - nmatchingsongs)]';
-        songs_with_hits = songs_with_hits(randomsongs);
-        
-        % Search for the optimal trigger thresholds using just the training set
-        trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
-            testout(:,:,1:ntrainsongs), ...
-            nwindows_per_song, ...
-            FALSE_POSITIVE_COST, ...
-            times_of_interest, ...
-            tstep_of_interest, ...
-            MATCH_PLUSMINUS, ...
-            timestep, ...
-            time_window_steps, ...
-            songs_with_hits(1:ntrainsongs));
-        
-        % Now that we've computed the thresholds using just the training set, print the confusion matrices
-        % using just the holdout test set.
-        CONFUSION_ALL = true;
-        if CONFUSION_ALL
-            foo = 1:size(testout, 3);
-        else
-            foo = ntrainsongs+1:size(testout, 3);
-        end
-        show_confusion(...
-            testout(:, :, foo), ...
-            nwindows_per_song, ...
-            FALSE_POSITIVE_COST, ...
-            times_of_interest, ...
-            tstep_of_interest, ...
-            MATCH_PLUSMINUS, ...
-            timestep, ...
-            time_window_steps, ...
-            songs_with_hits(foo), ...
-            trigger_thresholds);
-        
-        
-        
-        SHOW_THRESHOLDS = true;
-        SHOW_ONLY_TRUE_HITS = true;
-        SORT_BY_ALIGNMENT = true;
-        % For each timestep of interest, draw that output unit's response to all
-        % timesteps for all songs:
-        
+    
+    if use_nn_realignment_test
+        target_offsets_net = zeros(ntsteps_of_interest, nsongs);
+        sample_offsets_net = zeros(ntsteps_of_interest, nsongs);
         for i = 1:ntsteps_of_interest
-            figure(6);
-            subplot(ntsteps_of_interest, 1, i);
             testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
             leftbar = zeros(time_window_steps-1, nsongs);
+            trigger_img = trigger_max(testout_i_squeezed', trigger_thresholds(i), 0.1, timestep);
+            trigger_img = [leftbar' trigger_img];
+            [val pos] = max(trigger_img, [], 2);
             
-            if SHOW_THRESHOLDS
-                % "img" is a tricolour image
-                img = power_img;
-                % de-bounce:
-                trigger_img = trigger(testout_i_squeezed', trigger_thresholds(i), 0.1, timestep);
-                trigger_img = [leftbar' trigger_img];
-                [val pos] = max(trigger_img, [], 2);
-                
-                
-                % img is RGB.  Here I'm playing with colouring the image with triggers
-                img(1:ntrainsongs, :, 1) = img(1:ntrainsongs, :, 1) - trigger_img(1:ntrainsongs, :);
-                img(1:ntrainsongs, :, 2) = img(1:ntrainsongs, :, 2) + trigger_img(1:ntrainsongs, :);
-                img(1:ntrainsongs, :, 3) = img(1:ntrainsongs, :, 3) + trigger_img(1:ntrainsongs, :);
-                % Different colour for testsongs
-                img(ntrainsongs+1:end, :, 1) = img(ntrainsongs+1:end, :, 1) + trigger_img(ntrainsongs+1:end, :);
-                img(ntrainsongs+1:end, :, 2) = img(ntrainsongs+1:end, :, 2) - trigger_img(ntrainsongs+1:end, :);
-                img(ntrainsongs+1:end, :, 3) = img(ntrainsongs+1:end, :, 3) - trigger_img(ntrainsongs+1:end, :);
-                
-                % Colour the leftbar according to train and test:
-                img(1:ntrainsongs, 1:time_window_steps, 3) = 1;
-                img(1:ntrainsongs, 1:time_window_steps, 2) = 1;
-                img(1:ntrainsongs, 1:time_window_steps, 1) = 0;
-                img(ntrainsongs+1:end, 1:time_window_steps, 2) = 0;
-                img(ntrainsongs+1:end, 1:time_window_steps, 1) = 1;
-                img(ntrainsongs+1:end, 1:time_window_steps, 3) = 0;
-                
-                if SHOW_ONLY_TRUE_HITS
-                    img = img(find(songs_with_hits), :, :);
-                    pos = pos(find(songs_with_hits));
-                end
-                
-                if SORT_BY_ALIGNMENT
-                    %[a, new_world_order] = sort(sample_offsets(randomsongs(1:nmatchingsongs)));
-                    [~, new_world_order] = sort(pos);
-                    img = img(new_world_order,:,:);
-                end
-                
-                % Make sure the image handle has the correct axes
-                if SHOW_ONLY_TRUE_HITS
-                    imh = image([times(1) times(end)]*1000, [1 sum(songs_with_hits)], img);
-                else
-                    imh = image([times(1) times(end)]*1000, [1 nsongs], img);
-                end
-            else
-                leftbar(:, 1:ntrainsongs) = max(max(testout_i_squeezed))/2;
-                leftbar(:, ntrainsongs+1:end) = 3*max(max(testout_i_squeezed))/4;
-                testout_i_squeezed = [leftbar' testout_i_squeezed'];
-                imagesc([times(1) times(end)]*1000, [1 nsongs], testout_i_squeezed);
-            end
-            xlabel('Time (ms)');
-            ylabel('Song');
-            if ~SORT_BY_ALIGNMENT
-                text(time_window/2*1000, ntrainsongs/2, 'train', ...
-                    'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-                text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
-                    'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-            end
+            [targets_with_offsets, target_offsets_net_tmp] = find(trigger_img);
+            target_offsets_net(i,targets_with_offsets) = target_offsets_net_tmp' - tstep_of_interest(i) + 1;
+            sample_offsets_net(i,:) = target_offsets_net(i,:) * fft_time_shift_seconds * samplerate;
+            target_offsets_test = target_offsets_net;
+            sample_offsets_test = sample_offsets_net;
         end
-        
-        
-        drawnow;
-        
-        
-        
-        
-        
-        
     end
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%% And continue... %%%%%%%%%%%%%%%%%%%%%%%%
-    
-    
-    
-    
-    
+
     
     % Draw the hidden units' weights.  Let the user make these square or not
     % because lazy...
@@ -881,7 +642,7 @@ for times_of_interest = times_of_interest_loop
         figure(5);
         for i = 1:size(net.IW{1}, 1)
             subplot(size(net.IW{1}, 1), 1, i)
-            imagesc([-time_window_steps:0]*FFT_TIME_SHIFT*1000, linspace(freq_range(1), freq_range(2), length(freq_range_ds))/1000, ...
+            imagesc([-time_window_steps:0]*fft_time_shift_seconds*1000, linspace(freq_range(1), freq_range(2), length(freq_range_ds))/1000, ...
                 reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_steps));
             axis xy;
             ylabel('frequency');
@@ -897,7 +658,7 @@ for times_of_interest = times_of_interest_loop
     end
     drawnow;
     
-    save learn_detector_latest
+    %save learn_detector_latest
     
     %% Save input file for the LabView detector
     % Extract data from net structure, because LabView is too fucking stupid to
@@ -910,20 +671,25 @@ for times_of_interest = times_of_interest_loop
     mmmingain = net.inputs{1}.processSettings{1}.gain;
     mmmoutoffset = net.outputs{2}.processSettings{1}.xoffset;
     mmmoutgain = net.outputs{2}.processSettings{1}.gain;
-    fft_size = FFT_SIZE;
-    win_size = FFT_SIZE;
-    fft_time_shift = FFT_SIZE - NOVERLAP;
+    win_size = fft_size;
+    fft_time_shift = fft_size - noverlap;
     scaling = 'linear';
-    filename = sprintf('detector_%s%s_%dHz_%dhid_%dtrain_jeff%d%d.mat', ...
-        BIRD, sprintf('_%g', times_of_interest), floor(1/FFT_TIME_SHIFT), net.layers{1}.dimensions, NTRAIN, ...
-        USE_JEFF_REALIGNMENT_TRAIN, USE_JEFF_REALIGNMENT_TEST);
+    filename = sprintf('detector_%s%ss_%dHz_%dhid_%dtrain_jeff%d%d.mat', ...
+        BIRD, sprintf('_%g', times_of_interest), floor(1/fft_time_shift_seconds), net.layers{1}.dimensions, ntrain, ...
+        use_jeff_realignment_train, use_jeff_realignment_test);
     fprintf('Saving as ''%s''...\n', filename);
+    %save(filename, ...
+    %    'net', 'train_record', 'layer0', 'layer1', 'bias0', 'bias1', ...
+    %    'samplerate', 'fft_time_shift_seconds', 'freq_range_ds', ...
+    %    'time_window_steps', 'trigger_thresholds', ...
+    %    'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain', 'shotgun_sigma', ...
+    %    'ntrain', 'fft_size', 'win_size', 'fft_time_shift', 'freq_range', 'scaling', '-v7');
     save(filename, ...
-        'net', 'train_record', 'layer0', 'layer1', 'bias0', 'bias1', ...
-        'samplerate', 'FFT_SIZE', 'FFT_TIME_SHIFT', 'freq_range_ds', ...
-        'time_window_steps', 'trigger_thresholds', ...
-        'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain', 'shotgun_sigma', ...
-        'NTRAIN', 'fft_size', 'win_size', 'fft_time_shift', 'freq_range', 'scaling');
+        'net', 'train_record', ...
+        'samplerate', 'fft_size', 'win_size', 'fft_time_shift', 'fft_time_shift_seconds', ...
+        'freq_range_ds', 'time_window_steps', 'trigger_thresholds', ...
+        'shotgun_sigma', ...
+        'ntrain', 'freq_range', 'scaling', '-v7');
     %% Save sample data: audio on channel0, canonical hits for first syllable on channel1
     if false
         % Re-permute all songs with a new random order
@@ -947,18 +713,26 @@ for times_of_interest = times_of_interest_loop
         songs = [songs hits];
     else
         % Just the real songs, in the original order
-        songs = reshape(MIC_DATA(:, 1:nmatchingsongs), [], 1); % Include all singing and non-singing
-        %songs = reshape(MIC_DATA(:, 1:nsongs), [], 1); % Just singing
+        %songs = reshape(MIC_DATA(:, 1:nmatchingsongs), [], 1); % Include all singing and non-singing
+        songs = reshape(MIC_DATA(:, 1:nsongs), [], 1); % Just singing
         songs_scale = max([max(songs) -min(songs)]);
         songs = songs / songs_scale;
         hits = zeros(nsamples_per_song, nmatchingsongs);
         samples_of_interest = round(times_of_interest * samplerate);
         for i = 1:nmatchingsongs
-            hits(samples_of_interest(1) + round(sample_offsets_out(1, i)), i) = 1;
+            hits(samples_of_interest(1) + round(sample_offsets_test(1, i)), i) = 1;
         end
         hits = reshape(hits, [], 1);
         songs = [songs hits];
     end
     
-    audiowrite(sprintf('songs_%s%ss_%d%%.wav', BIRD, sprintf('_%g', times_of_interest), round(100/(1+NONSINGING_FRACTION))), songs, round(samplerate));
+    if use_nn_realignment_test
+        realignNetString = 'realignNet';
+    else
+        realignNetString = '';
+    end
+    audiowrite(sprintf('songs_%s%ss_%dHz_%d%%_jeff%d%d%s.wav',...
+        BIRD, sprintf('_%g', times_of_interest), floor(1/fft_time_shift_seconds), round(100/(1+nonsinging_fraction)), ...
+        use_jeff_realignment_train, use_jeff_realignment_test, realignNetString), ...
+        songs, round(samplerate));
 end
