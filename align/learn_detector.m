@@ -58,9 +58,9 @@ disp(sprintf('Bird: %s', BIRD));
 
 samplerate = 44100;
 ntrain = 200;
-nhidden_per_output = 3;
+nhidden_per_output = 4;
 fft_size = 256;
-fft_time_shift_seconds = 0.0015;
+fft_time_shift_seconds = 0.001;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
 nonsinging_fraction = 0;
 use_jeff_realignment_train = false;
@@ -393,7 +393,11 @@ for times_of_interest = times_of_interest_separate
     % This only indirectly affects final timing precision, since thresholds are
     % optimally tuned based on the window defined in MATCH_PLUSMINUS.
     shotgun_max_sec = 0.02;
-    shotgun_sigma = 0.002; % TUNE
+    if strcmp(BIRD, 'delta')
+        shotgun_sigma = 0.00001;
+    else
+        shotgun_sigma = 0.002; % TUNE
+    end
     shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
     shotgun = shotgun / max(shotgun);
     shotgun = shotgun(find(shotgun>0.1));
