@@ -11,6 +11,8 @@ function [ optimal_thresholds ] = optimise_network_output_unit_trigger_threshold
 
 global Y_NEGATIVE;
 
+Y_NEGATIVE = -1;
+
 % Search for optimal thresholds given false-positive vs
 % false-negagive weights (the latter := 1).
 

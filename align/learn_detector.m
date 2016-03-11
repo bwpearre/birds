@@ -16,8 +16,7 @@ if 0
     MIC_DATA = audio.data;
     agg_audio.fs = audio.fs;
     %times_of_interest = [0.15 0.315 0.405]
-    times_of_interest_separate = [ 0.3 0.15 0.2 0.25 0.35 0.4 ];
-    times_of_interest_separate = 0.3
+    times_of_interest_separate = [ 0.15 0.2 0.25 0.3 0.35 0.4 ];
     %times_of_interest_separate = NaN;
     %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
 elseif 0
@@ -57,12 +56,12 @@ disp(sprintf('Bird: %s', BIRD));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 samplerate = 44100;
-ntrain = 200;
+ntrain = 1000;
 nhidden_per_output = 4;
 fft_size = 256;
-fft_time_shift_seconds = 0.001;
+fft_time_shift_seconds = 0.0015;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
-nonsinging_fraction = 0;
+nonsinging_fraction = 1;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -502,6 +501,8 @@ for times_of_interest = times_of_interest_separate
     songs_with_hits = songs_with_hits(randomsongs);
     
     % Search for the optimal trigger thresholds using just the training set
+    
+    %%% FIXME I think the network's output mapping is [-1 1] and this only looks at [0 1]?
     trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
         testout(:,:,1:ntrainsongs), ...
         nwindows_per_song, ...
@@ -666,7 +667,7 @@ for times_of_interest = times_of_interest_separate
     
     %% Save input file for the LabView detector
     % Extract data from net structure, because LabView is too fucking stupid to
-    % permit the . operator.  Or I am.
+    % permit the . operator.
     layer0 = net.IW{1};
     layer1 = net.LW{2,1};
     bias0 = net.b{1};
@@ -675,6 +676,10 @@ for times_of_interest = times_of_interest_separate
     mmmingain = net.inputs{1}.processSettings{1}.gain;
     mmmoutoffset = net.outputs{2}.processSettings{1}.xoffset;
     mmmoutgain = net.outputs{2}.processSettings{1}.gain;
+    mapstd_xmean = net.inputs{1}.processSettings{1}.xmean;
+    mapstd_xstd = net.inputs{1}.processSettings{1}.xstd;
+    
+    
     win_size = fft_size;
     fft_time_shift = fft_size - noverlap;
     scaling = 'linear';
@@ -682,18 +687,14 @@ for times_of_interest = times_of_interest_separate
         BIRD, sprintf('_%g', times_of_interest), floor(1/fft_time_shift_seconds), net.layers{1}.dimensions, ntrain, ...
         use_jeff_realignment_train, use_jeff_realignment_test);
     fprintf('Saving as ''%s''...\n', filename);
-    %save(filename, ...
-    %    'net', 'train_record', 'layer0', 'layer1', 'bias0', 'bias1', ...
-    %    'samplerate', 'fft_time_shift_seconds', 'freq_range_ds', ...
-    %    'time_window_steps', 'trigger_thresholds', ...
-    %    'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain', 'shotgun_sigma', ...
-    %    'ntrain', 'fft_size', 'win_size', 'fft_time_shift', 'freq_range', 'scaling', '-v7');
     save(filename, ...
         'net', 'train_record', ...
-        'samplerate', 'fft_size', 'win_size', 'fft_time_shift', 'fft_time_shift_seconds', ...
-        'freq_range_ds', 'time_window_steps', 'trigger_thresholds', ...
+        'samplerate', 'fft_size', 'win_size', 'fft_time_shift', 'fft_time_shift_seconds', 'freq_range_ds', ...
+        'time_window_steps', 'trigger_thresholds', 'freq_range', ...
+        'layer0', 'layer1', 'bias0', 'bias1', ...
+        'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain', 'mapstd_xmean', 'mapstd_xstd', ...
         'shotgun_sigma', ...
-        'ntrain', 'freq_range', 'scaling', '-v7');
+        'ntrain',  'scaling', '-v7');
     %% Save sample data: audio on channel0, canonical hits for first syllable on channel1
     if false
         % Re-permute all songs with a new random order
