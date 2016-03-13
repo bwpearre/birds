@@ -6,8 +6,15 @@ e = 'lw95rhp-2015-11-19';
 
 read_Intan_RHD2000_file;
 
-adplus = (amplifier_data')/1e3 + 1;
-adplus(:,15) = adplus(:,15) - 1;
+[nchannels npoints] = size(amplifier_data);
+fs = frequency_parameters.amplifier_sample_rate;
+
+[B A] = ellip(2, .000001, 30, [10 3000]/(fs/2));
+
+adplus = (amplifier_data')/1e3;
+for i = 1:nchannels
+    adplus(:,i) = filtfilt(B, A, adplus(:,i)) + i - nchannels/2;
+end
 plot(t_amplifier*1e3, adplus);
 %set(gca, 'XLim', [400 800], 'YLim', [-1.3 0.3]);
 %set(gca, 'XLim', [1000 1400], 'YLim', [-1.3 0.3]);
