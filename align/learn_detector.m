@@ -273,7 +273,7 @@ for times_of_interest = times_of_interest_separate
             freq_range_ds);
         times_of_interest = tstep_of_interest * timestep
     elseif exist('times_of_interest', 'var') % TUNE
-        tstep_of_interest = round(times_of_interest / timestep);
+        tstep_of_interest = round((times_of_interest * samplerate - fft_size) / (fft_size - noverlap)) + 1;
     else
         disp('You must define a timestep in which you are interested');
     end
