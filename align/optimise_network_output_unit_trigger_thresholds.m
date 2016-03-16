@@ -47,12 +47,14 @@ for i = 1:length(tstep_of_interest)
         tstep_of_interest_shifted(i)+ACTIVE_TIMESTEPS_AFTER;
     positive_interval = positive_interval(find(positive_interval > 0 & positive_interval <= nwindows_per_song));
     
-    fc = @(threshold)trigger_threshold_cost_continuous(threshold, ...
-        responses, ...
-        tstep_of_interest_shifted, ...
-        positive_interval, ...
-        FALSE_POSITIVE_COST, ...
-        songs_with_hits);
+%     if exist('continuous', 'var')
+%         fc = @(threshold)trigger_threshold_cost_continuous(threshold, ...
+%             responses, ...
+%             tstep_of_interest_shifted, ...
+%             positive_interval, ...
+%             FALSE_POSITIVE_COST, ...
+%             songs_with_hits);
+%     end
     
     f = @(threshold)trigger_threshold_cost(threshold, ...
         responses, ...
@@ -68,10 +70,10 @@ for i = 1:length(tstep_of_interest)
     trueposrate = zeros(1, length(tstep_of_interest));
     falseposrate = zeros(1, length(tstep_of_interest));
     for j = 1:ntestpts
-        [ outval_c trueposrate_c(j) falseposrate_c(j) ] = fc(testpts(j));
+%         [ outval_c trueposrate_c(j) falseposrate_c(j) ] = fc(testpts(j));
         [ outval trueposrate(j) falseposrate(j) ] = f(testpts(j));
         outvals(j) = outval;
-        outvals_c(j) = outval_c;
+%         outvals_c(j) = outval_c;
         if outval < best
             best = outval;           % cost value
             bestparam = testpts(j);  % ...at this threshold
@@ -81,7 +83,7 @@ for i = 1:length(tstep_of_interest)
     
     figure(113);
     plot(testpts, 1+outvals, 'Color', colours(i,:));
-    plot(testpts, 1+outvals_c, 'Color', 'r');
+    %plot(testpts, 1+outvals_c, 'Color', 'r');
     % I've been running into a problem because with near-perfect detection over a large variety of
     % thresholds, the first one was chosen, but then with a large number of test songs, noise threw
     % one or two of them over the threshold.  So if there are several values for the threshold that
@@ -90,31 +92,30 @@ for i = 1:length(tstep_of_interest)
     
     % TOTAL KLUDGE: if the cost for a slightly larger of the threshold is the same, use that
     % instead.
-    if 0
-        if pos(2) == pos(1) + 1
-            opt_index = pos(2);
-        else
-            opt_index = pos(1);
-        end
-        % Look for the first sequence of consecutive positions:
-        if false
-            a = diff(pos);
-            b = find([a Inf] > 1);
-            c = diff([0 b]);
-            opt_index = floor(mean(pos(1:c(1))));
-        end
-        
-        if exist('midpoint', 'var') & midpoint
-            optimal_thresholds(i) = testpts(opt_index);
-        else
-            optimal_thresholds(i) = bestparam;
-        end
+    if pos(2) == pos(1) + 1
+        opt_index = pos(2);
+    else
+        opt_index = pos(1);
     end
+    % Look for the first sequence of consecutive positions:
+    if false
+        a = diff(pos);
+        b = find([a Inf] > 1);
+        c = diff([0 b]);
+        opt_index = floor(mean(pos(1:c(1))));
+    end
+    
+    if exist('midpoint', 'var') & midpoint
+        optimal_thresholds(i) = testpts(opt_index);
+    else
+        optimal_thresholds(i) = bestparam;
+    end
+    
     optimal_thresholds(i) = bestparam;
-    [best_c pos] = min(outvals_c);
-    bestparam_c = testpts(pos);
-    optimal_thresholds_c(i) =     bestparam_c;
-    scatter(bestparam_c, 1+best_c, 100, colours(i,:), 'o');
+    %[best_c pos] = min(outvals_c);
+    %bestparam_c = testpts(pos);
+    %optimal_thresholds_c(i) =     bestparam_c;
+    %scatter(bestparam_c, 1+best_c, 100, colours(i,:), 'o');
     scatter(bestparam, 1+best, 100, colours(i,:), '^');
 
     %% Plot the ROC curve.  It's, frankly, not very exciting.
