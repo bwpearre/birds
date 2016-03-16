@@ -10,13 +10,14 @@ addpath(sprintf('%s/../lib', p));
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 0
+if 1
     BIRD='lny64';
     load('~/Desktop/lny64/roboaggregate.mat');
     MIC_DATA = audio.data;
     agg_audio.fs = audio.fs;
     %times_of_interest = [0.15 0.315 0.405]
     times_of_interest_separate = [ 0.15 0.2 0.25 0.3 0.35 0.4 ];
+    times_of_interest_separate = [ 0.3 ];
     %times_of_interest_separate = NaN;
     %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
 elseif 0
@@ -37,13 +38,14 @@ elseif 0
     agg_audio.data = agg_audio.data(1:24000,:);
     clear agg_data;
     MIC_DATA = agg_audio.data;
-elseif 1
+else
     BIRD = 'delta';
     agg_audio.fs = 44100;
     times_of_interest_separate = 0.3;
+    n = 100;
     samples_of_interest = round(times_of_interest_separate * agg_audio.fs);
-    MIC_DATA = rand([20000, 100])/100;
-    MIC_DATA(samples_of_interest - round((0.005 * agg_audio.fs)), :) = rand([1, 100])/100 + 1;
+    MIC_DATA = rand([20000, n])/100;
+    MIC_DATA(samples_of_interest - round((0.005 * agg_audio.fs)), :) = rand([1, n])/100 + 1;
 end
 
 disp(sprintf('Bird: %s', BIRD));
@@ -56,12 +58,12 @@ disp(sprintf('Bird: %s', BIRD));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 samplerate = 44100;
-ntrain = 1000;
-nhidden_per_output = 4;
+ntrain = 100;
+nhidden_per_output = 3;
 fft_size = 256;
-fft_time_shift_seconds = 0.0015;
+fft_time_shift_seconds = 0.003;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
-nonsinging_fraction = 1;
+nonsinging_fraction = 0.1;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -273,7 +275,7 @@ for times_of_interest = times_of_interest_separate
             freq_range_ds);
         times_of_interest = tstep_of_interest * timestep
     elseif exist('times_of_interest', 'var') % TUNE
-        tstep_of_interest = round((times_of_interest * samplerate - fft_size) / (fft_size - noverlap)) + 1;
+        tsteps_of_interest = round((times_of_interest * samplerate - fft_size) / (fft_size - noverlap)) + 1;
     else
         disp('You must define a timestep in which you are interested');
     end
@@ -286,7 +288,7 @@ for times_of_interest = times_of_interest_separate
     end
     
     
-    ntsteps_of_interest = length(tstep_of_interest);
+    ntsteps_of_interest = length(tsteps_of_interest);
     
     %% For each timestep of interest, get the offset of this song from the most typical one.
     disp('Computing target jitter compensation...');
@@ -302,11 +304,11 @@ for times_of_interest = times_of_interest_separate
     %MIC_DATA2 = filtfilt(B, A, double(MIC_DATA));
     
     for i = 1:ntsteps_of_interest
-        range = tstep_of_interest(i)-tstep_buffer:tstep_of_interest(i)+tstep_buffer;
+        range = tsteps_of_interest(i)-tstep_buffer:tsteps_of_interest(i)+tstep_buffer;
         range = range(find(range>0&range<=ntimes));
         foo = reshape(spectrograms(1:nmatchingsongs, :, range), nmatchingsongs, []) * reshape(mean(spectrograms(:, :, range), 1), 1, [])';
         [val canonical_songs(i)] = max(foo);
-        [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tstep_of_interest(i), samplerate, timestep, canonical_songs(i));
+        [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tsteps_of_interest(i), samplerate, timestep, canonical_songs(i));
     end
     
     
@@ -423,7 +425,7 @@ for times_of_interest = times_of_interest_separate
                 continue;
             else
                 for interesting = 1:ntsteps_of_interest
-                    if tstep == tstep_of_interest(interesting)
+                    if tstep == tsteps_of_interest(interesting)
                         nnsetY(interesting, (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps - shothalf + 2 : ...
                             (song-1)*nwindows_per_song + tstep + target_offsets(interesting, randomsongs(song)) - time_window_steps + shothalf) = shotgun;
                     end
@@ -503,16 +505,17 @@ for times_of_interest = times_of_interest_separate
     % Search for the optimal trigger thresholds using just the training set
     
     %%% FIXME I think the network's output mapping is [-1 1] and this only looks at [0 1]?
-    trigger_thresholds = optimise_network_output_unit_trigger_thresholds(...
+    [trigger_thresholds trigger_thresholds_c ] = optimise_network_output_unit_trigger_thresholds(...
         testout(:,:,1:ntrainsongs), ...
         nwindows_per_song, ...
         FALSE_POSITIVE_COST, ...
         times_of_interest, ...
-        tstep_of_interest, ...
+        tsteps_of_interest, ...
         MATCH_PLUSMINUS, ...
         timestep, ...
         time_window_steps, ...
-        songs_with_hits(1:ntrainsongs));
+        songs_with_hits(1:ntrainsongs), ...
+        false);
     
     % Now that we've computed the thresholds using just the training set, print the confusion matrices
     % using just the holdout test set.
@@ -526,13 +529,24 @@ for times_of_interest = times_of_interest_separate
         nwindows_per_song, ...
         FALSE_POSITIVE_COST, ...
         times_of_interest, ...
-        tstep_of_interest, ...
+        tsteps_of_interest, ...
+        MATCH_PLUSMINUS, ...
+        timestep, ...
+        time_window_steps, ...
+        songs_with_hits(foo), ...
+        trigger_thresholds_c);
+    disp('Old:');
+    show_confusion(...
+        testout(:, :, foo), ...
+        nwindows_per_song, ...
+        FALSE_POSITIVE_COST, ...
+        times_of_interest, ...
+        tsteps_of_interest, ...
         MATCH_PLUSMINUS, ...
         timestep, ...
         time_window_steps, ...
         songs_with_hits(foo), ...
         trigger_thresholds);
-    
     
     
     SHOW_THRESHOLDS = true;
@@ -553,13 +567,13 @@ for times_of_interest = times_of_interest_separate
             % "img" is a tricolour image
             img = power_img;
             % de-bounce:
-            trigger_img = trigger_max(testout_i_squeezed', trigger_thresholds(i), 0.1, timestep);
+            trigger_img = trigger(testout_i_squeezed', trigger_thresholds(i), 0.1, timestep);
             trigger_img = [leftbar' trigger_img];
             [val pos] = max(trigger_img, [], 2);
             
             [targets_with_offsets, target_offsets_net_tmp] = find(trigger_img);
             
-            target_offsets_net(i,targets_with_offsets) = target_offsets_net_tmp' - tstep_of_interest(i) + 1;
+            target_offsets_net(i,targets_with_offsets) = target_offsets_net_tmp' - tsteps_of_interest(i) + 1;
             sample_offsets_net(i,:) = target_offsets_net(i,:) * fft_time_shift_seconds * samplerate;
             
             %figure(7);
@@ -628,12 +642,12 @@ for times_of_interest = times_of_interest_separate
         for i = 1:ntsteps_of_interest
             testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
             leftbar = zeros(time_window_steps-1, nsongs);
-            trigger_img = trigger_max(testout_i_squeezed', trigger_thresholds(i), 0.1, timestep);
+            trigger_img = trigger(testout_i_squeezed', trigger_thresholds(i), 0.1, timestep);
             trigger_img = [leftbar' trigger_img];
             [val pos] = max(trigger_img, [], 2);
             
             [targets_with_offsets, target_offsets_net_tmp] = find(trigger_img);
-            target_offsets_net(i,targets_with_offsets) = target_offsets_net_tmp' - tstep_of_interest(i) + 1;
+            target_offsets_net(i,targets_with_offsets) = target_offsets_net_tmp' - tsteps_of_interest(i) + 1;
             sample_offsets_net(i,:) = target_offsets_net(i,:) * fft_time_shift_seconds * samplerate;
             target_offsets_test = target_offsets_net;
             sample_offsets_test = sample_offsets_net;
