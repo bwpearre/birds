@@ -1304,6 +1304,14 @@ function stim = safety_check(stim,safeParams)
 % Check magnitude of current delivered
 for i = 1:16
     stim.electrode_stim_scaling(i) = check_current_magnitude(stim.electrode_stim_scaling(i), stim.current_uA, safeParams);
+    stim.electrode_stim_scaling(i) = check_pause_magnitude(stim.prepulse_s(i), safeParams);
+end
+
+function newPause = check_pause_magnitude(pause, safeParams)
+newPause = pause;
+if (newPause > safeParams.max_prepulse_s)
+    % Pause is too high, bring it back down to max value
+    newPause = safeParams.max_prepulse_s;
 end
 
 function newScale = check_current_magnitude(scale, current_uA, safeParams)
@@ -2239,7 +2247,7 @@ global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
 global increase_step;
-            
+
 
 factor = increase_step;
 final_factor = 1.02;
@@ -2880,8 +2888,12 @@ pauses = linspace(0,safeParams.max_prepulse_s,pauseStepSize); % All pause valuse
 
 % Select the electrode to test on
 activeElectrodeInds = find(stim.active_electrodes);
-testedElectrode = stim.active_electrodes(activeElectrodeInds(randi(size(activeElectrodeInds,2)))); % Determine the index of the active electrode randomly
+% testedElectrode = stim.active_electrodes(activeElectrodeInds(randi(size(activeElectrodeInds,2)))); % Determine the index of the active electrode randomly
+testedElectrode = stim.plexon_monitor_electrode; % Use the monitor electrode as the electrode which is changed
 
+%% Do hill-climbing
+
+% THIS IS NOT HILL-CLIMBING, THIS IS A SMOOTHNESS SEARCH
 % Loop through regions of stimulation amplitude and pre-stim pause on the
 % chosen active electrode, and determine what the minimum stimulation
 % current is for each parameter pair to get a voltage response
@@ -2893,10 +2905,20 @@ for ampInd = 1:size(amplitudeScales,2)
         % For each pre-pulse pause duration
         stimPause = pauses(pauseInd); % Extract the current pre-pulse pause duration
         
-        % START HERE
+        %% Set up the stimulation parameters
+        % Set the parameters for the testing electrode
+        stim.electrode_stim_scaling(testedElectrode) = stimAmpScale;
+        stim.prepulse_s(testedElectrode) = stimPause;
         
+        % Test the values, so that they are safe (redudant, but fast and
+        % safe)
+        stim = safety_check(stim, safeParams);
+        
+        %% Send stimulations
     end
 end
+
+% Hill-climbing code
     
 
 freqs_completed = 0;
