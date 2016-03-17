@@ -2838,7 +2838,7 @@ if ~exist(datadir, 'dir')
     mkdir(datadir);
 end
 
-if exist(fullfile(datadir, [expName '.mat'], 'file'))
+if exist(fullfile(datadir, [expName '.mat']), 'file')
     error('duplicatefile:warning', 'Error: ''%s'' already exists. Rename or delete.', ...
         fullfile(datadir, [expName '.mat']));
 end
@@ -2847,20 +2847,6 @@ response_thresholds = {};
 
 % detrend_param
 
-%% Track progress...
-% nsearches = length(frequencies) * length(durations) * length(polarities);
-% nsearches_done = 0;
-start_time = tic;
-start_datetime = datenum(datetime('now'));
-% if isempty(thewaitbar)
-%     thewaitbar = waitbar(0, 'Time remaining: hundreds of years');
-% else
-%     waitbar(0, thewaitbar, 'Time remaining: hundreds of years');
-% end
-
-warning('Test the thing that says TESTME');
-
-% Predict the number of searches to be done?
 % disp(sprintf('Doing %d threshold searches.', nsearches));
 
 %% Do a smoothness check on some random permutation of active electrodes
@@ -2868,12 +2854,16 @@ warning('Test the thing that says TESTME');
 
 % Test if user has changed stimulation scales on any active electrodes
 % (indicating that they probably want a certain current steering condition)
-numActiveElectrodes = sum(stim.active_electrodes); % Number of active electrodes
-if any(stim.negativefirst(stim.active_electrodes))
-    negElectrodes = stim.negativefirst(stim.active_electrodes); % For each active electrode, binary to indicate neg-first
-else
+% If they have not changed the stim scale, select a random permutation of
+% electrodes to have negative current
+if all(stim.electrode_stim_scaling(stim.active_electrodes) == 1)
     % Make a random perturbation of electrodes to test
-    negElectrodes = de2bi(randi([0 2^(numActiveElectrodes) - 1]), numActiveElectrodes); % For each active electrode, binary to indicate neg-first
+    numActiveElectrodes = sum(stim.active_electrodes); % Number of active electrodes
+    negElectrodes = logical(de2bi(randi([0 2^(numActiveElectrodes) - 1]), numActiveElectrodes)); % For each active electrode, binary to indicate neg-first
+    
+    % Make a negative amplitude scale for each of the randomly chosen
+    % electrodes
+    stim.electrode_stim_scaling(negElectrodes) = -stim.electrode_stim_scaling(negElectrodes);
 end
 
 % Determine the spaces over which amplitude and pre-stim pause will be
@@ -2887,16 +2877,32 @@ amplitudeScales = linspace(stim.current_uA,safeParams.max_current,ampStepSize)/s
 pauses = linspace(0,safeParams.max_prepulse_s,pauseStepSize); % All pause valuse that will be checked
 
 % Select the electrode to test on
-activeElectrodeInds = find(stim.active_electrodes);
+% activeElectrodeInds = find(stim.active_electrodes);
 % testedElectrode = stim.active_electrodes(activeElectrodeInds(randi(size(activeElectrodeInds,2)))); % Determine the index of the active electrode randomly
 testedElectrode = stim.plexon_monitor_electrode; % Use the monitor electrode as the electrode which is changed
 
-%% Do hill-climbing
+%% Track progress...
+nsearches = length(amplitudeScales) * length(pauses);
+nsearches_done = 0;
+start_time = tic;
+if isempty(thewaitbar)
+    thewaitbar = waitbar(0, 'Time remaining: hundreds of years');
+else
+    waitbar(0, thewaitbar, 'Time remaining: hundreds of years');
+end
+
+warning('Test the thing that says TESTME');
+
+%% Do space search
 
 % THIS IS NOT HILL-CLIMBING, THIS IS A SMOOTHNESS SEARCH
 % Loop through regions of stimulation amplitude and pre-stim pause on the
 % chosen active electrode, and determine what the minimum stimulation
 % current is for each parameter pair to get a voltage response
+
+response_results = zeros(size(amplitudeScales,2),size(pauses,2)); % Matrix to hold the response detected results of the experiment
+voltage_results = nan(size(response_results)); % Matrix to hold the voltage results of the experiment
+errorFlag = false;
 for ampInd = 1:size(amplitudeScales,2)
     % For each amplitude
     stimAmpScale = amplitudeScales(ampInd); % Extract the current stimulation amlpitude scale
@@ -2915,94 +2921,56 @@ for ampInd = 1:size(amplitudeScales,2)
         stim = safety_check(stim, safeParams);
         
         %% Send stimulations
-    end
-end
-
-% Hill-climbing code
-    
-
-freqs_completed = 0;
-
-for frequency = 1:length(frequencies)
-    % Go through different repitition frequencies
-    stim.repetition_Hz = frequencies(frequency);
-
-    for dur = 1:length(durations)
-        % Go through different durations
-        stim.halftime_s = durations(dur);
+        [ data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+        if isempty(data)
+            disp('smoothness check: stimulate() did not capture any data.');
+            return;
+        end
         
-        handles = configure_acquisition_devices(hObject, handles);
- 
-        for polarity = randperm(length(polarities))
-            
-            while get(handles.pause, 'Value')
-                pause(1);
+        if errors.val ~= 0
+            for i = 1:length(errors.name)
+                disp(errors.name{i});
             end
-            
-            if stop_button_pressed
-                stop_button_pressed = false;
-                return;
-            end
-            electrode_bit = 0; % run over all stim polarities...
-            stim.negativefirst = zeros(size(stim.active_electrodes));
-            for electrode = find(stim.active_electrodes)
-                electrode_bit = electrode_bit + 1;
-                stim.negativefirst(electrode) = bitget(polarities(polarity), electrode_bit);
-                eval(sprintf('set(handles.negfirst%d, ''Value'', %d);', ...
-                    electrode, stim.negativefirst(electrode)));
-            end
-            
-            
-            [response_thresholds{frequency, dur, polarity}, errors] = find_threshold(hObject, handles);
-            
-            if exist('errors', 'var') & isfield(errors, 'val') & bitand(errors.val, 256)
-                return;
-            end
-
-            
-            if stop_button_pressed
-                % Should there be a "stop_button_pressed = false" here?
-                return;
-            end
-            
-            
-            elapsed_time = toc(start_time);
-            nsearches_done = nsearches_done + 1;
-            total_expected_time = elapsed_time * nsearches / nsearches_done;
-            expected_finish_time = start_datetime + (total_expected_time / (24*3600));
-            if ishandle(thewaitbar)
-                waitbar(elapsed_time / total_expected_time, ...
-                    thewaitbar, ...
-                    sprintf('Expected finish time: %s', datestr(expected_finish_time, 'dddd HH:MM:SS')));
-            end
-            
-            
+            errorFlag = true;
         end
-    end
-    
-    save(fullfile(datadir, 'response_thresholds'), ...
-        'response_thresholds', ...
-        'frequencies', 'durations', ...
-        'polarities', 'detrend_param', '-v7.3');
-    % Let's see what we've got:
-    
-    for f = 1:frequency
-        for d = 1:length(durations)
-            for p = 1:length(polarities)
-                v(f,d,p,:) = response_thresholds{f,d,p}.voltages;
-            end
+        
+        % Record result
+        response_results(ampInd, pauseInd) = response_detected; % Record whether or not a response was seen at this voltage
+        voltage_results(ampInd, pauseInd) = voltage; % Record the voltage measured
+        
+        %% Update user
+        elapsed_time = toc(start_time);
+        nsearches_done = nsearches_done + 1;
+        total_expected_time = elapsed_time * nsearches / nsearches_done;
+        expected_remaining_time = (elapsed_time / nsearches_done) * (nsearches - nsearches_done);
+        if ishandle(thewaitbar)
+            waitbar(elapsed_time / total_expected_time, ...
+                thewaitbar, ...
+                sprintf('Expected remaining time: %s', expected_remaining_time));
         end
+        
     end
-    
-    % Probably want max per channel, actually...
-    channel_voltage_means = squeeze(mean(mean(max(v, [], 4), 1), 2))
-    channel_voltage_stds = squeeze(std(max(v(:, 1, :, :), [], 4), 0, 1)) % TESTME
-    
-                
-    %squeeze(response_thresholds.best_current_voltages(:,1,:))'
-    disp(sprintf('Completed experiment %d of %d...', frequency, length(frequencies)));
+    if errorFlag
+        break;
+    end
 end
 
+%% Plot results
+if ~errorFlag
+    figure;
+    mesh(amplitudeScales*stim.current_uA, pauses*1e6, response_results);
+    ylabel('Amplitude (uA)');
+    xlabel('Pre-pulse pause duration (us)');
+    zlabe('Response');
+    title('Neural response as a function of amplitude and pre-pulse pause duration');
+    
+    figure;
+    mesh(amplitudeScales*stim.current_uA, pauses*1e6, voltage_results);
+    ylabel('Amplitude (uA)');
+    xlabel('Pre-pulse pause duration (us)');
+    zlabe('Response');
+    title('Stimulation voltage as a function of amplitude and pre-pulse pause duration');
+end
 delete(thewaitbar);
 thewaitbar = [];
 

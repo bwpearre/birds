@@ -37,44 +37,6 @@ for i = 1:16
     plexon_write_rectangular_pulse_file(filenames{i},StimParams);
 end
 
-%
-% %
-% % % Remove once separate stim scaling is implemented
-% %
-%
-
-% A is amplitude, W is width, Delay is interphase delay.
-
-StimParamPos.A1 = stim.current_uA;
-StimParamPos.A2 = -stim.current_uA;
-StimParamPos.W1 = stim.halftime_s * 1e6;
-StimParamPos.W2 = stim.halftime_s * 1e6;
-StimParamPos.Delay = stim.interpulse_s * 1e6;
-
-StimParamNeg.A1 = -stim.current_uA;
-StimParamNeg.A2 = stim.current_uA;
-StimParamNeg.W1 = stim.halftime_s * 1e6;
-StimParamNeg.W2 = stim.halftime_s * 1e6;
-StimParamNeg.Delay = stim.interpulse_s * 1e6;
-
-
-NullPattern.W1 = 0;
-NullPattern.W2 = 0;
-NullPattern.A1 = 0;
-NullPattern.A2 = 0;
-NullPattern.Delay = 0;
-
-filenamePos = strrep(strcat(scriptdir, '/stimPos.pat'), '/', filesep);
-filenameNeg = strrep(strcat(scriptdir, '/stimNeg.pat'), '/', filesep);
-plexon_write_rectangular_pulse_file(filenamePos, StimParamPos);
-plexon_write_rectangular_pulse_file(filenameNeg, StimParamNeg);
-
-%
-% %
-% % % End remove
-% %
-%
-
 % If no stim.plexon_monitor_electrode is selected, just fail silently and let the user figure
 % out what's going on :)
 if stim.plexon_monitor_electrode > 0 & stim.plexon_monitor_electrode <= 16
