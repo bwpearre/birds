@@ -10,14 +10,14 @@ addpath(sprintf('%s/../lib', p));
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 0
+if 1
     BIRD='lny64';
     load('~/Desktop/lny64/roboaggregate.mat');
     MIC_DATA = audio.data;
     agg_audio.fs = audio.fs;
     %times_of_interest = [0.15 0.315 0.405]
     times_of_interest_separate = [ 0.15 0.2 0.25 0.3 0.35 0.4 ];
-    times_of_interest_separate = [ 0.3 ];
+    %times_of_interest_separate = [ 0.31 ];
     %times_of_interest_separate = NaN;
     %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
 elseif 0
@@ -58,10 +58,10 @@ disp(sprintf('Bird: %s', BIRD));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 samplerate = 44100;
-ntrain = 100;
+ntrain = 1000;
 nhidden_per_output = 4;
 fft_size = 256;
-fft_time_shift_seconds = 0.0015;
+fft_time_shift_seconds = 0.001;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
 nonsinging_fraction = 1;
 use_jeff_realignment_train = false;
@@ -473,7 +473,7 @@ for times_of_interest = times_of_interest_separate
     
     % Once the validation set performance stops improving, it doesn't seem to
     % get better, so keep this small.
-    net.trainParam.max_fail = 2;
+    net.trainParam.max_fail = 6;
         
     tic
     %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
@@ -534,6 +534,10 @@ for times_of_interest = times_of_interest_separate
         songs_with_hits(foo), ...
         trigger_thresholds);
     
+    
+    figure(32);
+    plot(times(time_window_steps:end), squeeze(testout(1,:,:)), 'b', ...
+        times([time_window_steps end]), [1 1]*trigger_thresholds, 'r');
     
     SHOW_THRESHOLDS = true;
     SHOW_ONLY_TRUE_HITS = true;
@@ -679,19 +683,18 @@ for times_of_interest = times_of_interest_separate
     % out = (xmax-xmin)*(rawnetout-ymin)/(ymax-ymin) + xmin
     %     = (xrange/yrange) * (rawnetout - ymin) + xmin
     %     = (rawnetout - ymin) / gain + xmin
-    mmmout_xmin = net.outputs{2}.processSettings{1}.xmin;
-    mmmout_ymin = net.outputs{2}.processSettings{1}.ymin;
-    mmmout_gain = net.outputs{2}.processSettings{1}.gain;
     mapstd_xmean = net.inputs{1}.processSettings{1}.xmean;
     mapstd_xstd = net.inputs{1}.processSettings{1}.xstd;
-    
+    mmmout_xmin = net.outputs{2}.processSettings{1}.xmin
+    mmmout_ymin = net.outputs{2}.processSettings{1}.ymin
+    mmmout_gain = net.outputs{2}.processSettings{1}.gain
+
     
     win_size = fft_size;
     fft_time_shift = fft_size - noverlap;
     scaling = 'linear';
-    filename = sprintf('detector_%s%ss_%dHz_%dhid_%dtrain_jeff%d%d.mat', ...
-        BIRD, sprintf('_%g', times_of_interest), floor(1/fft_time_shift_seconds), net.layers{1}.dimensions, ntrain, ...
-        use_jeff_realignment_train, use_jeff_realignment_test);
+    filename = sprintf('detector_%s%ss_frame%gms_%dhid_%dtrain.mat', ...
+        BIRD, sprintf('_%g', times_of_interest), 1000*fft_time_shift_seconds, net.layers{1}.dimensions, ntrain);
     fprintf('Saving as ''%s''...\n', filename);
     save(filename, ...
         'net', 'train_record', ...
@@ -742,8 +745,8 @@ for times_of_interest = times_of_interest_separate
     else
         realignNetString = '';
     end
-    audiowrite(sprintf('songs_%s%ss_%dHz_%d%%_jeff%d%d%s.wav',...
-        BIRD, sprintf('_%g', times_of_interest), floor(1/fft_time_shift_seconds), round(100/(1+nonsinging_fraction)), ...
-        use_jeff_realignment_train, use_jeff_realignment_test, realignNetString), ...
+    audiowrite(sprintf('songs_%s%ss_frame%dms_%d%%%s.wav',...
+        BIRD, sprintf('_%g', times_of_interest), 1000*fft_time_shift_seconds, round(100/(1+nonsinging_fraction)), ...
+         realignNetString), ...
         songs, round(samplerate));
 end
