@@ -2879,6 +2879,14 @@ pauses = linspace(0,safeParams.max_prepulse_s,pauseStepSize); % All pause valuse
 % Select the electrode to test on
 % activeElectrodeInds = find(stim.active_electrodes);
 % testedElectrode = stim.active_electrodes(activeElectrodeInds(randi(size(activeElectrodeInds,2)))); % Determine the index of the active electrode randomly
+% while stim.plexon_test_electrode == stim.plexon_monitor_electrode
+%     stim.plexon_test_electrode = stim.plexon_test_electrode + 1;
+%     if stim.plexon_test_electrode > 16
+%        stim.plexon_test_electrode = stim.plexon_test_electrode - 16; % Make sure that test electrode is not above 16
+%     end
+% end
+% 
+% testedElectrode = stim.plexon_test_electrode; % Test on the electrode selected by the user
 testedElectrode = stim.plexon_monitor_electrode; % Use the monitor electrode as the electrode which is changed
 
 %% Track progress...
@@ -2894,8 +2902,6 @@ end
 warning('Test the thing that says TESTME');
 
 %% Do space search
-
-% THIS IS NOT HILL-CLIMBING, THIS IS A SMOOTHNESS SEARCH
 % Loop through regions of stimulation amplitude and pre-stim pause on the
 % chosen active electrode, and determine what the minimum stimulation
 % current is for each parameter pair to get a voltage response
@@ -2921,7 +2927,7 @@ for ampInd = 1:size(amplitudeScales,2)
         stim = safety_check(stim, safeParams);
         
         %% Send stimulations
-        [ data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+        [data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
         if isempty(data)
             disp('smoothness check: stimulate() did not capture any data.');
             return;
@@ -2976,6 +2982,205 @@ thewaitbar = [];
 
 enable_controls(handles);
 
+function optimize_over_stim_parameters(handles, policyFunction, optimizationFunction, finishingConds)
+% minimize_over_stim_parameters(handles, policyFunction, minimizationFunction, finishingConds)
+% 
+% This function will minimize the minimizationFunction by changing the
+% electrode parameters using the policyFunction.
+%
+% policyFunction must have the contract:
+% [newAmplitudes newPauseDurations] = policyFunction(currentAmplitudes, currentPauseDurations, lastFunctionResult)
+% where:
+% newAmplitudes are the previous amplitude for each electrode,
+% newPauseDurations are the previous pause durations for each electrode,
+% currentAmplitudes are the new amplitudes for each electrode,
+% currentPauseDurations are the new pause durations for each electrode, and
+% lastFunctionResult is the output of the last call to
+% optimizationFunction.
+%
+% optimizationFunction must have the contract:
+% result = optimizationFunction(stimData)
+% where:
+% result is a scalar to be optimized, and
+% stimData is the data output from stimulate()
+% If there is an error (no stimulation, etc.), optimizationFunction would
+% return NaN.  This can be handled by policyFunction.
+%
+% finishingConds is a structure that has the following fields (= default value if field does not exist):
+% finishingConds.maxSteps (=10000) determines the maximum number of steps
+% the optimization can make
+% finishingConds.ampThresh (= 1) determines the threshold for the minimum
+% adjustment, in uA, that the policyFunction will make before finishing
+% (the largest step distance across all electrodes must be smaller than
+% this value)
+% finishingConds.pauseThresh (= 1) determines the threshold for the minimum
+% adjustment, in uS, that the policyFunction will make before finishing
+% (the largest step distance across all electrodes must be smaller than
+% this value)
+
+global stim hardware detrend_param safeParams;
+global stop_button_pressed;
+global response_thresholds;
+global datadir;
+global thewaitbar;
+global scriptdir;
+global paused;
+
+%% Fill in default finishingConds values
+if ~isfield(finishingConds, 'maxSteps')
+    finishingConds.maxSteps = 10000;
+end
+
+if ~isfield(finishingConds, 'ampThresh')
+    finishingConds.ampThresh = 1;
+end
+
+if ~isfield(finishingConds, 'pauseThresh')
+    finishingConds.pauseThresh = 1;
+end
+
+%% Save file
+expName = 'optimization'; % Experiment name
+
+if ~exist(datadir, 'dir')
+    mkdir(datadir);
+end
+
+if exist(fullfile(datadir, [expName '.mat']), 'file')
+    error('duplicatefile:warning', 'Error: ''%s'' already exists. Rename or delete.', ...
+        fullfile(datadir, [expName '.mat']));
+end
+
+%% Prepare GUI
+if ~exist('pause', 'var')
+    paused = false;
+end
+
+disable_controls(hObject, handles);
+stop_button_pressed = false;
+
+%% Track progress...
+% nsearches = 10;
+% nsearches_done = 0;
+% start_time = tic;
+% if isempty(thewaitbar)
+%     thewaitbar = waitbar(0, 'Time remaining: hundreds of years');
+% else
+%     waitbar(0, thewaitbar, 'Time remaining: hundreds of years');
+% end
+
+%% Do space search
+% Initialize matrices to record all amplitudes, pauseDurations, and results
+numRows = finishingConds.maxSteps + 1;
+amplitudes = zeros(numRows, size(stim.electrode_stim_scaling, 2));
+pauseDurations = zeros(numRows, size(stim.prepulse_s, 2));
+results = zeros(numRows, 1);
+
+% Initialize electrode parameters
+lastAmplitudes = stim.electrode_stim_scaling.*stim.current_uA;
+lastPauseDurations = stim.prepulse_s;
+amplitudes(1,:) = lastAmplitudes;
+pauseDurations(1,:) = lastPauseDurations;
+
+% Stimulate once to get initial result from optimization function
+[stimData, ~, ~, errors] = stimulate(stim, hardware, detrend_param, handles);
+if isempty(stimData)
+    disp('Initial conditions for optimization did not produce response.  Stopping optimization.');
+    return;
+end
+
+if errors.val ~= 0
+    for i = 1:length(errors.name)
+        disp(errors.name{i});
+    end
+    disp('Initial conditions for optimization produced error.  Stopping optimization.');
+    return;
+end
+
+% Get initial result from optimization function
+lastFunctionResult = feval(optimizationFunction, stimData);
+results(1) = lastFunctionResult;
+
+% Initialize loop control parameters
+currentLoop = 1;
+isDone = false;
+
+% Start optimization
+while ~isDone
+    %% Get new values from the policy
+    % Acquire new values
+    [newAmplitudes, newPauseDurations] = feval(policyFunction, lastAmplitudes, lastPauseDurations, lastFunctionResult);
+    
+    % Save new values from policy
+    amplitudes(currentLoop + 1,:) = newAmplitudes;
+    pauseDurations(currentLoop + 1,:) = newPauseDurations;
+    
+    % Convert the amplitude values to scale
+    newAmplitudeScales = newAmplitudes/stim.current_uA;
+    
+    % Assign the new values to the stim struct
+    stim.electrode_stim_scaling = newAmplitudeScales;
+    stim.prepulse_s = newPauseDurations;
+    
+    %% Check the new values
+    % Check for safety
+    stim = safety_check(stim,safeParams);
+    
+    % Save values from safety check  if needed (SHOULD be the same as from
+    % the policyFunction, but may have been changed if they were unsafe)
+    if any(stim.electrode_stim_scaling ~= newAmplitudeScales) || any(stim.prepulse_s ~= newPauseDurations)
+        disp('Safety Check: Policy produced unsafe parameters.  Parameters have been changed.');
+        amplitudes(currentLoop + 1,:) = stim.electrode_stim_scaling.*stim.current_uA;
+        pauseDurations(currentLoop + 1,:) = stim.prepulse_s;
+    end
+    
+    % Check if optimization is done
+    dAmplitudes = abs(newAmplitudes - lastAmplitudes);
+    dPauseDurations = abs(newPauseDurations - lastPauseDurations);
+    if (all(dAmplitudes < finishingConds.ampThresh) || all(dPauseDurations < finishingConds.pauseThresh))
+       isDone = true;
+    end
+    
+    %% Save the old values
+    lastAmplitudes = newAmplitudes;
+    lastPauseDurations = newPauseDurations;
+    
+    %% Stimulate
+    [stimData, ~, ~, errors ] = stimulate(stim, hardware, detrend_param, handles);
+    if isempty(data)
+        disp('optimization: stimulate() did not capture any data.');
+        return;
+    end
+    
+    if errors.val ~= 0
+        for i = 1:length(errors.name)
+            disp(errors.name{i});
+        end
+        isDone = true;
+    end
+    
+    %% Find value of optimizationFunction
+    lastFunctionResult = feval(optimizationFunction, stimData);
+    results(currentLoop + 1) = lastFunctionResult;
+    
+    
+    %% Iterate counter for next loop
+    currentLoop = currentLoop + 1;
+    
+    %% Check if max number of steps has been reached
+    if (currentLoop > finishingConds.maxSteps)
+       isDone = true; 
+    end
+end
+
+%% Save all data
+save(fullfile(datadir, [expName '.mat']),'amplitudes', 'pauseDurations',...
+    'results', '-v7.3');
+
+% delete(thewaitbar);
+% thewaitbar = [];
+
+enable_controls(handles);
 
 
 function ampStep_Callback(hObject, eventdata, handles)

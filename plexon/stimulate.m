@@ -107,7 +107,7 @@ for channel = find(stim.active_electrodes)
         throw(ME);
     end
     if ~v
-        ME = MException('plexon:stimulate:unbalanced', 'Waveform is not balanced for stimbox %d channel %d', hardware.plexon.id, channel);
+        ME = MException('plexon:stimulate:un_repetitionsnbalanced', 'Waveform is not balanced for stimbox %d channel %d', hardware.plexon.id, channel);
         throw(ME);
     end
     
