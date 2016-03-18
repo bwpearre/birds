@@ -9,6 +9,8 @@ if strcmp(bird, 'lw85ry')
     implant_date = datenum([ 2015 04 27 0 0 0 ]);
 elseif strcmp(bird, 'lw95rhp')
     implant_date = datenum([ 2015 05 04 0 0 0 ]);
+elseif strcmp(bird, 'lw94rhp')
+    implant_date = datenum([ 2015 04 28 0 0 0 ]);
 else
     implant_date = datenum([ 0 0 0 0 0 0 ]);
 end
@@ -33,7 +35,7 @@ end
 
 
 channels = 1:nchannels;
-channels = [2 5 7 15];
+channels = [1 2 3 8 9 10];
 subplotx = 7;
 
 nchannels = length(channels);
@@ -56,7 +58,7 @@ for channelnum = 1:nchannels
     %legend('1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16');
     %saveas(gcf, strcat('spiketrain-', experiment, '.fig'));
     
-    threshold = 8;
+    threshold = 5;
     window = [-0.001 0.002];
     adz = zscore(ad);
 
@@ -83,9 +85,9 @@ for channelnum = 1:nchannels
     if 1
         [ pks, locs ] = findpeaks(-adz(:, channel), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
         figure(2);
-        subplot(nchannels, 3, 3*channelnum);
+        %subplot(nchannels, 3, 3*channelnum);
         %subplot(nchannels, subplotx, subplotx*(channelnum-1)+[subplotx]);
-        
+        subplot(nchannels, 1, channelnum);
         cla;
         hold on;
         
