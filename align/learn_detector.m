@@ -10,7 +10,7 @@ addpath(sprintf('%s/../lib', p));
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 1
+if 0
     BIRD='lny64';
     load('~/Desktop/lny64/roboaggregate.mat');
     MIC_DATA = audio.data;
@@ -58,12 +58,12 @@ disp(sprintf('Bird: %s', BIRD));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 samplerate = 44100;
-ntrain = 1000;
+ntrain = 100;
 nhidden_per_output = 4;
 fft_size = 256;
 fft_time_shift_seconds = 0.0015;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
-nonsinging_fraction = 0.1;
+nonsinging_fraction = 1;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -512,7 +512,8 @@ for times_of_interest = times_of_interest_separate
         MATCH_PLUSMINUS, ...
         timestep, ...
         time_window_steps, ...
-        songs_with_hits(1:ntrainsongs));
+        songs_with_hits(1:ntrainsongs), ...
+        true)
     
     % Now that we've computed the thresholds using just the training set, print the confusion matrices
     % using just the holdout test set.
@@ -671,10 +672,16 @@ for times_of_interest = times_of_interest_separate
     layer1 = net.LW{2,1};
     bias0 = net.b{1};
     bias1 = net.b{2};
-    mmminoffset = net.inputs{1}.processSettings{1}.xoffset;
-    mmmingain = net.inputs{1}.processSettings{1}.gain;
-    mmmoutoffset = net.outputs{2}.processSettings{1}.xoffset;
-    mmmoutgain = net.outputs{2}.processSettings{1}.gain;
+    %mmminoffset = net.inputs{1}.processSettings{1}.xoffset;
+    %mmmingain = net.inputs{1}.processSettings{1}.gain;
+    % The following store the transformation that took nnsetY to actual network training.  So
+    % everything is forward.  Allow LabView to do:
+    % out = (xmax-xmin)*(rawnetout-ymin)/(ymax-ymin) + xmin
+    %     = (xrange/yrange) * (rawnetout - ymin) + xmin
+    %     = (rawnetout - ymin) / gain + xmin
+    mmmout_xmin = net.outputs{2}.processSettings{1}.xmin;
+    mmmout_ymin = net.outputs{2}.processSettings{1}.ymin;
+    mmmout_gain = net.outputs{2}.processSettings{1}.gain;
     mapstd_xmean = net.inputs{1}.processSettings{1}.xmean;
     mapstd_xstd = net.inputs{1}.processSettings{1}.xstd;
     
@@ -691,7 +698,7 @@ for times_of_interest = times_of_interest_separate
         'samplerate', 'fft_size', 'win_size', 'fft_time_shift', 'fft_time_shift_seconds', 'freq_range_ds', ...
         'time_window_steps', 'trigger_thresholds', 'freq_range', ...
         'layer0', 'layer1', 'bias0', 'bias1', ...
-        'mmminoffset', 'mmmingain', 'mmmoutoffset', 'mmmoutgain', 'mapstd_xmean', 'mapstd_xstd', ...
+        'mmmout_xmin', 'mmmout_ymin', 'mmmout_gain', 'mapstd_xmean', 'mapstd_xstd', ...
         'shotgun_sigma', ...
         'ntrain',  'scaling', '-v7');
     %% Save sample data: audio on channel0, canonical hits for first syllable on channel1

@@ -8,11 +8,9 @@ function [ optimal_thresholds optimal_thresholds_c ] = optimise_network_output_u
         timestep, ...
         time_window_steps, ...
         songs_with_hits, ...
-        continuous);
+        midpoint);
 
 global Y_NEGATIVE;
-
-Y_NEGATIVE = -1;
 
 % Search for optimal thresholds given false-positive vs
 % false-negagive weights (the latter := 1).
@@ -88,36 +86,37 @@ for i = 1:length(tstep_of_interest)
     % thresholds, the first one was chosen, but then with a large number of test songs, noise threw
     % one or two of them over the threshold.  So if there are several values for the threshold that
     % all produce identical accuracy, take the average, not the lowest.
-    [val pos] = find(outvals==best);
+    [val pos] = find(outvals == best);
     
     % TOTAL KLUDGE: if the cost for a slightly larger of the threshold is the same, use that
     % instead.
-    if pos(2) == pos(1) + 1
-        opt_index = pos(2);
-    else
-        opt_index = pos(1);
-    end
+    %if pos(2) == pos(1) + 1
+    %    opt_index = pos(2);
+    %else
+    %    opt_index = pos(1);
+    %end
     % Look for the first sequence of consecutive positions:
-    if false
-        a = diff(pos);
-        b = find([a Inf] > 1);
-        c = diff([0 b]);
-        opt_index = floor(mean(pos(1:c(1))));
-    end
+    a = diff(pos);
+    b = find([a Inf] > 1);
+    c = diff([0 b]);
+    opt_index = floor(mean(pos(1:c(1))));
+    opt_val = testpts(opt_index);
+    opt_cost = best;
     
+    scatter(opt_val, 1+best, 100, colours(i,:), '^');
+
     if exist('midpoint', 'var') & midpoint
         optimal_thresholds(i) = testpts(opt_index);
+        scatter(optimal_thresholds(i), 1+best, 100, colours(i,:), '^');
     else
         optimal_thresholds(i) = bestparam;
     end
     
-    optimal_thresholds(i) = bestparam;
     %[best_c pos] = min(outvals_c);
     %bestparam_c = testpts(pos);
     %optimal_thresholds_c(i) =     bestparam_c;
     %scatter(bestparam_c, 1+best_c, 100, colours(i,:), 'o');
-    scatter(bestparam, 1+best, 100, colours(i,:), '^');
-
+    
     %% Plot the ROC curve.  It's, frankly, not very exciting.
     if false
         % ROC should probably use the test set...

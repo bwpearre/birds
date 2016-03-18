@@ -116,30 +116,73 @@ fooste = foostd ./ repmat(sqrt(totalsamples'), ...
     1, ndurations, nsamples, nchannels);
 foo95 = fooste * 1.96;
 
+show_ste = true;
+show_std = true;
+%xlimits = [2e-3 data.tdt.times_aligned(max(v))]*1e3;
+xlimits = [2 12];
 show = [ 1:npolarities ];
+show = [ 4 8 21 25 ];
+
 colours = distinguishable_colors(length(show));
 hh = [];
 
 figure(2);
 clf;
-hold on;
-for i = 1:length(show)
-    if true
-        h = shadedErrorBar(timeaxis, squeeze(foo(show(i), :, v, 1)), ...
-            squeeze(foo95(show(i), :, v, 1)), ...
-            {'color', colours(i,:)}, 1);
-        hh(show(i)) = h.mainLine;
-        title(sprintf('HVC responses with different Area X stimulation patterns: stderr'));
+if show_ste
+    if show_std
+        subplot(2,1,1);
     else
-        h = plot(timeaxis, squeeze(allthethings(show(i), :, v, 1)), 'Color', colours(i,:));
-        hh(show(i)) = h(1);
+        subplot(1,1,1);
+    end
+    hold on;
+    for i = 1:length(show)
+        if true
+            h = shadedErrorBar(timeaxis, squeeze(foo(show(i), :, v, 1)), ...
+                squeeze(foo95(show(i), :, v, 1)), ...
+                {'color', colours(i,:)}, 1);
+            hh(show(i)) = h.mainLine;
+            title(sprintf('HVC responses with different Area X stimulation patterns: stderr'));
+        else
+            h = plot(timeaxis, squeeze(allthethings(show(i), :, v, 1)), 'Color', colours(i,:));
+            hh(show(i)) = h(1);
+        end
+    end
+    hold off;
+    if ~show_std
+        xlabel('milliseconds post-pulse');
+    end
+    ylabel('microvolts');
+    set(gca, 'XLim', xlimits);
+    legend(hh(show), labels(show), 'Location', 'NorthEast');
+end
+
+if show_std
+    if show_ste
+        subplot(2,1,2);
+    else
+        subplot(1,1,1);
+    end
+    hold on;
+    for i = 1:length(show)
+        if true
+            h = shadedErrorBar(timeaxis, squeeze(foo(show(i), :, v, 1)), ...
+                squeeze(foostd(show(i), :, v, 1)), ...
+                {'color', colours(i,:)}, 1);
+            hh(show(i)) = h.mainLine;
+            title(sprintf('HVC responses with different Area X stimulation patterns: \\sigma'));
+        else
+            h = plot(timeaxis, squeeze(allthethings(show(i), :, v, 1)), 'Color', colours(i,:));
+            hh(show(i)) = h(1);
+        end
+    end
+    hold off;
+    xlabel('milliseconds post-pulse');
+    ylabel('microvolts');
+    set(gca, 'XLim', xlimits);
+    if ~show_ste
+        legend(hh(show), labels(show), 'Location', 'NorthEast');
     end
 end
-hold off;
-xlabel('milliseconds post-pulse');
-ylabel('microvolts');
-set(gca, 'XLim', [2e-3 data.tdt.times_aligned(max(v))]*1e3);
-legend(hh(show), labels(show), 'Location', 'NorthEastOutside');
 
 set(gcf,'PaperPositionMode','auto'); 
 saveas(gcf, 'current_steering_hvc_responses.png');
