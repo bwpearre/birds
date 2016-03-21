@@ -17,7 +17,7 @@ if 1
     agg_audio.fs = audio.fs;
     %times_of_interest = [0.15 0.315 0.405]
     times_of_interest_separate = [ 0.15 0.2 0.25 0.3 0.35 0.4 ];
-    %times_of_interest_separate = [ 0.31 ];
+    times_of_interest_separate = [ 0.3 ];
     %times_of_interest_separate = NaN;
     %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
 elseif 0
@@ -39,13 +39,19 @@ elseif 0
     clear agg_data;
     MIC_DATA = agg_audio.data;
 else
-    BIRD = 'delta';
+    if false
+        BIRD = 'deltawide';
+        indices = round(-0.006 * agg_audio.fs) : round(-0.005 * agg_audio.fs);
+    else
+        BIRD = 'delta';
+        indices = round(-0.005 * agg_audio.fs);
+    end
     agg_audio.fs = 44100;
+    samples_of_interest = round(times_of_interest_separate * agg_audio.fs);
     times_of_interest_separate = 0.3;
     n = 100;
-    samples_of_interest = round(times_of_interest_separate * agg_audio.fs);
     MIC_DATA = rand([20000, n])/100;
-    MIC_DATA(samples_of_interest - round((0.005 * agg_audio.fs)), :) = rand([1, n])/100 + 1;
+    MIC_DATA(samples_of_interest + indices, :) = rand([length(indices), n])/100 + 1;
 end
 
 disp(sprintf('Bird: %s', BIRD));
@@ -61,13 +67,14 @@ samplerate = 44100;
 ntrain = 1000;
 nhidden_per_output = 4;
 fft_size = 256;
-fft_time_shift_seconds = 0.001;
+fft_time_shift_seconds = 0.0005;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
 nonsinging_fraction = 1;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
 confusion_all = false;
+testfile_include_nonsinging = false;
 
 % Region of the spectrum (in space and time) to examine:
 freq_range = [1000 8000];
@@ -473,7 +480,7 @@ for times_of_interest = times_of_interest_separate
     
     % Once the validation set performance stops improving, it doesn't seem to
     % get better, so keep this small.
-    net.trainParam.max_fail = 6;
+    net.trainParam.max_fail = 2;
         
     tic
     %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
@@ -513,7 +520,7 @@ for times_of_interest = times_of_interest_separate
         timestep, ...
         time_window_steps, ...
         songs_with_hits(1:ntrainsongs), ...
-        true)
+        true);
     
     % Now that we've computed the thresholds using just the training set, print the confusion matrices
     % using just the holdout test set.
@@ -685,9 +692,9 @@ for times_of_interest = times_of_interest_separate
     %     = (rawnetout - ymin) / gain + xmin
     mapstd_xmean = net.inputs{1}.processSettings{1}.xmean;
     mapstd_xstd = net.inputs{1}.processSettings{1}.xstd;
-    mmmout_xmin = net.outputs{2}.processSettings{1}.xmin
-    mmmout_ymin = net.outputs{2}.processSettings{1}.ymin
-    mmmout_gain = net.outputs{2}.processSettings{1}.gain
+    mmmout_xmin = net.outputs{2}.processSettings{1}.xmin;
+    mmmout_ymin = net.outputs{2}.processSettings{1}.ymin;
+    mmmout_gain = net.outputs{2}.processSettings{1}.gain;
 
     
     win_size = fft_size;
@@ -705,7 +712,14 @@ for times_of_interest = times_of_interest_separate
         'shotgun_sigma', ...
         'ntrain',  'scaling', '-v7');
     %% Save sample data: audio on channel0, canonical hits for first syllable on channel1
-    if false
+    
+    if use_nn_realignment_test
+        realignNetString = 'realignNet';
+    else
+        realignNetString = '';
+    end
+    
+    if testfile_include_nonsinging
         % Re-permute all songs with a new random order
         newrand = randperm(size(MIC_DATA,2));
         orig_songs_with_hits =  [ones(1, nmatchingsongs) zeros(1, nsongs - nmatchingsongs)]';
@@ -725,6 +739,9 @@ for times_of_interest = times_of_interest_separate
         end
         hits = reshape(hits, [], 1);
         songs = [songs hits];
+        testfilename = sprintf('songs_%s%ss_%d%%%s.wav',...
+            BIRD, sprintf('_%g', times_of_interest), round(100/(1+nonsinging_fraction)), ...
+            realignNetString);
     else
         % Just the real songs, in the original order
         %songs = reshape(MIC_DATA(:, 1:nmatchingsongs), [], 1); % Include all singing and non-singing
@@ -738,15 +755,12 @@ for times_of_interest = times_of_interest_separate
         end
         hits = reshape(hits, [], 1);
         songs = [songs hits];
+        
+        testfilename = sprintf('songs_%s%ss%s.wav',...
+            BIRD, sprintf('_%g', times_of_interest), ...
+            realignNetString);
+
     end
     
-    if use_nn_realignment_test
-        realignNetString = 'realignNet';
-    else
-        realignNetString = '';
-    end
-    audiowrite(sprintf('songs_%s%ss_frame%dms_%d%%%s.wav',...
-        BIRD, sprintf('_%g', times_of_interest), 1000*fft_time_shift_seconds, round(100/(1+nonsinging_fraction)), ...
-         realignNetString), ...
-        songs, round(samplerate));
+    audiowrite(testfilename, songs, round(samplerate));
 end
