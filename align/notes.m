@@ -132,4 +132,15 @@ At 400 ms:        True positive    negative
             neg       0.284%       99.99448%
 
 
-
+detector_lny64_0.3s_frame1.5ms_4hid_1000train_0.mat
+At 300 ms:        True positive    negative
+     output pos      99.61496%     3.93e-3%
+            neg       0.385%       99.99607%
+detector_lny64_0.3s_frame1.5ms_4hid_1000train_1.mat
+At 300 ms:        True positive    negative
+     output pos      99.83498%     4.62e-4%
+            neg       0.165%       99.99954%
+detector_lny64_0.3s_frame1.5ms_4hid_1000train_2.mat
+At 300 ms:        True positive    negative
+     output pos      99.83498%     4.62e-4%
+            neg       0.165%       99.99954%

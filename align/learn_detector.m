@@ -64,8 +64,8 @@ disp(sprintf('Bird: %s', BIRD));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 samplerate = 44100;
-ntrain = 1000;
-nhidden_per_output = 4;
+ntrain = 900;
+nhidden_per_output = 3;
 fft_size = 256;
 fft_time_shift_seconds = 0.0005;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
@@ -480,7 +480,7 @@ for times_of_interest = times_of_interest_separate
     
     % Once the validation set performance stops improving, it doesn't seem to
     % get better, so keep this small.
-    net.trainParam.max_fail = 2;
+    net.trainParam.max_fail = 6;
         
     tic
     %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
