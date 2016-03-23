@@ -10,14 +10,14 @@ addpath(sprintf('%s/../lib', p));
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 1
+if 0
     BIRD='lny64';
     load('~/Desktop/lny64/roboaggregate.mat');
     MIC_DATA = audio.data;
     agg_audio.fs = audio.fs;
     %times_of_interest = [0.15 0.315 0.405]
     times_of_interest_separate = [ 0.15 0.2 0.25 0.3 0.35 0.4 ];
-    times_of_interest_separate = [ 0.3 ];
+    %times_of_interest_separate = [ 0.3 ];
     %times_of_interest_separate = NaN;
     %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
 elseif 0
@@ -39,6 +39,7 @@ elseif 0
     clear agg_data;
     MIC_DATA = agg_audio.data;
 else
+    agg_audio.fs = 44100;
     if false
         BIRD = 'deltawide';
         indices = round(-0.006 * agg_audio.fs) : round(-0.005 * agg_audio.fs);
@@ -46,11 +47,11 @@ else
         BIRD = 'delta';
         indices = round(-0.005 * agg_audio.fs);
     end
-    agg_audio.fs = 44100;
+    times_of_interest_separate = 0.3;    
     samples_of_interest = round(times_of_interest_separate * agg_audio.fs);
-    times_of_interest_separate = 0.3;
-    n = 100;
+    n = 128;
     MIC_DATA = rand([20000, n])/100;
+    
     MIC_DATA(samples_of_interest + indices, :) = rand([length(indices), n])/100 + 1;
 end
 
@@ -64,8 +65,8 @@ disp(sprintf('Bird: %s', BIRD));
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 samplerate = 44100;
-ntrain = 900;
-nhidden_per_output = 3;
+ntrain = 1000;
+nhidden_per_output = 4;
 fft_size = 256;
 fft_time_shift_seconds = 0.0005;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
@@ -85,6 +86,8 @@ time_window = 0.03;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+rng('shuffle');
 
 [nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
@@ -478,9 +481,9 @@ for times_of_interest = times_of_interest_separate
     
     fprintf('Training network with %s...\n', net.trainFcn);
     
-    % Once the validation set performance stops improving, it doesn't seem to
+    % Once the validation set performance stops improving, it seldom seems to
     % get better, so keep this small.
-    net.trainParam.max_fail = 6;
+    net.trainParam.max_fail = 3;
         
     tic
     %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
@@ -545,6 +548,7 @@ for times_of_interest = times_of_interest_separate
     figure(32);
     plot(times(time_window_steps:end), squeeze(testout(1,:,:)), 'b', ...
         times([time_window_steps end]), [1 1]*trigger_thresholds, 'r');
+    title('Network output and threshold');
     
     SHOW_THRESHOLDS = true;
     SHOW_ONLY_TRUE_HITS = true;
@@ -719,6 +723,10 @@ for times_of_interest = times_of_interest_separate
         realignNetString = '';
     end
     
+    % Let's standardise order for each set of test songs, so that we can compare multiple training
+    % runs of the detector on the same songs:
+    rng(137);
+    
     if testfile_include_nonsinging
         % Re-permute all songs with a new random order
         newrand = randperm(size(MIC_DATA,2));
@@ -743,20 +751,27 @@ for times_of_interest = times_of_interest_separate
             BIRD, sprintf('_%g', times_of_interest), round(100/(1+nonsinging_fraction)), ...
             realignNetString);
     else
-        % Just the real songs, in the original order
+        % Just the real songs
+        
+        % Re-permute just 128 of the positive songs with a new random order -- for oscilloscope
+        % 128-sample averages
+        ntestsongs = 128; % nmatchingsongs
+        newrand = randperm(nmatchingsongs);
+        newrand = newrand(1:ntestsongs);
+
         %songs = reshape(MIC_DATA(:, 1:nmatchingsongs), [], 1); % Include all singing and non-singing
-        songs = reshape(MIC_DATA(:, 1:nsongs), [], 1); % Just singing
+        songs = reshape(MIC_DATA(:, newrand), [], 1); % Just singing
         songs_scale = max([max(songs) -min(songs)]);
         songs = songs / songs_scale;
-        hits = zeros(nsamples_per_song, nmatchingsongs);
+        hits = zeros(nsamples_per_song, ntestsongs);
         samples_of_interest = round(times_of_interest * samplerate);
-        for i = 1:nmatchingsongs
+        for i = 1:ntestsongs
             hits(samples_of_interest(1) + round(sample_offsets_test(1, i)), i) = 1;
         end
         hits = reshape(hits, [], 1);
         songs = [songs hits];
         
-        testfilename = sprintf('songs_%s%ss%s.wav',...
+        testfilename = sprintf('songs_128_%s%ss%s.wav',...
             BIRD, sprintf('_%g', times_of_interest), ...
             realignNetString);
 
