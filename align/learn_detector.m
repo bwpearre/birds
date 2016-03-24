@@ -68,7 +68,7 @@ samplerate = 44100;
 ntrain = 1000;
 nhidden_per_output = 4;
 fft_size = 256;
-fft_time_shift_seconds = 0.004;
+fft_time_shift_seconds = 0.0005;
 noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
 nonsinging_fraction = 1;
 use_jeff_realignment_train = false;
@@ -78,7 +78,7 @@ confusion_all = false;
 testfile_include_nonsinging = false;
 
 % Region of the spectrum (in space and time) to examine:
-freq_range = [1000 2000];
+freq_range = [1000 8000];
 time_window = 0.03;
 
 
@@ -293,11 +293,9 @@ for times_of_interest = times_of_interest_separate
         times_ends = times + timestep/2;
         for i = 1:length(times_of_interest)
              foo = find(times_ends >= times_of_interest(i) - timestep & times_ends <= times_of_interest(i) + timestep);
-             if length(foo) > 2
-                 disp('Got more than 2 matches.');
-                 a(0);
-             end
-             tsteps_of_interest(i) = foo(1)
+             baz = abs(times_ends(foo) - times_of_interest(i));
+             [v p] = min(baz);
+             tsteps_of_interest(i) = foo(p)
         end
         nathan_error = (tsteps_of_interest - tsteps_of_interest_nathan) * timestep * 1000
         
