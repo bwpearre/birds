@@ -1,5 +1,33 @@
 clear;
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%% Parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ntrain = 1000;
+nhidden_per_output = 2;
+fft_time_shift_seconds_target = 0.0015;
+nonsinging_fraction = 0;
+use_jeff_realignment_train = false;
+use_jeff_realignment_test = false;
+use_nn_realignment_test = false;
+confusion_all = false;
+testfile_include_nonsinging = false;
+samplerate = 44100;
+fft_size = 256;
+
+% Region of the spectrum (in space and time) to examine:
+freq_range = [1000 3000];
+time_window = 0.012;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
 rng('shuffle');
 
 p = fileparts(mfilename('fullpath'));
@@ -45,10 +73,10 @@ else
         indices = round(-0.006 * agg_audio.fs) : round(-0.005 * agg_audio.fs);
     else
         BIRD = 'delta';
-        indices = round(-0.005 * agg_audio.fs);
+        indices = round(-0.01 * agg_audio.fs);
     end
     times_of_interest_separate = 0.3;
-    samples_of_interest = round(times_of_interest_separate * agg_audio.fs);
+    samples_of_interest = round(times_of_interest_separate * agg_audio.fs) + 1;
     n = 128;
     MIC_DATA = rand([20000, n])/100;
     
@@ -60,31 +88,6 @@ disp(sprintf('Bird: %s', BIRD));
 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%% Parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-samplerate = 44100;
-ntrain = 1000;
-nhidden_per_output = 4;
-fft_size = 256;
-fft_time_shift_seconds = 0.0005;
-noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds));
-nonsinging_fraction = 1;
-use_jeff_realignment_train = false;
-use_jeff_realignment_test = false;
-use_nn_realignment_test = false;
-confusion_all = false;
-testfile_include_nonsinging = false;
-
-% Region of the spectrum (in space and time) to examine:
-freq_range = [1000 8000];
-time_window = 0.03;
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 rng('shuffle');
@@ -175,19 +178,25 @@ MIC_DATA = single(filtfilt(B, A, MIC_DATA));
 % optimal but I have not played with them).  Compute one to get size, then
 % preallocate memory and compute the rest in parallel.
 
+noverlap = fft_size - (floor(samplerate * fft_time_shift_seconds_target));
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],noverlap=500)
 %speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
-fprintf('FFT time shift = %g s\n', fft_time_shift_seconds);
 
 window = hamming(fft_size);
 
 [speck freqs times] = spectrogram(MIC_DATA(:,1), window, noverlap, [], samplerate);
+% Adjust "times" to reflect the time at which the information is actually available--i.e. the end,
+% rather than the middle, of the window:
+times = times - times(1) + fft_size/samplerate;
 [nfreqs, ntimes] = size(speck);
 speck = speck + eps;
 
-% This _should_ be the same as fft_time_shift_seconds, but let's use this because
-% round-off error is a possibility.  This is actually seconds/timestep.
-timestep = (times(end)-times(1))/(length(times)-1);
+% This will be approximately the same as fft_time_shift_seconds_target, but not quite: the fft_time_shift
+% is given by noverlap, and will actually be fft_size/samplerate
+fft_time_shift_seconds = (times(end)-times(1))/(length(times)-1);
+fprintf('FFT time shift = %d frames, %s... ms\n', ...
+    floor(samplerate * fft_time_shift_seconds_target), ...
+    sigfig(1000*fft_time_shift_seconds, 8));
 
 
 %% Define training set
@@ -224,7 +233,6 @@ spectrogram_avg_img = squeeze(log(sum(spectrograms(1:nmatchingsongs,:,:))));
 
 %% Draw the pretty full-res spectrogram and the targets
 figure(4);
-subplot(2,1,1);
 imagesc([times(1) times(end)]*1000, [freqs(1) freqs(end)]/1000, spectrogram_avg_img);
 axis xy;
 xlabel('Time (ms)');
@@ -246,7 +254,7 @@ ylabel('Frequency (kHz)');
 freq_range_ds = find(freqs >= freq_range(1) & freqs <= freq_range(2));
 disp(sprintf('Using frequencies in [ %g %g ] Hz: %d frequency samples.', ...
     freq_range(1), freq_range(2), length(freq_range_ds)));
-time_window_steps = double(floor(time_window / timestep));
+time_window_steps = double(floor(time_window / fft_time_shift_seconds));
 disp(sprintf('Time window is %g ms, %d samples.', time_window*1000, time_window_steps));
 
 % How big will the neural network's input layer be?
@@ -278,26 +286,20 @@ for times_of_interest = times_of_interest_separate
         tstep_of_interest = suggest_moments_of_interest(5, ...
             spectrogram_avg_img, ...
             time_window_steps, ...
-            timestep, ...
+            fft_time_shift_seconds, ...
             layer0sz, ...
             nwindows_per_song, ...
             ntimes, ...
             freq_range_ds);
-        times_of_interest = tstep_of_interest * timestep
+        times_of_interest = tstep_of_interest * fft_time_shift_seconds
     elseif exist('times_of_interest', 'var') % TUNE
         tsteps_of_interest_nathan = round((times_of_interest * samplerate - fft_size) / (fft_size - noverlap)) + 1
-        guess = tsteps_of_interest_nathan + length([times(1):-timestep:0]) - 1
+        guess = tsteps_of_interest_nathan + length([times(1):-fft_time_shift_seconds:0]) - 1
 
-        %tsteps_of_interest = round(times_of_interest  / fft_time_shift_seconds);
-        % "times" contains the centres of the FFT time bins, so let's make it include the ends:
-        times_ends = times + timestep/2;
         for i = 1:length(times_of_interest)
-             foo = find(times_ends >= times_of_interest(i) - timestep & times_ends <= times_of_interest(i) + timestep);
-             baz = abs(times_ends(foo) - times_of_interest(i));
-             [v p] = min(baz);
-             tsteps_of_interest(i) = foo(p)
+            tsteps_of_interest(i) = find(times >= times_of_interest(i), 1);
         end
-        nathan_error = (tsteps_of_interest - tsteps_of_interest_nathan) * timestep * 1000
+        nathan_correction = (tsteps_of_interest - tsteps_of_interest_nathan) * fft_time_shift_seconds * 1000
         
         %tsteps_of_interest = tsteps_of_interest_nathan
     else
@@ -320,7 +322,7 @@ for times_of_interest = times_of_interest_separate
     % We'll look for this long around the timestep, to compute the canonical
     % song
     time_buffer = 0.04;
-    tstep_buffer = round(time_buffer / timestep);
+    tstep_buffer = round(time_buffer / fft_time_shift_seconds);
     
     % For alignment: which is the most stereotypical song at each target?
     
@@ -332,7 +334,7 @@ for times_of_interest = times_of_interest_separate
         range = range(find(range>0&range<=ntimes));
         foo = reshape(spectrograms(1:nmatchingsongs, :, range), nmatchingsongs, []) * reshape(mean(spectrograms(:, :, range), 1), 1, [])';
         [val canonical_songs(i)] = max(foo);
-        [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tsteps_of_interest(i), samplerate, timestep, canonical_songs(i));
+        [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tsteps_of_interest(i), samplerate, fft_time_shift_seconds, canonical_songs(i));
     end
     
     
@@ -349,7 +351,8 @@ for times_of_interest = times_of_interest_separate
     subplot(1,1,1);
     power_img = power_img(1:nmatchingsongs,:);
     imagesc(power_img(pt,:));
-    
+    set(gca, 'xlim', [280.2 300]);
+
     
     target_offsets_test = target_offsets;
     sample_offsets_test = sample_offsets;
@@ -385,9 +388,12 @@ for times_of_interest = times_of_interest_separate
                 (freq_range(2)-freq_range(1))/1000], ...
                 'EdgeColor', [1 0 0]);
         end
+        
+        set(gca, 'xlim', [(times_of_interest(1)*1000-(time_window_steps)*fft_time_shift_seconds*1000) 1000*times_of_interest(1)]);
+
+        set(gca, 'YLim', [0 10]);
+
     end
-    
-    set(gca, 'YLim', [0 10]);
     drawnow;
     
     
@@ -411,7 +417,7 @@ for times_of_interest = times_of_interest_separate
     % Some syllables are really hard to pinpoint to within the frame rate, so
     % the network has to try to learn "image A is a hit, and this thing that
     % looks identical to image A is not a hit".  For each sample of interest,
-    % define a "shotgun function" that spreads the "acceptable" timesteps in
+    % define a "shotgun function" that spreads the "acceptable" fft_time_shift_secondss in
     % the training set a little.  This could be generalised for multiple
     % syllables, but right now they all share one sigma.
     
@@ -423,7 +429,7 @@ for times_of_interest = times_of_interest_separate
     else
         shotgun_sigma = 0.002; % TUNE
     end
-    shotgun = normpdf(0:timestep:shotgun_max_sec, 0, shotgun_sigma);
+    shotgun = normpdf(0:fft_time_shift_seconds:shotgun_max_sec, 0, shotgun_sigma);
     shotgun = shotgun / max(shotgun);
     shotgun = shotgun(find(shotgun>0.1));
     shothalf = length(shotgun);
@@ -534,7 +540,7 @@ for times_of_interest = times_of_interest_separate
         times_of_interest, ...
         tsteps_of_interest, ...
         MATCH_PLUSMINUS, ...
-        timestep, ...
+        fft_time_shift_seconds, ...
         time_window_steps, ...
         songs_with_hits(1:ntrainsongs), ...
         true);
@@ -553,7 +559,7 @@ for times_of_interest = times_of_interest_separate
         times_of_interest, ...
         tsteps_of_interest, ...
         MATCH_PLUSMINUS, ...
-        timestep, ...
+        fft_time_shift_seconds, ...
         time_window_steps, ...
         songs_with_hits(foo), ...
         trigger_thresholds);
@@ -567,7 +573,7 @@ for times_of_interest = times_of_interest_separate
     SHOW_THRESHOLDS = true;
     SHOW_ONLY_TRUE_HITS = true;
     SORT_BY_ALIGNMENT = true;
-    % For each timestep of interest, draw that output unit's response to all
+    % For each fft_time_shift_seconds of interest, draw that output unit's response to all
     % timesteps for all songs:
     
     target_offsets_net = zeros(ntsteps_of_interest, nsongs);
@@ -582,7 +588,7 @@ for times_of_interest = times_of_interest_separate
             % "img" is a tricolour image
             img = power_img;
             % de-bounce:
-            trigger_img = trigger(testout_i_squeezed', trigger_thresholds(i), 0.1, timestep);
+            trigger_img = trigger(testout_i_squeezed', trigger_thresholds(i), 0.1, fft_time_shift_seconds);
             trigger_img = [leftbar' trigger_img];
             [val pos] = max(trigger_img, [], 2);
             
@@ -657,7 +663,7 @@ for times_of_interest = times_of_interest_separate
         for i = 1:ntsteps_of_interest
             testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
             leftbar = zeros(time_window_steps-1, nsongs);
-            trigger_img = trigger(testout_i_squeezed', trigger_thresholds(i), 0.1, timestep);
+            trigger_img = trigger(testout_i_squeezed', trigger_thresholds(i), 0.1, fft_time_shift_seconds);
             trigger_img = [leftbar' trigger_img];
             [val pos] = max(trigger_img, [], 2);
             
@@ -676,7 +682,9 @@ for times_of_interest = times_of_interest_separate
         figure(5);
         for i = 1:size(net.IW{1}, 1)
             subplot(size(net.IW{1}, 1), 1, i)
-            imagesc([-time_window_steps:0]*fft_time_shift_seconds*1000, linspace(freq_range(1), freq_range(2), length(freq_range_ds))/1000, ...
+            %imagesc([-time_window_steps:0]*fft_time_shift_seconds*1000, linspace(freq_range(1), freq_range(2), length(freq_range_ds))/1000, ...
+            %    reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_steps));
+            imagesc([times(1:time_window_steps) - times(time_window_steps)]*1000, linspace(freq_range(1), freq_range(2), length(freq_range_ds))/1000, ...
                 reshape(net.IW{1}(i,:), length(freq_range_ds), time_window_steps));
             axis xy;
             ylabel('frequency');
@@ -719,7 +727,7 @@ for times_of_interest = times_of_interest_separate
     fft_time_shift = fft_size - noverlap;
     scaling = 'linear';
     filename = sprintf('detector_%s%ss_frame%gms_%dhid_%dtrain.mat', ...
-        BIRD, sprintf('_%g', times_of_interest), 1000*fft_time_shift_seconds, net.layers{1}.dimensions, ntrain);
+        BIRD, sprintf('_%g', times_of_interest), 1000*fft_time_shift_seconds_target, net.layers{1}.dimensions, ntrain);
     fprintf('Saving as ''%s''...\n', filename);
     save(filename, ...
         'net', 'train_record', ...
