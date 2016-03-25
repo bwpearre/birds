@@ -1,5 +1,19 @@
 clear;
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+channels = 1:16;
+%channels = [1 8 10 12 16]
+subplotx = 5;
+threshold = 5;
+window = [-0.001 0.002];
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %cd lw95rhp-2015-11-23;
 
 [a,experiment,c] = fileparts(pwd);
@@ -34,75 +48,78 @@ for channel = 1:nchannels
 end
 
 
-channels = 1:nchannels;
-channels = [1 2 3 8 9 10];
-subplotx = 7;
+adz = zscore(ad);
 
+    
+if length(channels) == 16
+    
+    goodchannels = [];    
+    
+    
+    nchannels = length(channels);
+    for channelnum = 1:nchannels
+        channel = channels(channelnum);
+        
+        [ pks, locs ] = findpeaks(-adz(:, channel), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
+        
+        if length(locs) > 5
+            goodchannels(end+1) = channel;
+            
+            for j = 1:length(locs)
+                try
+                    indices = locs(j)+window(1)*fs : locs(j)+window(2)*fs;
+                catch ME
+                end
+            end
+        end
+    end
+else
+    goodchannels = channels;
+end
+
+channels = goodchannels;
 nchannels = length(channels);
 colours = distinguishable_colors(nchannels);
 for channelnum = 1:nchannels
     channel = channels(channelnum);
-    figure(1);
-    %subplot(nchannels, subplotx, subplotx*(channelnum-1)+[1:subplotx-1]);
-    subplot(nchannels, 1, channelnum);
-    plot(t_amplifier*1e3, ad(:,channel), 'color', colours(channelnum,:));
-    axis tight;
-    if channelnum == 1
-        title(experiment_desc);
-    end
-    if channelnum == nchannels
-        xlabel('milliseconds');
-    end
-    ylabel('millivolts');
-    legend(sprintf('%d', channel));
-    %legend('1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16');
-    %saveas(gcf, strcat('spiketrain-', experiment, '.fig'));
     
-    threshold = 5;
-    window = [-0.001 0.002];
-    adz = zscore(ad);
-
-    if 0
-        [ pks, locs ] = findpeaks(adz(:, channel), 'MinPeakHeight', threshold);
-        subplot(nchannels, 1, channelnum);
-        cla;
-        hold on;
-        
-        for j = 1:length(locs)
-            try
-                indices = locs(j)+window(1)*fs : locs(j)+window(2)*fs;
-                plot([window(1):1/fs:window(2)]*1e3, ...
-                    ad(indices, channel), ...
-                    'color', colours(channelnum,:));
-                axis tight;
-                
-            catch ME
-            end
-        end
-        hold off;
-    end
     
     if 1
         [ pks, locs ] = findpeaks(-adz(:, channel), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
-        figure(2);
+        figure(1);
         %subplot(nchannels, 3, 3*channelnum);
-        %subplot(nchannels, subplotx, subplotx*(channelnum-1)+[subplotx]);
-        subplot(nchannels, 1, channelnum);
+        subplot(nchannels, subplotx, subplotx*(channelnum-1)+[subplotx]);
+        %subplot(nchannels, 1, channelnum);
         cla;
-        hold on;
         
+        set = zeros(length([window(1):1/fs:window(2)]), length(locs));
         for j = 1:length(locs)
             try
                 indices = locs(j)+window(1)*fs : locs(j)+window(2)*fs;
-                plot([window(1):1/fs:window(2)]*1e3, ...
-                    ad(indices, channel), ...
-                    'color', colours(channelnum,:));
-                axis tight;
-                %set(gca, 'YLim', [-0.2 0.2]);
+%                 plot([window(1):1/fs:window(2)]*1e3, ...
+%                     ad(indices, channel), ...
+%                     'color', colours(channelnum,:));
+                set(:, j) = ad(indices, channel);
             catch ME
             end
         end
-        hold off;
+        
+        n = length(locs);
+        mu = mean(set, 2);
+        sigma = std(set, 0, 2);
+        ste = sigma / sqrt(n);
+        set95 = ste * 1.96;
+        
+        shadedErrorBar([window(1):1/fs:window(2)]*1e3, ...
+            mu, ...
+            set95, ...
+            {'color', colours(channelnum,:)}, 1);
+        grid on;
+        axis tight;
+        
+        %set(gca, 'YLim', [-0.2 0.2]);
+    
+            
         if channelnum == 1
             title(experiment_desc);
         end
@@ -112,10 +129,25 @@ for channelnum = 1:nchannels
         %ylabel('millivolts');
         legend(sprintf('%d', channel));
         
-        %title(sprintf('%s, Area X, channel %d', experiment_desc, channel));
-        %xlabel('milliseconds');
-        %ylabel('millivolts');
-
     end
+    
+    
+    
+    
+    
+    figure(1);
+    subplot(nchannels, subplotx, subplotx*(channelnum-1)+[1:subplotx-1]);
+    %subplot(nchannels, 1, channelnum);
+    plot(t_amplifier*1e3, ad(:,channel), 'color', colours(channelnum,:));
+    axis tight;
+    if channelnum == 1
+        title(experiment_desc);
+    end
+    if channelnum == nchannels
+        xlabel('milliseconds');
+    end
+    ylabel('millivolts');
+    legend(sprintf('%d', channel));    
+    
 end
 
