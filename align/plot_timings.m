@@ -29,7 +29,7 @@ set(gca, 'YLim', l);
 l = get(gca, 'XLim');
 l(1) = 0;
 set(gca, 'XLim', l);
-legend('Ideal', 'LabView', 'Swift + serial', 'Location', 'SouthEast');
+legend('Ideal', 'LabView', 'Swift+serial', 'Location', 'SouthEast');
 
 subplot(2,2,2);
 plot(framesize, jitters_delta);
@@ -70,7 +70,7 @@ set(gca, 'XLim', l);
 
 %% TIMING vs. SYLLABLE
 
-syllables = [ 0.15 : 0.05 : 0.4];
+syllables = [ 150:50:400 ];
 
 % ideal; swift+serial
 latencies_syl = [ -0.4 -1.1 -0.5 -1.1 -1.3 -0.5;
@@ -82,11 +82,11 @@ figure(2)
 subplot(1,2,1);
 plot(syllables, latencies_syl, 'o');
 title('Latency vs. test syllable');
-xlabel('Syllable @t (s)');
+xlabel('Syllable @t (ms)');
 ylabel('Latency (s)');
 l = get(gca, 'YLim') + [-0.5 0.5];
 set(gca, 'YLim', l);
-l = get(gca, 'XLim') + [-0.02 0.02];
+l = get(gca, 'XLim') + [-20 20];
 set(gca, 'XLim', l);
 legend('Ideal', 'Swift+serial', 'Location', 'NorthEast');
 
@@ -94,11 +94,11 @@ legend('Ideal', 'Swift+serial', 'Location', 'NorthEast');
 subplot(1,2,2);
 plot(syllables, jitters_syl, 'o');
 title('Jitter vs. test syllable');
-xlabel('Syllable @t (s)');
+xlabel('Syllable @t (ms)');
 ylabel('Jitter (s)');
 l = get(gca, 'YLim') + [-0.05 0.05];
 set(gca, 'YLim', l);
-l = get(gca, 'XLim') + [-0.02 0.02];
+l = get(gca, 'XLim') + [-20 20];
 set(gca, 'XLim', l);
 
 
