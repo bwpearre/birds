@@ -21,7 +21,6 @@ figure(1);
 subplot(2,2,1);
 plot(framesize, latencies_delta);
 title('Latency: \Delta-song');
-xlabel('FFT frame interval (ms)');
 ylabel('Latency (s)');
 l = get(gca, 'YLim');
 l(1) = 0;
@@ -29,12 +28,10 @@ set(gca, 'YLim', l);
 l = get(gca, 'XLim');
 l(1) = 0;
 set(gca, 'XLim', l);
-legend('Ideal', 'LabView', 'Swift+serial', 'Location', 'SouthEast');
 
 subplot(2,2,2);
 plot(framesize, jitters_delta);
 title('Jitter: \Delta-song');
-xlabel('FFT frame interval (ms)');
 ylabel('Jitter (s)');
 l = get(gca, 'YLim');
 l(1) = 0;
@@ -66,6 +63,7 @@ set(gca, 'YLim', l);
 l = get(gca, 'XLim');
 l(1) = 0;
 set(gca, 'XLim', l);
+legend('Ideal', 'LabView', 'Swift+serial', 'Location', 'SouthEast');
 
 
 %% TIMING vs. SYLLABLE
@@ -89,7 +87,12 @@ set(gca, 'YLim', l);
 l = get(gca, 'XLim') + [-20 20];
 set(gca, 'XLim', l);
 legend('Ideal', 'Swift+serial', 'Location', 'NorthEast');
-
+latencies_mean = mean(latencies_syl')
+latencies_std = std(latencies_syl')
+latencies_ste95 = 1.96 * latencies_std / sqrt(length(syllables))
+jitters_mean = mean(jitters_syl')
+jitters_std = std(jitters_syl')
+jitters_ste95 = 1.96 * jitters_std / sqrt(length(syllables))
 
 subplot(1,2,2);
 plot(syllables, jitters_syl, 'o');
