@@ -20,7 +20,7 @@ jitters_lny64_300 = [NaN 2.032 1.951 1.989 2.152;
 figure(1);
 subplot(2,2,1);
 plot(framesize, latencies_delta);
-title('Latency: \Delta-song');
+title('Latency: \delta-syllable');
 ylabel('Latency (s)');
 l = get(gca, 'YLim');
 l(1) = 0;
@@ -31,7 +31,7 @@ set(gca, 'XLim', l);
 
 subplot(2,2,2);
 plot(framesize, jitters_delta);
-title('Jitter: \Delta-song');
+title('Jitter: \delta-syllable');
 ylabel('Jitter (s)');
 l = get(gca, 'YLim');
 l(1) = 0;
@@ -123,7 +123,7 @@ title('Latency vs. detector');
 ylabel('Latency (s)');
 set(gca, 'XLim', [detectors_num(1)-0.5 detectors_num(end)+0.5]);
 xticklabel_rotate(detectors_num, 45, detectors);
-legend('\Delta', 'Song 300ms', 'Location', 'NorthWest');
+legend('\delta-syllable', 'Song 300ms', 'Location', 'NorthWest');
 
 
 subplot(1,2,2);

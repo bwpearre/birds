@@ -6,9 +6,9 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 ntrain = 1000;
-nhidden_per_output = 2;
+nhidden_per_output = 3;
 fft_time_shift_seconds_target = 0.0015;
-nonsinging_fraction = 0;
+nonsinging_fraction = 0.5;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -18,8 +18,8 @@ samplerate = 44100;
 fft_size = 256;
 
 % Region of the spectrum (in space and time) to examine:
-freq_range = [1000 3000];
-time_window = 0.012;
+freq_range = [1000 8000];
+time_window = 0.03;
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -38,15 +38,16 @@ addpath(sprintf('%s/../lib', p));
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 0
+if 1
     BIRD='lny64';
     load('~/Desktop/lny64/roboaggregate.mat');
     MIC_DATA = audio.data;
     agg_audio.fs = audio.fs;
-    %times_of_interest = [0.15 0.315 0.405]
-    times_of_interest_separate = [ 0.15 0.2 0.25 0.3 0.35 0.4 ];
+    times_of_interest_simultaneous = [0.15 : 0.05 : 0.4 ]
+    
+    times_of_interest_separate = NaN;
+    %times_of_interest_separate = [ 0.15:0.05:0.4 ];
     %times_of_interest_separate = [ 0.3 ];
-    %times_of_interest_separate = NaN;
     %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
 elseif 0
     BIRD='lg373rblk';
@@ -73,7 +74,7 @@ else
         indices = round(-0.006 * agg_audio.fs) : round(-0.005 * agg_audio.fs);
     else
         BIRD = 'delta';
-        indices = round(-0.01 * agg_audio.fs);
+        indices = round(-0.3 * agg_audio.fs);
     end
     times_of_interest_separate = 0.3;
     samples_of_interest = round(times_of_interest_separate * agg_audio.fs) + 1;
@@ -293,13 +294,13 @@ for times_of_interest = times_of_interest_separate
             freq_range_ds);
         times_of_interest = tstep_of_interest * fft_time_shift_seconds
     elseif exist('times_of_interest', 'var') % TUNE
-        tsteps_of_interest_nathan = round((times_of_interest * samplerate - fft_size) / (fft_size - noverlap)) + 1
-        guess = tsteps_of_interest_nathan + length([times(1):-fft_time_shift_seconds:0]) - 1
+        %tsteps_of_interest_nathan = round((times_of_interest * samplerate - fft_size) / (fft_size - noverlap)) + 1
+        %guess = tsteps_of_interest_nathan + length([times(1):-fft_time_shift_seconds:0]) - 1
 
         for i = 1:length(times_of_interest)
             tsteps_of_interest(i) = find(times >= times_of_interest(i), 1);
         end
-        nathan_correction = (tsteps_of_interest - tsteps_of_interest_nathan) * fft_time_shift_seconds * 1000
+        %nathan_correction = (tsteps_of_interest - tsteps_of_interest_nathan) * fft_time_shift_seconds * 1000
         
         %tsteps_of_interest = tsteps_of_interest_nathan
     else
@@ -351,7 +352,7 @@ for times_of_interest = times_of_interest_separate
     subplot(1,1,1);
     power_img = power_img(1:nmatchingsongs,:);
     imagesc(power_img(pt,:));
-    set(gca, 'xlim', [280.2 300]);
+    %set(gca, 'xlim', [280.2 300]);
 
     
     target_offsets_test = target_offsets;
@@ -389,7 +390,7 @@ for times_of_interest = times_of_interest_separate
                 'EdgeColor', [1 0 0]);
         end
         
-        set(gca, 'xlim', [(times_of_interest(1)*1000-(time_window_steps)*fft_time_shift_seconds*1000) 1000*times_of_interest(1)]);
+        %set(gca, 'xlim', [(times_of_interest(1)*1000-(time_window_steps)*fft_time_shift_seconds*1000) 1000*times_of_interest(1)]);
 
         set(gca, 'YLim', [0 10]);
 
@@ -504,7 +505,7 @@ for times_of_interest = times_of_interest_separate
     % Once the validation set performance stops improving, it seldom seems to
     % get better, so keep this small.
     net.trainParam.max_fail = 3;
-        
+
     tic
     %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
     [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
@@ -565,10 +566,10 @@ for times_of_interest = times_of_interest_separate
         trigger_thresholds);
     
     
-    figure(32);
-    plot(times(time_window_steps:end), squeeze(testout(1,:,:)), 'b', ...
-        times([time_window_steps end]), [1 1]*trigger_thresholds, 'r');
-    title('Network output and threshold');
+    %figure(32);
+    %plot(times(time_window_steps:end), squeeze(testout(1,:,:)), 'b', ...
+    %    times([time_window_steps end]), [1 1]*trigger_thresholds, 'r');
+    %title('Network output and threshold');
     
     SHOW_THRESHOLDS = true;
     SHOW_ONLY_TRUE_HITS = true;
