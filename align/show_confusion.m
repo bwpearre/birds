@@ -54,11 +54,18 @@ for i = 1:length(tstep_of_interest)
     trueposrate = zeros(1, length(tstep_of_interest));
     falseposrate = zeros(1, length(tstep_of_interest));
     [ outval trueposrate falseposrate ] = f(trigger_thresholds(i));
+    
+    tpfp = [times_of_interest trueposrate falseposrate];
 
     if true
-        disp(sprintf('At %d ms:        True positive    negative', times_of_interest(i) * 1000));
-        disp(sprintf('     output pos      %.5f%%     %s%%', trueposrate*100, sigfig(falseposrate*100)));
-        disp(sprintf('            neg       %s%%       %.5f%%', sigfig((1-trueposrate)*100), (1-falseposrate)*100));
+        fprintf('At %d ms:        True positive    negative\n', times_of_interest(i) * 1000);
+        fprintf('     output pos      %.5f%%     %s%%\n', trueposrate*100, sigfig(falseposrate*100));
+        fprintf('            neg       %s%%       %.5f%%\n', sigfig((1-trueposrate)*100), (1-falseposrate)*100);
+        if exist('confusion_log.txt', 'file')
+            save('confusion_log.txt', 'tpfp', '-append', '-ascii');
+        else
+            save('confusion_log.txt', 'tpfp', '-ascii');
+        end
     else
         fprintf('\\vspace{8pt}\\par\\noindent\n\\begin{tabular}{r|cc}\n  {\\bf At %d ms} & \\multicolumn{2}{c}{True} \\\\ \n  & pos & neg \\\\ \n  \\hline  Detected pos & %.5f\\%% & %.5f\\%%\\\\ \n  neg & %.5f\\%% & %.5f\\%%\\\\ \n\\end{tabular}\n', ...
             times_of_interest(i) * 1000, trueposrate*100, falseposrate*100, (1-trueposrate)*100, (1-falseposrate)*100);

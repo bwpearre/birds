@@ -7,8 +7,8 @@ clear;
 
 ntrain = 1000;
 nhidden_per_output = 4;
-fft_time_shift_seconds_target = 0.001;
-nonsinging_fraction = 0.5;
+fft_time_shift_seconds_target = 0.0015;
+nonsinging_fraction = 1;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -49,7 +49,8 @@ if 1
     times_of_interest_separate = NaN;
     %times_of_interest_separate = [ 0.15:0.05:0.4 ];
     %times_of_interest_separate = [ 0.3 ];
-    times_of_interest_separate = [0.2:0.1:0.4]
+    times_of_interest_separate = [0.15:0.05:0.4];
+    times_of_interest_separate = repmat(times_of_interest_separate, 1, 10);
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -277,6 +278,11 @@ testsongs = randomsongs(ntrainsongs+1:end);
 
 separate_syllable_counter = 0;
 for times_of_interest = times_of_interest_separate
+    
+    randomsongs = randperm(nsongs);
+    trainsongs = randomsongs(1:ntrainsongs);
+    testsongs = randomsongs(ntrainsongs+1:end);
+
     separate_syllable_counter = separate_syllable_counter + 1;
     
     if exist('times_of_interest_simultaneous', 'var')
@@ -594,8 +600,8 @@ for times_of_interest = times_of_interest_separate
     sample_offsets_net = zeros(ntsteps_of_interest, nsongs);
     for i = 1:ntsteps_of_interest
         figure(6);
-        %subplot(ntsteps_of_interest, 1, i);
-        subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
+        subplot(ntsteps_of_interest, 1, i);
+        %subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
         testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
         leftbar = zeros(time_window_steps-1, nsongs);
         
@@ -692,6 +698,25 @@ for times_of_interest = times_of_interest_separate
         end
     end
 
+    
+    
+    figure(9);
+    confusion = load('confusion_log.txt');
+    [binvals bini binj] = unique(confusion(:,1));
+    colours = distinguishable_colors(length(binvals));
+    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.02;
+    subplot(1,2,1);
+    scatter(confusion(:,1)+offsets, confusion(:,2)*100, [], colours(binj,:), 'filled');
+    xlabel('Syllable time');
+    ylabel('True Positives %');
+    title('True Positives');
+    subplot(1,2,2);
+    scatter(confusion(:,1)+offsets, confusion(:,3)*100, [], colours(binj,:), 'filled');
+    xlabel('Syllable time');
+    ylabel('False Positives %');
+    title('False Positives');
+    
+    
     
     % Draw the hidden units' weights.  Let the user make these square or not
     % because lazy...
