@@ -108,11 +108,11 @@ for channelnum = 1:nchannels
         mu = mean(set, 2);
         sigma = std(set, 0, 2);
         ste = sigma / sqrt(n);
-        set95 = ste * 1.96;
+        ste95 = ste * 1.96;
         
         shadedErrorBar([window(1):1/fs:window(2)]*1e3, ...
             mu, ...
-            set95, ...
+            ste95, ...
             {'color', colours(channelnum,:)}, 1);
         grid on;
         axis tight;

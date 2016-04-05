@@ -6,8 +6,8 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 ntrain = 1000;
-nhidden_per_output = 2;
-fft_time_shift_seconds_target = 0.0015;
+nhidden_per_output = 4;
+fft_time_shift_seconds_target = 0.001;
 nonsinging_fraction = 0;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
@@ -18,8 +18,8 @@ samplerate = 44100;
 fft_size = 256;
 
 % Region of the spectrum (in space and time) to examine:
-freq_range = [1000 3000];
-time_window = 0.012;
+freq_range = [1000 8000];
+time_window = 0.03;
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -38,16 +38,18 @@ addpath(sprintf('%s/../lib', p));
 global Y_NEGATIVE;
 Y_NEGATIVE = 0;
 
-if 0
+if 1
     BIRD='lny64';
     load('~/Desktop/lny64/roboaggregate.mat');
     MIC_DATA = audio.data;
     agg_audio.fs = audio.fs;
-    %times_of_interest = [0.15 0.315 0.405]
-    times_of_interest_separate = [ 0.15 0.2 0.25 0.3 0.35 0.4 ];
-    %times_of_interest_separate = [ 0.3 ];
-    %times_of_interest_separate = NaN;
+    %times_of_interest_simultaneous = [0.2 : 0.1 : 0.4 ]
     %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
+    
+    times_of_interest_separate = NaN;
+    %times_of_interest_separate = [ 0.15:0.05:0.4 ];
+    %times_of_interest_separate = [ 0.3 ];
+    times_of_interest_separate = [0.2:0.1:0.4]
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -73,7 +75,7 @@ else
         indices = round(-0.006 * agg_audio.fs) : round(-0.005 * agg_audio.fs);
     else
         BIRD = 'delta';
-        indices = round(-0.01 * agg_audio.fs);
+        indices = round(-0.3 * agg_audio.fs);
     end
     times_of_interest_separate = 0.3;
     samples_of_interest = round(times_of_interest_separate * agg_audio.fs) + 1;
@@ -273,7 +275,9 @@ testsongs = randomsongs(ntrainsongs+1:end);
 
 %%%%%%%%%% Loop over times_of_interest_loop
 
+separate_syllable_counter = 0;
 for times_of_interest = times_of_interest_separate
+    separate_syllable_counter = separate_syllable_counter + 1;
     
     if exist('times_of_interest_simultaneous', 'var')
         times_of_interest = times_of_interest_simultaneous;
@@ -293,13 +297,13 @@ for times_of_interest = times_of_interest_separate
             freq_range_ds);
         times_of_interest = tstep_of_interest * fft_time_shift_seconds
     elseif exist('times_of_interest', 'var') % TUNE
-        tsteps_of_interest_nathan = round((times_of_interest * samplerate - fft_size) / (fft_size - noverlap)) + 1
-        guess = tsteps_of_interest_nathan + length([times(1):-fft_time_shift_seconds:0]) - 1
+        %tsteps_of_interest_nathan = round((times_of_interest * samplerate - fft_size) / (fft_size - noverlap)) + 1
+        %guess = tsteps_of_interest_nathan + length([times(1):-fft_time_shift_seconds:0]) - 1
 
         for i = 1:length(times_of_interest)
             tsteps_of_interest(i) = find(times >= times_of_interest(i), 1);
         end
-        nathan_correction = (tsteps_of_interest - tsteps_of_interest_nathan) * fft_time_shift_seconds * 1000
+        %nathan_correction = (tsteps_of_interest - tsteps_of_interest_nathan) * fft_time_shift_seconds * 1000
         
         %tsteps_of_interest = tsteps_of_interest_nathan
     else
@@ -316,26 +320,50 @@ for times_of_interest = times_of_interest_separate
     
     ntsteps_of_interest = length(tsteps_of_interest);
     
-    %% For each timestep of interest, get the offset of this song from the most typical one.
-    disp('Computing target jitter compensation...');
     
-    % We'll look for this long around the timestep, to compute the canonical
-    % song
-    time_buffer = 0.04;
-    tstep_buffer = round(time_buffer / fft_time_shift_seconds);
-    
-    % For alignment: which is the most stereotypical song at each target?
-    
-    %[B A] = butter(4, [0.01 0.05]);
-    %MIC_DATA2 = filtfilt(B, A, double(MIC_DATA));
-    
-    for i = 1:ntsteps_of_interest
-        range = tsteps_of_interest(i)-tstep_buffer:tsteps_of_interest(i)+tstep_buffer;
-        range = range(find(range>0&range<=ntimes));
-        foo = reshape(spectrograms(1:nmatchingsongs, :, range), nmatchingsongs, []) * reshape(mean(spectrograms(:, :, range), 1), 1, [])';
-        [val canonical_songs(i)] = max(foo);
-        [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tsteps_of_interest(i), samplerate, fft_time_shift_seconds, canonical_songs(i));
+    if use_jeff_realignment_train | use_jeff_realignment_test
+        
+        %% For each timestep of interest, get the offset of this song from the most typical one.
+        disp('Computing target jitter compensation...');
+        
+        % We'll look for this long around the timestep, to compute the canonical
+        % song
+        time_buffer = 0.04;
+        tstep_buffer = round(time_buffer / fft_time_shift_seconds);
+        
+        % For alignment: which is the most stereotypical song at each target?
+        
+        %[B A] = butter(4, [0.01 0.05]);
+        %MIC_DATA2 = filtfilt(B, A, double(MIC_DATA));
+        
+        for i = 1:ntsteps_of_interest
+            range = tsteps_of_interest(i)-tstep_buffer:tsteps_of_interest(i)+tstep_buffer;
+            range = range(find(range>0&range<=ntimes));
+            foo = reshape(spectrograms(1:nmatchingsongs, :, range), nmatchingsongs, []) * reshape(mean(spectrograms(:, :, range), 1), 1, [])';
+            [val canonical_songs(i)] = max(foo);
+            [target_offsets(i,:) sample_offsets(i,:)] = get_target_offsets_jeff(MIC_DATA(:, 1:nmatchingsongs), tsteps_of_interest(i), samplerate, fft_time_shift_seconds, canonical_songs(i));
+        end
+        
+        target_offsets_test = target_offsets;
+        sample_offsets_test = sample_offsets;
+        if ~use_jeff_realignment_train
+            fprintf('\n               ***** DISCARDING TARGET JITTER COMPENSATION FOR TRAINING *****\n\n');
+            target_offsets = 0 * target_offsets;
+            sample_offsets = 0 * sample_offsets;
+        end
+        if ~use_jeff_realignment_test
+            fprintf('\n               ***** DISCARDING TARGET JITTER COMPENSATION FOR TEST FILE *****\n\n');
+            target_offsets_test = 0 * target_offsets_test;
+            sample_offsets_test = 0 * sample_offsets_test;
+        end
+    else
+        target_offsets = zeros(ntsteps_of_interest, nsongs);
+        sample_offsets = target_offsets;
+        target_offsets_test = target_offsets;
+        sample_offsets_test = sample_offsets;
     end
+    %hist(target_offsets', 40);
+
     
     
     disp('Creating spectral power image...');
@@ -351,23 +379,9 @@ for times_of_interest = times_of_interest_separate
     subplot(1,1,1);
     power_img = power_img(1:nmatchingsongs,:);
     imagesc(power_img(pt,:));
-    set(gca, 'xlim', [280.2 300]);
+    %set(gca, 'xlim', [280.2 300]);
 
     
-    target_offsets_test = target_offsets;
-    sample_offsets_test = sample_offsets;
-    if ~use_jeff_realignment_train
-        fprintf('\n               ***** DISCARDING TARGET JITTER COMPENSATION FOR TRAINING *****\n\n');
-        target_offsets = 0 * target_offsets;
-        sample_offsets = 0 * sample_offsets;
-    end
-    if ~use_jeff_realignment_test
-        fprintf('\n               ***** DISCARDING TARGET JITTER COMPENSATION FOR TEST FILE *****\n\n');
-        target_offsets_test = 0 * target_offsets_test;
-        sample_offsets_test = 0 * sample_offsets_test;
-    end
-    
-    %hist(target_offsets', 40);
     
     %% Draw the pretty full-res spectrogram and the targets
     if 1
@@ -389,7 +403,7 @@ for times_of_interest = times_of_interest_separate
                 'EdgeColor', [1 0 0]);
         end
         
-        set(gca, 'xlim', [(times_of_interest(1)*1000-(time_window_steps)*fft_time_shift_seconds*1000) 1000*times_of_interest(1)]);
+        %set(gca, 'xlim', [(times_of_interest(1)*1000-(time_window_steps)*fft_time_shift_seconds*1000) 1000*times_of_interest(1)]);
 
         set(gca, 'YLim', [0 10]);
 
@@ -504,7 +518,7 @@ for times_of_interest = times_of_interest_separate
     % Once the validation set performance stops improving, it seldom seems to
     % get better, so keep this small.
     net.trainParam.max_fail = 3;
-        
+
     tic
     %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
     [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
@@ -565,10 +579,10 @@ for times_of_interest = times_of_interest_separate
         trigger_thresholds);
     
     
-    figure(32);
-    plot(times(time_window_steps:end), squeeze(testout(1,:,:)), 'b', ...
-        times([time_window_steps end]), [1 1]*trigger_thresholds, 'r');
-    title('Network output and threshold');
+    %figure(32);
+    %plot(times(time_window_steps:end), squeeze(testout(1,:,:)), 'b', ...
+    %    times([time_window_steps end]), [1 1]*trigger_thresholds, 'r');
+    %title('Network output and threshold');
     
     SHOW_THRESHOLDS = true;
     SHOW_ONLY_TRUE_HITS = true;
@@ -580,7 +594,8 @@ for times_of_interest = times_of_interest_separate
     sample_offsets_net = zeros(ntsteps_of_interest, nsongs);
     for i = 1:ntsteps_of_interest
         figure(6);
-        subplot(ntsteps_of_interest, 1, i);
+        %subplot(ntsteps_of_interest, 1, i);
+        subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
         testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
         leftbar = zeros(time_window_steps-1, nsongs);
         
@@ -645,6 +660,8 @@ for times_of_interest = times_of_interest_separate
         end
         xlabel('Time (ms)');
         ylabel('Song');
+        title(sprintf('Detection events for %d ms', round(1000*times_of_interest(i))));
+
         if ~SORT_BY_ALIGNMENT
             text(time_window/2*1000, ntrainsongs/2, 'train', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
