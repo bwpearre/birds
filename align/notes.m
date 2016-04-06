@@ -144,3 +144,13 @@ detector_lny64_0.3s_frame1.5ms_4hid_1000train_2.mat
 At 300 ms:        True positive    negative
      output pos      99.83498%     4.62e-4%
             neg       0.165%       99.99954%
+            
+000 abc
+001 ab c
+010 ac b
+011 a bc
+100 bc a
+101 b ac
+110 c ab
+111   abc
+
