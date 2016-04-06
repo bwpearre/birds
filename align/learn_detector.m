@@ -8,7 +8,7 @@ clear;
 ntrain = 1000;
 nhidden_per_output = 4;
 fft_time_shift_seconds_target = 0.0015;
-nonsinging_fraction = 1;
+nonsinging_fraction = 0.1;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -49,7 +49,7 @@ if 1
     %times_of_interest_separate = [ 0.15:0.05:0.4 ];
     %times_of_interest_separate = [ 0.3 ];
     times_of_interest_separate = [0.15:0.05:0.4];
-    times_of_interest_separate = repmat(times_of_interest_separate, 1, 10);
+    times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 10)];
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -94,7 +94,7 @@ disp(sprintf('Bird: %s', BIRD));
 
 rng('shuffle');
 
-[nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
+[orig_nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
 
 %% Downsample the data
@@ -102,7 +102,7 @@ rng('shuffle');
 if agg_audio.fs ~= samplerate
         disp(sprintf('Resampling data from %g Hz to %g Hz...', agg_audio.fs, samplerate));
         [a b] = rat(samplerate/agg_audio.fs);
-
+        
         MIC_DATA = double(MIC_DATA);
         MIC_DATA = resample(MIC_DATA, a, b);
 end
@@ -136,22 +136,42 @@ need_n_songs = size(nonmatchingsongs, 2);
 
 fprintf('Borrowing %d non-matching songs from ''%s/%s''...\n', need_n_songs, nonmatchingloc, nonmatchingbird);
 
-% incorporate nonmatching data
-done = false;
-nnewsongs = 0;
-for i = 1:length(l)
-        if ~strncmp(l(i).name(end:-1:1), 'vaw.', 4)
-                continue;
-        end
-        %fprintf('reading ''%s''\n', l(i).name);
-        [foo, nonmatchingfs] = audioread(sprintf('%s/%s/%s', nonmatchingloc, nonmatchingbird, l(i).name));
 
+if false
+    %%%%% REWRITE NONMATCHING STUFF %%%%%
+    
+    NONMATCHINGBIRD='lg373rblk';
+    nonmatch = load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
+    NONMATCHING_MIC_DATA = nonmatch.audio.data(1:orig_nsamples_per_song, :);
+    NONMATCHING_FS = nonmatch.audio.fs;
+    if NONMATCHING_FS ~= samplerate
+        disp(sprintf('Resampling nonmatching data from %g Hz to %g Hz...', NONMATCHING_FS, samplerate));
+        [a b] = rat(samplerate/NONMATCHING_FS);
+        
+        NONMATCHING_MIC_DATA = double(NONMATCHING_MIC_DATA);
+        NONMATCHING_MIC_DATA = resample(NONMATCHING_MIC_DATA, a, b);
+    end
+    NONMATCHING_MIC_DATA = NONMATCHING_MIC_DATA / max(max(max(NONMATCHING_MIC_DATA)), -min(min(NONMATCHING_MIC_DATA)));
+    nonmatchingsongs = NONMATCHING_MIC_DATA;
+    disp(sprintf('Loaded %d songs from %s', size(nonmatchingsongs, 2), nonmatchingbird));
+
+else
+    % incorporate nonmatching data
+    done = false;
+    nnewsongs = 0;
+    for i = 1:length(l)
+        if ~strncmp(l(i).name(end:-1:1), 'vaw.', 4)
+            continue;
+        end
+        fprintf('reading ''%s''\n', l(i).name);
+        [foo, nonmatchingfs] = audioread(sprintf('%s/%s/%s', nonmatchingloc, nonmatchingbird, l(i).name));
+        
         % downsample
         nonmatching_resample = round([samplerate nonmatchingfs]);
         foo = resample(foo, round(samplerate), round(nonmatchingfs));
         % normalise
         foo = foo / max(max(foo), -min(foo));
-
+        
         % append to the extant audio
         songs_available = floor(length(foo) / nsamples_per_song);
         foo = reshape(foo(1:(songs_available*nsamples_per_song)), nsamples_per_song, songs_available);
@@ -162,18 +182,20 @@ for i = 1:length(l)
         nnewsongs = nnewsongs + songs_available;
         need_n_songs = need_n_songs - take_n_songs;
         if need_n_songs <= 0
-                break;
+            break;
         end
+    end
 end
 
+nsongs = size(MIC_DATA, 2)
 
-nsongs = size(MIC_DATA, 2);
+MIC_DATA = [MIC_DATA nonmatchingsongs];
 
+nmatchingsongs
 
-MIC_DATA = double([MIC_DATA nonmatchingsongs]);
-disp('Bandpass-filtering the data...');
-[B A] = butter(4, [0.03 0.9]);
-MIC_DATA = single(filtfilt(B, A, MIC_DATA));
+%disp('Bandpass-filtering the data...');
+%[B A] = butter(4, [0.03 0.9]);
+%MIC_DATA = single(filtfilt(B, A, double(MIC_DATA)));
 
 
 % Compute the spectrogram using original parameters (probably far from
@@ -702,20 +724,28 @@ for times_of_interest = times_of_interest_separate
     
     figure(9);
     confusion = load('confusion_log.txt');
-    [binvals bini binj] = unique(confusion(:,1));
-    colours = distinguishable_colors(length(binvals));
+    [sylly bini binj] = unique(confusion(:,1));
+    xtickl = {};
+    for i = 1:length(sylly)
+        xtickl{i} = sprintf('t^*_i');
+    end
+    colours = distinguishable_colors(length(sylly));
     offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.02;
+    
     subplot(1,2,1);
     scatter(confusion(:,1)+offsets, confusion(:,2)*100, [], colours(binj,:), 'filled');
     xlabel('Syllable time');
     ylabel('True Positives %');
     title('True Positives');
+    set(gca, 'xtick', sylly, 'xticklabel', xtickl);
+
     subplot(1,2,2);
     scatter(confusion(:,1)+offsets, confusion(:,3)*100, [], colours(binj,:), 'filled');
     xlabel('Syllable time');
     ylabel('False Positives %');
     title('False Positives');
-    
+    set(gca, 'xtick', sylly, 'xticklabel', xtickl);
+
     
     
     % Draw the hidden units' weights.  Let the user make these square or not
