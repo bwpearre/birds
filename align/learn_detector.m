@@ -28,7 +28,6 @@ time_window = 0.03;
 
 
 
-rng('shuffle');
 
 p = fileparts(mfilename('fullpath'));
 addpath(sprintf('%s/../lib', p));
@@ -279,6 +278,7 @@ testsongs = randomsongs(ntrainsongs+1:end);
 separate_syllable_counter = 0;
 for times_of_interest = times_of_interest_separate
     
+    %rng('shuffle');
     randomsongs = randperm(nsongs);
     trainsongs = randomsongs(1:ntrainsongs);
     testsongs = randomsongs(ntrainsongs+1:end);
@@ -789,7 +789,7 @@ for times_of_interest = times_of_interest_separate
     
     % Let's standardise order for each set of test songs, so that we can compare multiple training
     % runs of the detector on the same songs:
-    rng(137);
+    %rng(137);
     
     if testfile_include_nonsinging
         % Re-permute all songs with a new random order
