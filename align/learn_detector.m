@@ -48,8 +48,8 @@ if 1
     times_of_interest_separate = NaN;
     %times_of_interest_separate = [ 0.15:0.05:0.4 ];
     %times_of_interest_separate = [ 0.3 ];
-    times_of_interest_separate = [0.15:0.05:0.4];
-    times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 10)];
+    times_of_interest_separate = [0.15:0.05:0.4]
+    times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 100)];
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -193,9 +193,9 @@ MIC_DATA = [MIC_DATA nonmatchingsongs];
 
 nmatchingsongs
 
-%disp('Bandpass-filtering the data...');
-%[B A] = butter(4, [0.03 0.9]);
-%MIC_DATA = single(filtfilt(B, A, double(MIC_DATA)));
+disp('Bandpass-filtering the data...');
+[B A] = butter(4, [0.03 0.9]);
+MIC_DATA = single(filtfilt(B, A, double(MIC_DATA)));
 
 
 % Compute the spectrogram using original parameters (probably far from
@@ -604,7 +604,8 @@ for times_of_interest = times_of_interest_separate
         fft_time_shift_seconds, ...
         time_window_steps, ...
         songs_with_hits(foo), ...
-        trigger_thresholds);
+        trigger_thresholds, ...
+        train_record);
     
     
     %figure(32);
@@ -721,29 +722,39 @@ for times_of_interest = times_of_interest_separate
     end
 
     
-    
+    %% Plot the figure of errors for all networks...
     figure(9);
-    confusion = load('confusion_log.txt');
+    confusion = load('confusion_log_perf.txt');
     [sylly bini binj] = unique(confusion(:,1));
     xtickl = {};
     for i = 1:length(sylly)
-        xtickl{i} = sprintf('t^*_i');
+        xtickl{i} = sprintf('t^*_%d', i);
     end
     colours = distinguishable_colors(length(sylly));
-    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.02;
-    
+    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.01;
+    if size(confusion, 2) >= 4
+        sizes = (mapminmax(-confusion(:,4)')'+1.1)*20;
+    else
+        sizes = [];
+    end
     subplot(1,2,1);
-    scatter(confusion(:,1)+offsets, confusion(:,2)*100, [], colours(binj,:), 'filled');
-    xlabel('Syllable time');
+    scatter(confusion(:,1)+offsets, confusion(:,2)*100, sizes, colours(binj,:), 'filled');
+    xlabel('Test syllable');
     ylabel('True Positives %');
-    title('True Positives');
+    title('True Positive Rate');
+    if min(sylly) ~= max(sylly)
+        set(gca, 'xlim', [min(sylly)-0.02 max(sylly)+0.02]);
+    end
     set(gca, 'xtick', sylly, 'xticklabel', xtickl);
 
     subplot(1,2,2);
-    scatter(confusion(:,1)+offsets, confusion(:,3)*100, [], colours(binj,:), 'filled');
-    xlabel('Syllable time');
+    scatter(confusion(:,1)+offsets, confusion(:,3)*100, sizes, colours(binj,:), 'filled');
+    xlabel('Test syllable');
     ylabel('False Positives %');
-    title('False Positives');
+    title('False Positive Rate');
+    if min(sylly) ~= max(sylly)
+        set(gca, 'xlim', [min(sylly)-0.02 max(sylly)+0.02]);
+    end
     set(gca, 'xtick', sylly, 'xticklabel', xtickl);
 
     
