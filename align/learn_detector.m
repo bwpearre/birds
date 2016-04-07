@@ -727,15 +727,17 @@ for times_of_interest = times_of_interest_separate
     confusion = load('confusion_log_perf.txt');
     [sylly bini binj] = unique(confusion(:,1));
     xtickl = {};
+    sylly_counts = [];
     for i = 1:length(sylly)
         xtickl{i} = sprintf('t^*_%d', i);
+        sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
     end
     colours = distinguishable_colors(length(sylly));
-    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.01;
-    if size(confusion, 2) >= 4
+    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.015;
+    if size(confusion, 2) >= 4 & false
         sizes = (mapminmax(-confusion(:,4)')'+1.1)*20;
     else
-        sizes = [];
+        sizes = 10;
     end
     subplot(1,2,1);
     scatter(confusion(:,1)+offsets, confusion(:,2)*100, sizes, colours(binj,:), 'filled');
@@ -743,7 +745,7 @@ for times_of_interest = times_of_interest_separate
     ylabel('True Positives %');
     title('True Positive Rate');
     if min(sylly) ~= max(sylly)
-        set(gca, 'xlim', [min(sylly)-0.02 max(sylly)+0.02]);
+        set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
     end
     set(gca, 'xtick', sylly, 'xticklabel', xtickl);
 
@@ -753,9 +755,11 @@ for times_of_interest = times_of_interest_separate
     ylabel('False Positives %');
     title('False Positive Rate');
     if min(sylly) ~= max(sylly)
-        set(gca, 'xlim', [min(sylly)-0.02 max(sylly)+0.02]);
+        set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
     end
     set(gca, 'xtick', sylly, 'xticklabel', xtickl);
+    sylly_counts
+
 
     
     
