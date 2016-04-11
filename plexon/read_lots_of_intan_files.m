@@ -7,6 +7,9 @@ if length(dd) == 0
     return;
 end
 
+[~, dirn, ~] = fileparts(dirname);
+e1 = strsplit(dirn, '-');
+
 
 alldata = [];
 alltimes = [];
@@ -16,6 +19,11 @@ for i = 1:length(dd)
     alltimes = [alltimes intanstruct.t_amplifier];
 end
 
+% Centre it
+for i = 1:size(alldata, 1)
+    alldata(i, :) = (alldata(i, :) - mean(alldata(i, :)));
+end
 
 intanstruct.amplifier_data = alldata;
 intanstruct.t_amplifier = alltimes;
+intanstruct.experiment_date = datenum([ str2double(e1{2}) str2double(e1{3}) str2double(e1{4}) 0 0 0]);

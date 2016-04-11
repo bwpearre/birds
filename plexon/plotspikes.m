@@ -1,26 +1,29 @@
-channels = goodchannels;
+function [] = plotspikes(sessions, goodsessions, channels, window);
+
 nchannels = length(channels);
 colours = distinguishable_colors(nchannels);
-for channelnum = 1:nchannels
-    channel = channels(channelnum);
-    
-    
-    if 1
-        [ pks, locs ] = findpeaks(-adz(:, channel), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
+nsessions = length(find(goodsessions));
+
+sessioncounter = 0;
+for session = find(goodsessions)
+    sessioncounter = sessioncounter+1;
+    fs = sessions{session}.data.frequency_parameters.amplifier_sample_rate;
+
+    for channelnum = 1:nchannels
+        channel = channels(channelnum);
+        
         figure(1);
-        %subplot(nchannels, 3, 3*channelnum);
-        subplot(nchannels, subplotx, subplotx*(channelnum-1)+[subplotx]);
+        subplot(nchannels, nsessions, nsessions*(channelnum-1)+sessioncounter);
         %subplot(nchannels, 1, channelnum);
         cla;
         
+        ad = sessions{session}.data.amplifier_data;
+        locs = sessions{session}.peaklocs{channel};        
         set = zeros(length([window(1):1/fs:window(2)]), length(locs));
-        for j = 1:length(locs)<
+        for j = 1:length(locs)
             try
                 indices = locs(j)+window(1)*fs : locs(j)+window(2)*fs;
-%                 plot([window(1):1/fs:window(2)]*1e3, ...
-%                     ad(indices, channel), ...
-%                     'color', colours(channelnum,:));
-                set(:, j) = ad(indices, channel);
+                set(:, j) = ad(channel, indices);
             catch ME
             end
         end
@@ -37,38 +40,23 @@ for channelnum = 1:nchannels
             {'color', colours(channelnum,:)}, 1);
         grid on;
         axis tight;
+        legend(sprintf('n=%d', length(locs)));
         
         %set(gca, 'YLim', [-0.2 0.2]);
-    
-            
+        
+        
         if channelnum == 1
-            title(experiment_desc);
+            title(sessions{session}.experiment_desc);
         end
+        
         if channelnum == nchannels
             xlabel('milliseconds');
         end
+        if sessioncounter == 1
+            ylabel('microvolts');
+        end
         %ylabel('millivolts');
-        legend(sprintf('%d', channel));
+        %legend(sprintf('%d', channel));
         
     end
-    
-    
-    
-    
-    
-    figure(1);
-    subplot(nchannels, subplotx, subplotx*(channelnum-1)+[1:subplotx-1]);
-    %subplot(nchannels, 1, channelnum);
-    plot(t_amplifier*1e3, ad(:,channel), 'color', colours(channelnum,:));
-    axis tight;
-    if channelnum == 1
-        title(experiment_desc);
-    end
-    if channelnum == nchannels
-        xlabel('milliseconds');
-    end
-    ylabel('millivolts');
-    legend(sprintf('%d', channel));    
-    
 end
-
