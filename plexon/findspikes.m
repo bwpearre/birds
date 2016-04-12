@@ -15,8 +15,9 @@ fs = frequency_parameters.amplifier_sample_rate;
 %    ad(:,channel) = ad(:,channel)-mean(ad(:,channel));
 %end
 
+% This is zscore, since the data are already zero-mean.  This is faster:
+adz = bsxfun(@rdivide, stuff.amplifier_data, std(stuff.amplifier_data, 0, 2));
 
-adz = zscore(stuff.amplifier_data, 0, 2);
 
 goodchannels = [];
 
@@ -29,7 +30,7 @@ for channelnum = 1:nchannels
         'MinPeakDistance', 0.003*fs);
     alllocs{channelnum} = locs;
     
-    if length(locs) > 50
+    if length(locs) > 10
         goodchannels(end+1) = channel;
     end
 end

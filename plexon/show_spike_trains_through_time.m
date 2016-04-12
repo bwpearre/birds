@@ -7,8 +7,9 @@ clear;
 bird = 'lw94rhp'
 
 channels = 1:16;
-%channels = [1 8 10 12 16]
-threshold = 5;
+%channels = [1 10 14 15 16];
+channels = [1 8 16]
+threshold = 6;
 window = [-0.001 0.002];
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
