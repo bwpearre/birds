@@ -6,9 +6,9 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 ntrain = 1000;
-nhidden_per_output = 4;
-fft_time_shift_seconds_target = 0.005;
-nonsinging_fraction = 0;
+nhidden_per_output = 2;
+fft_time_shift_seconds_target = 0.002;
+nonsinging_fraction = 0; % Doesn't work right now...
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -714,27 +714,30 @@ for times_of_interest = times_of_interest_separate
                 
             legend('Train', 'Test', 'location', 'SouthWest');
         else
-            % Find the longest contiguous blocks of training and test songs:
+            % Find the longest contiguous blocks of training and test songs,
+            % and print the legend therein:
             s = img(:,1,1); % s is now 0 for train, 1 for test
             a = diff(s);
             b = find([a; Inf] ~= 0);
             c = diff([0; b]);
             d = cumsum(c);
-            if a(1) % parity: now d always lists the size of the first training region in even positions
-                d = [0; d];
-            end
             [e f] = max(c(2:2:end)); % even: test
             f = f * 2;
-            testcentre = mean(d(f-1:f))
+            testcentre = mean(d(f-1:f));
             
             [g h] = max(c(1:2:end)); % odd: train
             h = h * 2 - 1;
-            traincentre = mean(d(h-1:h))
+            traincentre = mean(d(h-1:h));
             
-            text(time_window/2*1000, traincentre, 'train', ...
-                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-            text(time_window/2*1000, testcentre, 'test', ...
-                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+            if s(1) % Fix parity if it looks to be wrong...
+                foo = testcentre;
+                testcentre = traincentre;
+                traincentre = foo;
+            end
+            text(time_window/2*1000+3, traincentre, 'train', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 0);
+            text(time_window/2*1000+3, testcentre, 'test', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 0);
         end
     end
     
