@@ -4,7 +4,7 @@ JITTERSD = true;
 
 
 framesize = [0.5 1 1.5 2 4];
-latencies_legend = {'Ideal', 'LabView', 'Swift+serial'};
+latencies_legend = {'Ideal', 'LabVIEW', 'Swift+serial'};
 latencies_delta = [ 0.249 0.159 0.658 1.43 1.875;
     0.521 0.945 1.516 2.678 3.287;
     1.003 1.177 0.878 2.878 1.403];
@@ -165,7 +165,7 @@ jitters_ste95 = 1.96 * jitters_std / sqrt(length(syllables))
 
 % delta; bird
 legend_det = {'\delta-syllable', 'Trigger t^*_4'};
-detectors = {'Ideal', 'LabView','Swift+serial','Swift+audio','Matlab+serial','Matlab+audio'};
+detectors = {'Ideal', 'LabVIEW','Swift+serial','Swift+audio','MATLAB+serial','MATLAB+audio'};
 latencies_det = [ 0.658 1.516 0.878 5.886 8.059 12.491;
     -1.032 -0.182 -0.075 1.242 3.794 8.367];
 jitters_det = [ 0.377 0.691 1.626 2.552 2.324 5.874;
