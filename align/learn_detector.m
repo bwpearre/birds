@@ -7,8 +7,8 @@ clear;
 
 ntrain = 1000;
 nhidden_per_output = 4;
-fft_time_shift_seconds_target = 0.0015;
-nonsinging_fraction = 0.1;
+fft_time_shift_seconds_target = 0.005;
+nonsinging_fraction = 0;
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -48,8 +48,9 @@ if 1
     times_of_interest_separate = NaN;
     %times_of_interest_separate = [ 0.15:0.05:0.4 ];
     %times_of_interest_separate = [ 0.3 ];
-    times_of_interest_separate = [0.15:0.05:0.4]
-    times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 100)];
+    %times_of_interest_separate = [0.15:0.05:0.4]
+    times_of_interest_separate = [0.15 0.3 0.4];
+    %times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 100)];
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -624,7 +625,7 @@ for times_of_interest = times_of_interest_separate
     for i = 1:ntsteps_of_interest
         figure(6);
         subplot(ntsteps_of_interest, 1, i);
-        %subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
+        subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
         testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
         leftbar = zeros(time_window_steps-1, nsongs);
         
@@ -733,27 +734,28 @@ for times_of_interest = times_of_interest_separate
         sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
     end
     colours = distinguishable_colors(length(sylly));
-    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.015;
+    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.02;
     if size(confusion, 2) >= 4 & false
-        sizes = (mapminmax(-confusion(:,4)')'+1.1)*20;
+        sizes = (mapminmax(-confusion(:,4)')'+1.1)*8;
     else
-        sizes = 10;
+        sizes = 3;
     end
     subplot(1,2,1);
     scatter(confusion(:,1)+offsets, confusion(:,2)*100, sizes, colours(binj,:), 'filled');
     xlabel('Test syllable');
     ylabel('True Positives %');
-    title('True Positive Rate');
+    title('Correct detections');
     if min(sylly) ~= max(sylly)
         set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
     end
+    %set(gca, 'ylim', [0 100]);
     set(gca, 'xtick', sylly, 'xticklabel', xtickl);
 
     subplot(1,2,2);
     scatter(confusion(:,1)+offsets, confusion(:,3)*100, sizes, colours(binj,:), 'filled');
     xlabel('Test syllable');
     ylabel('False Positives %');
-    title('False Positive Rate');
+    title('Incorrect detections');
     if min(sylly) ~= max(sylly)
         set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
     end
