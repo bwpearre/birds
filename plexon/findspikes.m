@@ -1,4 +1,4 @@
-function [ goodchannels, locs ] = findspikes(stuff, channels, threshold);
+function [ goodchannels, alllocs ] = findspikes(stuff, channels, threshold);
 
 amplifier_data = stuff.amplifier_data;
 frequency_parameters = stuff.frequency_parameters;
@@ -7,43 +7,30 @@ frequency_parameters = stuff.frequency_parameters;
 fs = frequency_parameters.amplifier_sample_rate;
 
 
-ad = (amplifier_data')/1e3;
 
 
-[B A] = ellip(2, .000001, 30, [10 3000]/(fs/2));
-for channel = 1:nchannels
+%[B A] = ellip(2, .000001, 30, [10 3000]/(fs/2));
+%for channel = 1:nchannels
     %ad(:,i) = filtfilt(B, A, ad(:,i));
-    ad(:,channel) = ad(:,channel)-mean(ad(:,channel));
-end
+%    ad(:,channel) = ad(:,channel)-mean(ad(:,channel));
+%end
+
+% This is zscore, since the data are already zero-mean.  This is faster:
+adz = bsxfun(@rdivide, stuff.amplifier_data, std(stuff.amplifier_data, 0, 2));
 
 
-adz = zscore(ad);
+goodchannels = [];
 
+nchannels = length(channels);
+for channelnum = 1:nchannels
+    channel = channels(channelnum);
     
-if length(channels) == 16
+    [ pks, locs ] = findpeaks(-adz(channel, :), ...
+        'MinPeakHeight', threshold, ...
+        'MinPeakDistance', 0.003*fs);
+    alllocs{channelnum} = locs;
     
-    goodchannels = [];    
-    
-    
-    nchannels = length(channels);
-    for channelnum = 1:nchannels
-        channel = channels(channelnum);
-        
-        [ pks, locs ] = findpeaks(-adz(:, channel), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
-        alllocs{channelnum} = locs;
-        
-        if length(locs) > 5
-            goodchannels(end+1) = channel;
-            
-            for j = 1:length(locs)
-                try
-                    indices = locs(j)+window(1)*fs : locs(j)+window(2)*fs;
-                catch ME
-                end
-            end
-        end
+    if length(locs) > 10
+        goodchannels(end+1) = channel;
     end
-else
-    goodchannels = channels;
 end
-

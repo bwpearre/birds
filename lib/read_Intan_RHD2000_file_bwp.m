@@ -19,8 +19,8 @@ function [ out ] = read_Intan_RHD2000_file_bwp(filename)
 
 if nargin
     [a b c] = fileparts(filename);
-    file = strcat(b, '.', c)
-    path = a
+    file = strcat(b, '.', c);
+    path = a;
     filterindex = 1;
 else
     [file, path, filterindex] = uigetfile('*.rhd', 'Select an RHD2000 Data File', 'MultiSelect', 'off');
@@ -49,10 +49,6 @@ end
 data_file_main_version_number = fread(fid, 1, 'int16');
 data_file_secondary_version_number = fread(fid, 1, 'int16');
 
-fprintf(1, '\n');
-fprintf(1, 'Reading Intan Technologies RHD2000 Data File, Version %d.%d\n', ...
-    data_file_main_version_number, data_file_secondary_version_number);
-fprintf(1, '\n');
 
 % Read information of sampling rate and amplifier frequency settings.
 sample_rate = fread(fid, 1, 'single');
@@ -227,22 +223,6 @@ num_board_adc_channels = board_adc_index - 1;
 num_board_dig_in_channels = board_dig_in_index - 1;
 num_board_dig_out_channels = board_dig_out_index - 1;
 
-fprintf(1, 'Found %d amplifier channel%s.\n', ...
-    num_amplifier_channels, plural(num_amplifier_channels));
-fprintf(1, 'Found %d auxiliary input channel%s.\n', ...
-    num_aux_input_channels, plural(num_aux_input_channels));
-fprintf(1, 'Found %d supply voltage channel%s.\n', ...
-    num_supply_voltage_channels, plural(num_supply_voltage_channels));
-fprintf(1, 'Found %d board ADC channel%s.\n', ...
-    num_board_adc_channels, plural(num_board_adc_channels));
-fprintf(1, 'Found %d board digital input channel%s.\n', ...
-    num_board_dig_in_channels, plural(num_board_dig_in_channels));
-fprintf(1, 'Found %d board digital output channel%s.\n', ...
-    num_board_dig_out_channels, plural(num_board_dig_out_channels));
-fprintf(1, 'Found %d temperature sensors channel%s.\n', ...
-    num_temp_sensor_channels, plural(num_temp_sensor_channels));
-fprintf(1, '\n');
-
 % Determine how many samples the data file contains.
 
 % Each data block contains 60 amplifier samples.
@@ -288,11 +268,9 @@ record_time = num_amplifier_samples / sample_rate;
 if (data_present)
     fprintf(1, 'File contains %0.3f seconds of data.  Amplifiers were sampled at %0.2f kS/s.\n', ...
         record_time, sample_rate / 1000);
-    fprintf(1, '\n');
 else
     fprintf(1, 'Header file contains no data.  Amplifiers were sampled at %0.2f kS/s.\n', ...
         sample_rate / 1000);
-    fprintf(1, '\n');
 end
 
 if (data_present)
@@ -311,7 +289,6 @@ if (data_present)
     board_dig_out_raw = zeros(1, num_board_dig_out_samples);
 
     % Read sampled data from file.
-    fprintf(1, 'Reading data from file...\n');
 
     amplifier_index = 1;
     aux_input_index = 1;
@@ -401,7 +378,6 @@ if (data_present)
     % Check for gaps in timestamps.
     num_gaps = sum(diff(t_amplifier) ~= 1);
     if (num_gaps == 0)
-        fprintf(1, 'No missing timestamps in data.\n');
     else
         fprintf(1, 'Warning: %d gaps in timestamp data found.  Time scale will not be uniform!\n', ...
             num_gaps);
@@ -418,7 +394,6 @@ if (data_present)
     % If the software notch filter was selected during the recording, apply the
     % same notch filter to amplifier data here.
     if (notch_filter_frequency > 0)
-        fprintf(1, 'Applying notch filter...\n');
 
         print_increment = 10;
         percent_done = print_increment;
@@ -428,7 +403,6 @@ if (data_present)
 
             fraction_done = 100 * (i / num_amplifier_channels);
             if (fraction_done >= percent_done)
-                fprintf(1, '%d%% done...\n', percent_done);
                 percent_done = percent_done + print_increment;
             end
 

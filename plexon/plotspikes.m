@@ -1,74 +1,82 @@
-channels = goodchannels;
+function [] = plotspikes(sessions, goodsessions, channels, window);
+
 nchannels = length(channels);
 colours = distinguishable_colors(nchannels);
-for channelnum = 1:nchannels
-    channel = channels(channelnum);
-    
-    
-    if 1
-        [ pks, locs ] = findpeaks(-adz(:, channel), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
+nsessions = length(find(goodsessions));
+
+sessioncounter = 0;
+xlims = [];
+ylims = [];
+for session = find(goodsessions)
+    sessioncounter = sessioncounter+1;
+    fs = sessions{session}.data.frequency_parameters.amplifier_sample_rate;
+
+    for channelnum = 1:nchannels
+        channel = channels(channelnum);
+        
         figure(1);
-        %subplot(nchannels, 3, 3*channelnum);
-        subplot(nchannels, subplotx, subplotx*(channelnum-1)+[subplotx]);
+        subplot(nchannels, nsessions, nsessions*(channelnum-1)+sessioncounter);
         %subplot(nchannels, 1, channelnum);
         cla;
         
-        set = zeros(length([window(1):1/fs:window(2)]), length(locs));
-        for j = 1:length(locs)<
+        ad = sessions{session}.data.amplifier_data;
+        locs = sessions{session}.peaklocs{channelnum};        
+        spikeset = zeros(length([window(1):1/fs:window(2)]), length(locs));
+        for j = 1:length(locs)
             try
                 indices = locs(j)+window(1)*fs : locs(j)+window(2)*fs;
-%                 plot([window(1):1/fs:window(2)]*1e3, ...
-%                     ad(indices, channel), ...
-%                     'color', colours(channelnum,:));
-                set(:, j) = ad(indices, channel);
+                spikeset(:, j) = ad(channel, indices);
             catch ME
             end
         end
         
         n = length(locs);
-        mu = mean(set, 2);
-        sigma = std(set, 0, 2);
+        mu = mean(spikeset, 2);
+        sigma = std(spikeset, 0, 2);
         ste = sigma / sqrt(n);
         ste95 = ste * 1.96;
         
-        shadedErrorBar([window(1):1/fs:window(2)]*1e3, ...
-            mu, ...
-            ste95, ...
-            {'color', colours(channelnum,:)}, 1);
+        if n > 10
+            if true
+                shadedErrorBar([window(1):1/fs:window(2)]*1e3, ...
+                    mu, ...
+                    ste95, ...
+                    {'color', colours(channelnum,:)}, 1);
+            else
+                plot([window(1):1/fs:window(2)]*1e3, ...
+                    spikeset, ...
+                    'color', colours(channelnum,:));
+            end
+        end
         grid on;
         axis tight;
+        ylims = [ylims; get(gca, 'YLim')];
+        legend(sprintf('n=%d', length(locs)), 'Location', 'SouthEast');        
         
-        %set(gca, 'YLim', [-0.2 0.2]);
-    
-            
         if channelnum == 1
-            title(experiment_desc);
+            title(strcat(sessions{session}.experiment_desc, ...
+                sprintf(' (%d s)', round(sessions{session}.data.t_total_s))));
         end
+        
         if channelnum == nchannels
             xlabel('milliseconds');
         end
+        if sessioncounter == 1
+            ylabel(sprintf('ch %d, \\mu V', channel));
+        end
         %ylabel('millivolts');
-        legend(sprintf('%d', channel));
+        %legend(sprintf('%d', channel));
         
     end
-    
-    
-    
-    
-    
-    figure(1);
-    subplot(nchannels, subplotx, subplotx*(channelnum-1)+[1:subplotx-1]);
-    %subplot(nchannels, 1, channelnum);
-    plot(t_amplifier*1e3, ad(:,channel), 'color', colours(channelnum,:));
-    axis tight;
-    if channelnum == 1
-        title(experiment_desc);
-    end
-    if channelnum == nchannels
-        xlabel('milliseconds');
-    end
-    ylabel('millivolts');
-    legend(sprintf('%d', channel));    
-    
 end
 
+ylims = [min(ylims(:,1))-eps max(ylims(:,2))+eps];
+sessioncounter = 0;
+for session = find(goodsessions)
+    sessioncounter = sessioncounter+1;
+    for channelnum = 1:nchannels
+        channel = channels(channelnum);
+        subplot(nchannels, nsessions, nsessions*(channelnum-1)+sessioncounter);
+        set(gca, 'YLim', ylims);
+    end
+end
