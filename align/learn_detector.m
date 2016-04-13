@@ -50,6 +50,7 @@ if 1
     %times_of_interest_separate = [ 0.3 ];
     %times_of_interest_separate = [0.15:0.05:0.4]
     times_of_interest_separate = [0.15 0.3 0.4];
+    times_of_interest_names = {'t^*_1', 't^*_4', 't^*_6'};
     %times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 100)];
 elseif 0
     BIRD='lg373rblk';
@@ -624,8 +625,11 @@ for times_of_interest = times_of_interest_separate
     sample_offsets_net = zeros(ntsteps_of_interest, nsongs);
     for i = 1:ntsteps_of_interest
         figure(6);
-        subplot(ntsteps_of_interest, 1, i);
-        subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
+        if false
+            subplot(ntsteps_of_interest, 1, i);
+        else
+            subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
+        end
         testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
         leftbar = zeros(time_window_steps-1, nsongs);
         
@@ -690,12 +694,46 @@ for times_of_interest = times_of_interest_separate
         end
         xlabel('Time (ms)');
         ylabel('Song');
-        title(sprintf('Detection events for %d ms', round(1000*times_of_interest(i))));
+        %title(sprintf('Detection events for %d ms', round(1000*times_of_interest(i))));
+        title(sprintf('Detection events: %s', times_of_interest_names{separate_syllable_counter}));
 
         if ~SORT_BY_ALIGNMENT
             text(time_window/2*1000, ntrainsongs/2, 'train', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
             text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+        elseif false
+            prevhold = ishold;
+            hold on;
+            % Plot some dummy lines for legend to pick up the colours from:
+            plot([10 10+eps], [1 2], 'color', [0 1 1], 'LineWidth', 5);
+            plot([11 11+eps], [1 2], 'color', [1 0 0], 'LineWidth', 5);
+            if ~prevhold
+                hold off;
+            end
+                
+            legend('Train', 'Test', 'location', 'SouthWest');
+        else
+            % Find the longest contiguous blocks of training and test songs:
+            s = img(:,1,1); % s is now 0 for train, 1 for test
+            a = diff(s);
+            b = find([a; Inf] ~= 0);
+            c = diff([0; b]);
+            d = cumsum(c);
+            if a(1) % parity: now d always lists the size of the first training region in even positions
+                d = [0; d];
+            end
+            [e f] = max(c(2:2:end)); % even: test
+            f = f * 2;
+            testcentre = mean(d(f-1:f))
+            
+            [g h] = max(c(1:2:end)); % odd: train
+            h = h * 2 - 1;
+            traincentre = mean(d(h-1:h))
+            
+            text(time_window/2*1000, traincentre, 'train', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+            text(time_window/2*1000, testcentre, 'test', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
         end
     end

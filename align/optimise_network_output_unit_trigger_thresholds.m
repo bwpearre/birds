@@ -88,13 +88,6 @@ for i = 1:length(tstep_of_interest)
     % all produce identical accuracy, take the average, not the lowest.
     [val pos] = find(outvals == best);
     
-    % TOTAL KLUDGE: if the cost for a slightly larger of the threshold is the same, use that
-    % instead.
-    %if pos(2) == pos(1) + 1
-    %    opt_index = pos(2);
-    %else
-    %    opt_index = pos(1);
-    %end
     % Look for the first sequence of consecutive positions:
     a = diff(pos);
     b = find([a Inf] > 1);
