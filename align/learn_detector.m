@@ -6,8 +6,8 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 ntrain = 1000;
-nhidden_per_output = 2;
-fft_time_shift_seconds_target = 0.002;
+nhidden_per_output = 4;
+fft_time_shift_seconds_target = 0.001;
 nonsinging_fraction = 0; % Doesn't work right now...
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
@@ -77,7 +77,7 @@ else
         indices = round(-0.006 * agg_audio.fs) : round(-0.005 * agg_audio.fs);
     else
         BIRD = 'delta';
-        indices = round(-0.3 * agg_audio.fs);
+        indices = round(-0.010 * agg_audio.fs);
     end
     times_of_interest_separate = 0.3;
     samples_of_interest = round(times_of_interest_separate * agg_audio.fs) + 1;
@@ -90,7 +90,11 @@ end
 disp(sprintf('Bird: %s', BIRD));
 
 
-
+if ~exist('times_of_interest_names', 'var') | length(times_of_interest_names) < length(times_of_interest_separate)
+    for i = 1:length(times_of_interest_separate)
+        times_of_interest_names{i} = sprintf('t_{%d}', round(1000*times_of_interest_separate(i)));
+    end
+end
 
 
 
@@ -302,7 +306,7 @@ testsongs = randomsongs(ntrainsongs+1:end);
 separate_syllable_counter = 0;
 for times_of_interest = times_of_interest_separate
     
-    %rng('shuffle');
+    rng('shuffle');
     randomsongs = randperm(nsongs);
     trainsongs = randomsongs(1:ntrainsongs);
     testsongs = randomsongs(ntrainsongs+1:end);
@@ -702,17 +706,19 @@ for times_of_interest = times_of_interest_separate
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
             text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-        elseif false
-            prevhold = ishold;
-            hold on;
-            % Plot some dummy lines for legend to pick up the colours from:
-            plot([10 10+eps], [1 2], 'color', [0 1 1], 'LineWidth', 5);
-            plot([11 11+eps], [1 2], 'color', [1 0 0], 'LineWidth', 5);
-            if ~prevhold
-                hold off;
-            end
+        elseif true
+            if separate_syllable_counter == 1
+                prevhold = ishold;
+                hold on;
+                % Plot some dummy lines for legend to pick up the colours from:
+                plot([10 10+eps], [1 2], 'color', [0 1 1], 'LineWidth', 5);
+                plot([11 11+eps], [1 2], 'color', [1 0 0], 'LineWidth', 5);
+                if ~prevhold
+                    hold off;
+                end
                 
-            legend('Train', 'Test', 'location', 'SouthWest');
+                legend('Train', 'Test', 'location', 'NorthEast');
+            end
         else
             % Find the longest contiguous blocks of training and test songs,
             % and print the legend therein:
@@ -727,7 +733,11 @@ for times_of_interest = times_of_interest_separate
             
             [g h] = max(c(1:2:end)); % odd: train
             h = h * 2 - 1;
-            traincentre = mean(d(h-1:h));
+            try
+                traincentre = mean(d(h-1:h));
+            catch ME
+                traincentre = mean([0 d(h)]);
+            end
             
             if s(1) % Fix parity if it looks to be wrong...
                 foo = testcentre;
@@ -877,7 +887,7 @@ for times_of_interest = times_of_interest_separate
     
     % Let's standardise order for each set of test songs, so that we can compare multiple training
     % runs of the detector on the same songs:
-    %rng(137);
+    rng(137);
     
     if testfile_include_nonsinging
         % Re-permute all songs with a new random order
