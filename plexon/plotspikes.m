@@ -71,6 +71,7 @@ for session = find(goodsessions)
 end
 
 ylims = [min(ylims(:,1))-eps max(ylims(:,2))+eps];
+%ylims = [-150 100];
 sessioncounter = 0;
 for session = find(goodsessions)
     sessioncounter = sessioncounter+1;

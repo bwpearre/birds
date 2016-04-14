@@ -5,9 +5,9 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 channels = 1:16;
-%channels = [1 8 10 12 16]
+channels = [1 8 10 12 16]
 subplotx = 5;
-threshold = 5;
+threshold = 4;
 window = [-0.001 0.002];
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -40,15 +40,17 @@ read_Intan_RHD2000_file;
 fs = frequency_parameters.amplifier_sample_rate;
 
 
-ad = (amplifier_data')/1e3;
+amplifier_data = bsxfun(@minus, amplifier_data, mean(amplifier_data, 2));
+ad = amplifier_data;
+standarddev = std(ad, [], 2);
 
-[B A] = ellip(2, .000001, 30, [10 3000]/(fs/2));
+[B A] = ellip(2, .000001, 30, [300 3000]/(fs/2));
 for channel = 1:nchannels
-%    ad(:,i) = filtfilt(B, A, ad(:,i));
+%    ad(channel,:) = filtfilt(B, A, ad(channel,:));
 end
 
-
-adz = zscore(ad);
+% zscore
+adz = bsxfun(@rdivide, ad, standarddev);
 
     
 if length(channels) == 16
@@ -60,7 +62,7 @@ if length(channels) == 16
     for channelnum = 1:nchannels
         channel = channels(channelnum);
         
-        [ pks, locs ] = findpeaks(-adz(:, channel), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
+        [ pks, locs ] = findpeaks(-adz(channel,:), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
         
         if length(locs) > 5
             goodchannels(end+1) = channel;
@@ -85,28 +87,28 @@ for channelnum = 1:nchannels
     
     
     if 1
-        [ pks, locs ] = findpeaks(-adz(:, channel), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
+        [ pks, locs ] = findpeaks(-adz(channel, :), 'MinPeakHeight', threshold, 'MinPeakDistance', 0.01*fs);
         figure(1);
         %subplot(nchannels, 3, 3*channelnum);
         subplot(nchannels, subplotx, subplotx*(channelnum-1)+[subplotx]);
         %subplot(nchannels, 1, channelnum);
         cla;
         
-        set = zeros(length([window(1):1/fs:window(2)]), length(locs));
+        spikeset = zeros(length([window(1):1/fs:window(2)]), length(locs));
         for j = 1:length(locs)
             try
                 indices = locs(j)+window(1)*fs : locs(j)+window(2)*fs;
 %                 plot([window(1):1/fs:window(2)]*1e3, ...
 %                     ad(indices, channel), ...
 %                     'color', colours(channelnum,:));
-                set(:, j) = ad(indices, channel);
+                spikeset(:, j) = ad(channel, indices)';
             catch ME
             end
         end
         
         n = length(locs);
-        mu = mean(set, 2);
-        sigma = std(set, 0, 2);
+        mu = mean(spikeset, 2);
+        sigma = std(spikeset, 0, 2);
         ste = sigma / sqrt(n);
         ste95 = ste * 1.96;
         
@@ -138,7 +140,10 @@ for channelnum = 1:nchannels
     figure(1);
     subplot(nchannels, subplotx, subplotx*(channelnum-1)+[1:subplotx-1]);
     %subplot(nchannels, 1, channelnum);
-    plot(t_amplifier*1e3, ad(:,channel), 'color', colours(channelnum,:));
+    plot(t_amplifier*1e3, ad(channel, :), 'color', colours(channelnum, :));
+    hold on;
+    plot(t_amplifier([1 end])*1e3, [1 1]*-threshold*standarddev(channel), 'k');
+    hold off;
     axis tight;
     if channelnum == 1
         title(experiment_desc);
@@ -146,8 +151,8 @@ for channelnum = 1:nchannels
     if channelnum == nchannels
         xlabel('milliseconds');
     end
-    ylabel('millivolts');
-    legend(sprintf('%d', channel));    
+    ylabel('microvolts');
+    legend(sprintf('%d', channel), sprintf('%d \sigma', threshold));    
     
 end
 
