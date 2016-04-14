@@ -7,8 +7,8 @@ clear;
 
 ntrain = 1000;
 nhidden_per_output = 4;
-fft_time_shift_seconds_target = 0.0015;
-nonsinging_fraction = 0.1;
+fft_time_shift_seconds_target = 0.001;
+nonsinging_fraction = 0; % Doesn't work right now...
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
 use_nn_realignment_test = false;
@@ -48,8 +48,10 @@ if 1
     times_of_interest_separate = NaN;
     %times_of_interest_separate = [ 0.15:0.05:0.4 ];
     %times_of_interest_separate = [ 0.3 ];
-    times_of_interest_separate = [0.15:0.05:0.4]
-    times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 100)];
+    %times_of_interest_separate = [0.15:0.05:0.4]
+    times_of_interest_separate = [0.15 0.3 0.4];
+    times_of_interest_names = {'t^*_1', 't^*_4', 't^*_6'};
+    %times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 100)];
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -75,7 +77,7 @@ else
         indices = round(-0.006 * agg_audio.fs) : round(-0.005 * agg_audio.fs);
     else
         BIRD = 'delta';
-        indices = round(-0.3 * agg_audio.fs);
+        indices = round(-0.010 * agg_audio.fs);
     end
     times_of_interest_separate = 0.3;
     samples_of_interest = round(times_of_interest_separate * agg_audio.fs) + 1;
@@ -88,7 +90,11 @@ end
 disp(sprintf('Bird: %s', BIRD));
 
 
-
+if ~exist('times_of_interest_names', 'var') | length(times_of_interest_names) < length(times_of_interest_separate)
+    for i = 1:length(times_of_interest_separate)
+        times_of_interest_names{i} = sprintf('t_{%d}', round(1000*times_of_interest_separate(i)));
+    end
+end
 
 
 
@@ -300,7 +306,7 @@ testsongs = randomsongs(ntrainsongs+1:end);
 separate_syllable_counter = 0;
 for times_of_interest = times_of_interest_separate
     
-    %rng('shuffle');
+    rng('shuffle');
     randomsongs = randperm(nsongs);
     trainsongs = randomsongs(1:ntrainsongs);
     testsongs = randomsongs(ntrainsongs+1:end);
@@ -623,8 +629,11 @@ for times_of_interest = times_of_interest_separate
     sample_offsets_net = zeros(ntsteps_of_interest, nsongs);
     for i = 1:ntsteps_of_interest
         figure(6);
-        subplot(ntsteps_of_interest, 1, i);
-        %subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
+        if false
+            subplot(ntsteps_of_interest, 1, i);
+        else
+            subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
+        end
         testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
         leftbar = zeros(time_window_steps-1, nsongs);
         
@@ -689,13 +698,56 @@ for times_of_interest = times_of_interest_separate
         end
         xlabel('Time (ms)');
         ylabel('Song');
-        title(sprintf('Detection events for %d ms', round(1000*times_of_interest(i))));
+        %title(sprintf('Detection events for %d ms', round(1000*times_of_interest(i))));
+        title(sprintf('Detection events: %s', times_of_interest_names{separate_syllable_counter}));
 
         if ~SORT_BY_ALIGNMENT
             text(time_window/2*1000, ntrainsongs/2, 'train', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
             text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
+        elseif true
+            if separate_syllable_counter == 1
+                prevhold = ishold;
+                hold on;
+                % Plot some dummy lines for legend to pick up the colours from:
+                plot([10 10+eps], [1 2], 'color', [0 1 1], 'LineWidth', 5);
+                plot([11 11+eps], [1 2], 'color', [1 0 0], 'LineWidth', 5);
+                if ~prevhold
+                    hold off;
+                end
+                
+                legend('Train', 'Test', 'location', 'NorthEast');
+            end
+        else
+            % Find the longest contiguous blocks of training and test songs,
+            % and print the legend therein:
+            s = img(:,1,1); % s is now 0 for train, 1 for test
+            a = diff(s);
+            b = find([a; Inf] ~= 0);
+            c = diff([0; b]);
+            d = cumsum(c);
+            [e f] = max(c(2:2:end)); % even: test
+            f = f * 2;
+            testcentre = mean(d(f-1:f));
+            
+            [g h] = max(c(1:2:end)); % odd: train
+            h = h * 2 - 1;
+            try
+                traincentre = mean(d(h-1:h));
+            catch ME
+                traincentre = mean([0 d(h)]);
+            end
+            
+            if s(1) % Fix parity if it looks to be wrong...
+                foo = testcentre;
+                testcentre = traincentre;
+                traincentre = foo;
+            end
+            text(time_window/2*1000+3, traincentre, 'train', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 0);
+            text(time_window/2*1000+3, testcentre, 'test', ...
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 0);
         end
     end
     
@@ -733,27 +785,28 @@ for times_of_interest = times_of_interest_separate
         sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
     end
     colours = distinguishable_colors(length(sylly));
-    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.015;
+    offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.02;
     if size(confusion, 2) >= 4 & false
-        sizes = (mapminmax(-confusion(:,4)')'+1.1)*20;
+        sizes = (mapminmax(-confusion(:,4)')'+1.1)*8;
     else
-        sizes = 10;
+        sizes = 3;
     end
     subplot(1,2,1);
     scatter(confusion(:,1)+offsets, confusion(:,2)*100, sizes, colours(binj,:), 'filled');
     xlabel('Test syllable');
     ylabel('True Positives %');
-    title('True Positive Rate');
+    title('Correct detections');
     if min(sylly) ~= max(sylly)
         set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
     end
+    %set(gca, 'ylim', [0 100]);
     set(gca, 'xtick', sylly, 'xticklabel', xtickl);
 
     subplot(1,2,2);
     scatter(confusion(:,1)+offsets, confusion(:,3)*100, sizes, colours(binj,:), 'filled');
     xlabel('Test syllable');
     ylabel('False Positives %');
-    title('False Positive Rate');
+    title('Incorrect detections');
     if min(sylly) ~= max(sylly)
         set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
     end
@@ -834,7 +887,7 @@ for times_of_interest = times_of_interest_separate
     
     % Let's standardise order for each set of test songs, so that we can compare multiple training
     % runs of the detector on the same songs:
-    %rng(137);
+    rng(137);
     
     if testfile_include_nonsinging
         % Re-permute all songs with a new random order
