@@ -118,6 +118,14 @@ for i = devices_perhaps
 end
 set(handles.show_device, 'String', devices);
 
+if isfield(data, 'tdt')
+    d = data.tdt;
+elseif isfield(data, 'ni')
+    d = data.ni;
+else
+    a(0);
+end
+
 
 if data.version >= 12
     tdt_show_data = zeros(1, 16);
@@ -141,17 +149,10 @@ detrend_param_orig = data.detrend_param;
 
 if ~isequal(detrend_param, data.detrend_param)
     %data.detrend_param = detrend_param;
-    if isfield(data, 'tdt')
-        [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
-            = detrend_response(data.tdt, data, detrend_param);
-        [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
-            data, detrend_param, [], handles);
-    else
-        [ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
-            = detrend_response(data.ni, data, detrend_param);
-        [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
-            data, detrend_param, [], handles);
-    end
+    [ d.response_detrended d.response_trend data.detrend_param ] ...
+        = detrend_response(d, data, detrend_param);
+    [ d.spikes d.spikes_r ]= look_for_spikes_xcorr(d, ...
+        data, detrend_param, [], handles);
 end
 
 
@@ -197,7 +198,11 @@ if doplot
         set(handles.table1, 'Data', tabledata);
 end
 
-data.tdt.show_now = find(tdt_show_now(data.tdt.index_recording));
+if isfield(data, 'tdt')
+    d.show_now = find(tdt_show_now(d.index_recording));
+elseif isfield(data, 'ni')
+    d.show_now = 1;
+end
 
 plot_stimulation(data, handles);
 

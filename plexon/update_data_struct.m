@@ -17,7 +17,7 @@ if data.version < 8
         = chop_and_align(data.data_raw, ...
                          data.data_raw(:, 4), ...
                          data.time', ...
-                         Inf, ...
+                         data.n_repetitions, ...
                          data.fs);
     data.times_aligned = data.time - data.triggertime;
 end
@@ -93,11 +93,15 @@ end
 
 
 if data.version < 18
-
-    data.detrend_param.model = 'fourier8';
-    data.detrend_param.range = [0.003 0.025];
-    data.detrend_param.response_roi = [0.003 0.008];
-    data.detrend_param.response_baseline = [0.012 0.025];
+    
+    if isempty(detrend_param)
+        detrend_param.model = 'fourier8';
+        detrend_param.range = [0.003 0.025];
+        detrend_param.response_roi = [0.003 0.008];
+        detrend_param.response_baseline = [0.012 0.025];
+        detrend_param.response_detection_threshold = Inf;
+    end
+    data.detrend_param = detrend_param;
 end
 
 

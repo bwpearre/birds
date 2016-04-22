@@ -60,9 +60,14 @@ for session = find(goodsessions)
         
         if channelnum == nchannels
             xlabel('milliseconds');
+        else
+            set(gca, 'XTickLabel', []);
         end
         if sessioncounter == 1
             ylabel(sprintf('ch %d, \\mu V', channel));
+        end
+        if mod(sessioncounter-1, nsessions)
+            set(gca, 'YTickLabel', []);
         end
         %ylabel('millivolts');
         %legend(sprintf('%d', channel));

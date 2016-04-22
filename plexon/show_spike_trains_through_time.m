@@ -39,7 +39,8 @@ for i = 1:length(d)
     if isempty(sessions{i}.data)
         continue;
     end
-    sessions{i}.experiment_desc = sprintf('%s, day %d', bird, ...
+    sessions{i}.bird = bird;
+    sessions{i}.experiment_desc = sprintf('day %d', ...
         sessions{i}.data.experiment_date-implant_date);
     [ sessions{i}.goodchannels, sessions{i}.peaklocs ] ...
         = findspikes(sessions{i}.data, channels, threshold);
@@ -49,5 +50,8 @@ for i = 1:length(d)
     goodchannels = or(goodchannels, goodchannels_ind);
     
 end
+
+%plotchannels = find(goodchannels);
+%plotchannels = channels;
 
 plotspikes(sessions, goodsessions, find(goodchannels), window);
