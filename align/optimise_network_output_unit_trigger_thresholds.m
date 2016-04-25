@@ -34,10 +34,15 @@ tstep_of_interest_shifted = tstep_of_interest - time_window_steps + 1;
 
 ntestpts = 1000;
 
-figure(113);
-cla;
-hold on;
-colours = distinguishable_colors(length(tstep_of_interest));
+
+plotting = false;
+
+if plotting
+    figure(113);
+    cla;
+    hold on;
+    colours = distinguishable_colors(length(tstep_of_interest));
+end
 
 for i = 1:length(tstep_of_interest)
     responses = squeeze(testout(i, :, :))';
@@ -79,9 +84,6 @@ for i = 1:length(tstep_of_interest)
         end
     end
     
-    figure(113);
-    plot(testpts, 1+outvals, 'Color', colours(i,:));
-    %plot(testpts, 1+outvals_c, 'Color', 'r');
     % I've been running into a problem because with near-perfect detection over a large variety of
     % thresholds, the first one was chosen, but then with a large number of test songs, noise threw
     % one or two of them over the threshold.  So if there are several values for the threshold that
@@ -95,12 +97,19 @@ for i = 1:length(tstep_of_interest)
     opt_index = floor(mean(pos(1:c(1))));
     opt_val = testpts(opt_index);
     opt_cost = best;
-    
-    scatter(opt_val, 1+best, 100, colours(i,:), '^');
+
+    if plotting
+        figure(113);
+        plot(testpts, 1+outvals, 'Color', colours(i,:));
+        plot(testpts, 1+outvals_c, 'Color', 'r');
+        scatter(opt_val, 1+best, 100, colours(i,:), '^');
+    end
 
     if exist('midpoint', 'var') & midpoint
         optimal_thresholds(i) = testpts(opt_index);
-        scatter(optimal_thresholds(i), 1+best, 100, colours(i,:), '^');
+        if plotting
+            scatter(optimal_thresholds(i), 1+best, 100, colours(i,:), '^');
+        end
     else
         optimal_thresholds(i) = bestparam;
     end
@@ -122,8 +131,11 @@ for i = 1:length(tstep_of_interest)
         axis square;
     end
 end
-hold off;
-title('Cost vs threshold');
-xlabel('threshold');
-ylabel('cost+1');
-set(gca, 'YScale', 'log');
+
+if plotting
+    hold off;
+    title('Cost vs threshold');
+    xlabel('threshold');
+    ylabel('cost+1');
+    set(gca, 'YScale', 'log');
+end

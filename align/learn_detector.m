@@ -6,8 +6,8 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 ntrain = 1000;
-nhidden_per_output = 4;
-fft_time_shift_seconds_target = 0.001;
+nhidden_per_output = 2;
+fft_time_shift_seconds_target = 0.0015;
 nonsinging_fraction = 0; % Doesn't work right now...
 use_jeff_realignment_train = false;
 use_jeff_realignment_test = false;
@@ -46,12 +46,12 @@ if 1
     %times_of_interest_simultaneous = [ 0.15 0.2 0.25 0.3 0.35 0.4 ]
     
     times_of_interest_separate = NaN;
-    %times_of_interest_separate = [ 0.15:0.05:0.4 ];
+    times_of_interest_separate = [ 0.15:0.05:0.4 ];
     %times_of_interest_separate = [ 0.3 ];
     %times_of_interest_separate = [0.15:0.05:0.4]
-    times_of_interest_separate = [0.15 0.3 0.4];
-    times_of_interest_names = {'t^*_1', 't^*_4', 't^*_6'};
-    %times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 100)];
+    %times_of_interest_separate = [0.15 0.3 0.4];
+    times_of_interest_names = {'t^*_1', 't^*_2', 't^*_3', 't^*_4', 't^*_5', 't^*_6'};
+    times_of_interest_separate = [ repmat(times_of_interest_separate, 1, 100)];
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/roboaggregate/roboaggregate.mat');
@@ -622,6 +622,7 @@ for times_of_interest = times_of_interest_separate
     SHOW_THRESHOLDS = true;
     SHOW_ONLY_TRUE_HITS = true;
     SORT_BY_ALIGNMENT = true;
+    raster_colour_left_bar = false;
     % For each fft_time_shift_seconds of interest, draw that output unit's response to all
     % timesteps for all songs:
     
@@ -665,14 +666,16 @@ for times_of_interest = times_of_interest_separate
             img(ntrainsongs+1:end, :, 2) = img(ntrainsongs+1:end, :, 2) - trigger_img(ntrainsongs+1:end, :);
             img(ntrainsongs+1:end, :, 3) = img(ntrainsongs+1:end, :, 3) - trigger_img(ntrainsongs+1:end, :);
             
-            % Colour the leftbar according to train and test:
-            img(1:ntrainsongs, 1:time_window_steps, 3) = 1;
-            img(1:ntrainsongs, 1:time_window_steps, 2) = 1;
-            img(1:ntrainsongs, 1:time_window_steps, 1) = 0;
-            img(ntrainsongs+1:end, 1:time_window_steps, 2) = 0;
-            img(ntrainsongs+1:end, 1:time_window_steps, 1) = 1;
-            img(ntrainsongs+1:end, 1:time_window_steps, 3) = 0;
-            
+            if raster_colour_left_bar
+                % Colour the leftbar according to train and test:
+                img(1:ntrainsongs, 1:time_window_steps, 3) = 1;
+                img(1:ntrainsongs, 1:time_window_steps, 2) = 1;
+                img(1:ntrainsongs, 1:time_window_steps, 1) = 0;
+                img(ntrainsongs+1:end, 1:time_window_steps, 2) = 0;
+                img(ntrainsongs+1:end, 1:time_window_steps, 1) = 1;
+                img(ntrainsongs+1:end, 1:time_window_steps, 3) = 0;
+            end
+                
             if SHOW_ONLY_TRUE_HITS
                 img = img(find(songs_with_hits), :, :);
                 pos = pos(find(songs_with_hits));
@@ -702,26 +705,13 @@ for times_of_interest = times_of_interest_separate
         title(sprintf('Detection events: %s', times_of_interest_names{separate_syllable_counter}));
 
         if ~SORT_BY_ALIGNMENT
+            %% Show coloration by labeling the blocks of training and test songs
             text(time_window/2*1000, ntrainsongs/2, 'train', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
             text(time_window/2*1000, ntrainsongs+ntestsongs/2, 'test', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 90);
-        elseif true
-            if separate_syllable_counter == 1
-                prevhold = ishold;
-                hold on;
-                % Plot some dummy lines for legend to pick up the colours from:
-                plot([10 10+eps], [1 2], 'color', [0 1 1], 'LineWidth', 5);
-                plot([11 11+eps], [1 2], 'color', [1 0 0], 'LineWidth', 5);
-                if ~prevhold
-                    hold off;
-                end
-                
-                legend('Train', 'Test', 'location', 'NorthEast');
-            end
-        else
-            % Find the longest contiguous blocks of training and test songs,
-            % and print the legend therein:
+        elseif raster_colour_left_bar
+            %% Show colouration by labeling the largest contiguous blocks of training and test songs
             s = img(:,1,1); % s is now 0 for train, 1 for test
             a = diff(s);
             b = find([a; Inf] ~= 0);
@@ -748,6 +738,23 @@ for times_of_interest = times_of_interest_separate
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 0);
             text(time_window/2*1000+3, testcentre, 'test', ...
                 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', 'Rotation', 0);
+        else
+            %% Show colouration via a legend
+            if separate_syllable_counter == 1
+                prevhold = ishold;
+                hold on;
+                % Plot some dummy lines offscreen for legend to pick up the colours from:
+                xlims = get(gca, 'XLim');
+                ylims = get(gca, 'YLim');
+                plot([-1 -2], [-1 -2], 'color', [0 1 1], 'LineWidth', 5);
+                plot([-1 -2], [-1 -2], 'color', [1 0 0], 'LineWidth', 5);
+                if ~prevhold
+                    hold off;
+                end
+                set(gca, 'XLim', xlims, 'YLim', ylims);
+                
+                legend('Train', 'Test', 'location', 'SouthWest');
+            end
         end
     end
     
