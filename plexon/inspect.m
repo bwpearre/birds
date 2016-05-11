@@ -384,8 +384,8 @@ end
 
 % --- Executes on slider movement.
 function yscale_Callback(hObject, eventdata, handles)
-set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
-set(handles.axes2, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1e3);
+set(handles.axes2, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1e3);
 
 
 % --- Executes during object creation, after setting all properties.

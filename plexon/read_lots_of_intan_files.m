@@ -15,15 +15,22 @@ alldata = [];
 alltimes = [];
 for i = 1:length(dd)
     intanstruct = read_Intan_RHD2000_file_bwp(strcat(dirname, filesep, dd(i).name));
-    alldata = [alldata intanstruct.amplifier_data];
-    alltimes = [alltimes intanstruct.t_amplifier];
+
+    % Centre it
+    foo = bsxfun(@minus, intanstruct.amplifier_data, ...
+        mean(intanstruct.amplifier_data, ...
+        2));
+
+    % Toss files with high noise levels; hopefully this is correlated with
+    % various kinds of garbage in the files...
+    if max(abs(foo)) <= 500
+        alldata = [alldata intanstruct.amplifier_data];
+        alltimes = [alltimes intanstruct.t_amplifier];
+    end
 end
 
-% Centre it
+% Better centering if we look at the whole thing at once, so repeat!
 alldata = bsxfun(@minus, alldata, mean(alldata, 2));
-%for i = 1:size(alldata, 1)
-%    alldata(i, :) = (alldata(i, :) - mean(alldata(i, :)));
-%end
 
 intanstruct.amplifier_data = alldata;
 intanstruct.t_amplifier = alltimes;
