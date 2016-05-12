@@ -16,6 +16,7 @@ confusion_all = false;
 testfile_include_nonsinging = false;
 samplerate = 44100;
 fft_size = 256;
+use_pattern_net = true;
 
 % Region of the spectrum (in space and time) to examine:
 freq_range = [1000 8000];
@@ -47,7 +48,7 @@ if 1
     
     times_of_interest_separate = NaN;
     times_of_interest_separate = [ 0.15:0.05:0.4 ];
-    %times_of_interest_separate = [ 0.3 ];
+    %times_of_interest_separate = [ 0.15 0.3 ];
     %times_of_interest_separate = [0.15:0.05:0.4]
     %times_of_interest_separate = [0.15 0.3 0.4];
     times_of_interest_names = {'t^*_1', 't^*_2', 't^*_3', 't^*_4', 't^*_5', 't^*_6'};
@@ -471,7 +472,11 @@ for times_of_interest = times_of_interest_separate
     
     % This only indirectly affects final timing precision, since thresholds are
     % optimally tuned based on the window defined in MATCH_PLUSMINUS.
-    shotgun_max_sec = 0.02;
+    if use_pattern_net
+        shotgun_max_sec = 0.002;
+    else
+        shotgun_max_sec = 0.02;
+    end
     if strcmp(BIRD, 'delta')
         shotgun_sigma = 0.00001;
     else
@@ -516,6 +521,10 @@ for times_of_interest = times_of_interest_separate
     nnsetX = single(nnsetX);
     nnsetY = single(nnsetY);
     
+    if use_pattern_net
+        nnsetYC = [nnsetY~=0 ; nnsetY==0];
+    end
+    
     %% Shape only?  Let's try normalising the training inputs:
     nnsetX = zscore(nnsetX);
     %nnsetX = normc(nnsetX);
@@ -536,34 +545,42 @@ for times_of_interest = times_of_interest_separate
     % layer.  [8] means one hidden layer with 8 units.  [] means a simple
     % perceptron.
     
-    
-    
-    net = feedforwardnet([nhidden_per_output * ntsteps_of_interest]);
+    if use_pattern_net
+        net = patternnet(nhidden_per_output * ntsteps_of_interest);
+    else
+        net = feedforwardnet([nhidden_per_output * ntsteps_of_interest]);
+    end
     net.inputs{1}.processFcns={'mapstd'};
-    %net = feedforwardnet([ntsteps_of_interest]);
-    %net = feedforwardnet([]);
-    
+        
     %net.trainParam.goal=1e-3;
-    
-    %net.trainFcn = 'trainbfg';
-    
+        
     fprintf('Training network with %s...\n', net.trainFcn);
+  
     
     % Once the validation set performance stops improving, it seldom seems to
     % get better, so keep this small.
     net.trainParam.max_fail = 3;
-
+        
     tic
-    %net = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), {}, {}, 0.1 + nnsetY(:, nnset_train));
-    [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
+    
+    if use_pattern_net
+        [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetYC(:, nnset_train));
+    else
+        [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
+    end
     % Oh yeah, the line above was the hard part.
     disp(sprintf('   ...training took %g minutes.', toc/60));
     % Test on all the data:
     
     % Why not test just on the non-training data?  Compute them all, and then only count ntestsongs for statistics (later)
-    testout = sim(net, nnsetX);
+    if use_pattern_net
+        testout = net(nnsetX);
+        testout = testout(1,:);
+    else
+        testout = sim(net, nnsetX);
+    end
     testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongs);
-    
+
     % Update the each-song image
     power_img = power_img(randomsongs(1:nmatchingsongs),:);
     power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
@@ -626,6 +643,8 @@ for times_of_interest = times_of_interest_separate
     % For each fft_time_shift_seconds of interest, draw that output unit's response to all
     % timesteps for all songs:
     
+    n_unique_tsteps_of_interest = length(unique(times_of_interest_separate));
+
     target_offsets_net = zeros(ntsteps_of_interest, nsongs);
     sample_offsets_net = zeros(ntsteps_of_interest, nsongs);
     for i = 1:ntsteps_of_interest
@@ -633,7 +652,8 @@ for times_of_interest = times_of_interest_separate
         if false
             subplot(ntsteps_of_interest, 1, i);
         else
-            subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
+            subplot(n_unique_tsteps_of_interest, 1, ...
+                mod(separate_syllable_counter, n_unique_tsteps_of_interest) + 1);
         end
         testout_i_squeezed = reshape(testout(i,:,:), [], nsongs);
         leftbar = zeros(time_window_steps-1, nsongs);
@@ -786,11 +806,14 @@ for times_of_interest = times_of_interest_separate
     confusion = load('confusion_log_perf.txt');
     [sylly bini binj] = unique(confusion(:,1));
     xtickl = {};
+    sylly_means = [];
     sylly_counts = [];
     for i = 1:length(sylly)
         xtickl{i} = sprintf('t^*_%d', i);
         sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
+        sylly_means(i,:) = mean(confusion(find(confusion(:,1)==sylly(i)),2:3));
     end
+    sylly_means
     colours = distinguishable_colors(length(sylly));
     offsets = (rand(size(confusion(:,1))) - 0.5) * 2 * 0.02;
     if size(confusion, 2) >= 4 & false
@@ -806,7 +829,7 @@ for times_of_interest = times_of_interest_separate
     if min(sylly) ~= max(sylly)
         set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
     end
-    %set(gca, 'ylim', [0 100]);
+    set(gca, 'ylim', [97 100]);
     set(gca, 'xtick', sylly, 'xticklabel', xtickl);
 
     subplot(1,2,2);
@@ -818,8 +841,8 @@ for times_of_interest = times_of_interest_separate
         set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
     end
     set(gca, 'xtick', sylly, 'xticklabel', xtickl);
+    set(gca, 'ylim', [0 0.07]);
     sylly_counts
-
 
     
     
@@ -865,10 +888,15 @@ for times_of_interest = times_of_interest_separate
     %     = (rawnetout - ymin) / gain + xmin
     mapstd_xmean = net.inputs{1}.processSettings{1}.xmean;
     mapstd_xstd = net.inputs{1}.processSettings{1}.xstd;
-    mmmout_xmin = net.outputs{2}.processSettings{1}.xmin;
-    mmmout_ymin = net.outputs{2}.processSettings{1}.ymin;
-    mmmout_gain = net.outputs{2}.processSettings{1}.gain;
-
+    if use_pattern_net
+        mmmout_xmin = 0;
+        mmmout_ymin = 0;
+        mmmout_gain = 1;
+    else
+        mmmout_xmin = net.outputs{2}.processSettings{1}.xmin;
+        mmmout_ymin = net.outputs{2}.processSettings{1}.ymin;
+        mmmout_gain = net.outputs{2}.processSettings{1}.gain;
+    end
     
     win_size = fft_size;
     fft_time_shift = fft_size - noverlap;

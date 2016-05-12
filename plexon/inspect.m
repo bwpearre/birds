@@ -22,7 +22,7 @@ function varargout = inspect(varargin)
 
 % Edit the above text to modify the response to help inspect
 
-% Last Modified by GUIDE v2.5 15-Dec-2015 13:06:11
+% Last Modified by GUIDE v2.5 12-May-2016 17:07:41
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -56,6 +56,12 @@ global responses_detrended;
 global wait_bar;
 global tdt_show_now tdt_show_data tdt_show_data_last tdt_show_last_chosen;
 global detrend_param;
+global look_for_spikes;
+global axes2_tracks_axes1;
+
+
+look_for_spikes = @look_for_spikes_peaks;
+
 
 
 clear global detrend_param;
@@ -67,7 +73,7 @@ tdt_show_data_last = zeros(1, 16);
 
 clear nnsetX;
 
-files = dir('stim*');
+files = dir('stim*.mat');
 
 [sorted_names, sorted_index] = sortrows({files.name}');
 handles.files = sorted_names;
@@ -80,14 +86,20 @@ if ~isempty(wait_bar)
         wait_bar = [];
 end
 
+axes2_tracks_axes1 = false;
+
 % Which channels to show?
 for i = 1:16
     handles.tdt_show_buttons{i} = uicontrol('Style','checkbox','String', sprintf('%d', i), ...
-                       'Value',0,'Position', [920 570-22*(i-1) 50 20], ...
-                        'Callback',{@tdt_show_channel_Callback});
+                       'Value',0,'Position', [950 650-22*(i-1) 50 20], ...
+                        'Callback',{@tdt_show_channel_Callback}, 'Units', 'pixels');
 end
 
-do_file(hObject, handles, 1, true);
+%do_file(hObject, handles, 1, true);
+
+% We don't need to know when there are no spikes.
+warning('off', 'signal:findpeaks:largeMinPeakHeight');
+warning('off', 'stats:gmdistribution:FailedToConverge');
 
 guidata(hObject, handles);
 
@@ -101,7 +113,7 @@ guidata(hObject, handles);
 
 function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
-global detrend_param detrend_param_orig;
+global detrend_param detrend_param_orig look_for_spikes;
 
 %set(handles.listbox1, 'Enable', 'inactive');
 drawnow;
@@ -144,12 +156,12 @@ if ~isequal(detrend_param, data.detrend_param)
     if isfield(data, 'tdt')
         [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
             = detrend_response(data.tdt, data, detrend_param);
-        [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
+        [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes(data.tdt, ...
             data, detrend_param, [], handles);
     else
         [ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
             = detrend_response(data.ni, data, detrend_param);
-        [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
+        [ data.ni.spikes data.ni.spikes_r ] = look_for_spikes(data.ni, ...
             data, detrend_param, [], handles);
     end
 end
@@ -166,7 +178,12 @@ if isfield(data, 'tdt')
         end
         set(handles.tdt_show_buttons{i}, 'Enable', foo);
     end
+    data.tdt.show_now = find(tdt_show_now(data.tdt.index_recording));
+
 end
+%if isfield(data, 'ni')
+%    data.ni.show_now = find(tdt_show_now(data.ni.index_recording));
+%end
 
 
 
@@ -193,11 +210,9 @@ if doplot
             set(handles.comments, 'String', data.comments);
         end
         
-        
         set(handles.table1, 'Data', tabledata);
 end
 
-data.tdt.show_now = find(tdt_show_now(data.tdt.index_recording));
 
 plot_stimulation(data, handles);
 
@@ -219,8 +234,12 @@ set(handles.roi0, 'String', sprintf('%g', detrend_param.response_roi(1)*1000));
 set(handles.roi1, 'String', sprintf('%g', detrend_param.response_roi(2)*1000));
 set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1)*1000));
 set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
-set(handles.response_detection_threshold, 'String', sprintf('%g', ...
-    detrend_param.response_detection_threshold));
+%set(handles.response_sigma, 'String', sprintf('%g', ...
+%    detrend_param.response_sigma));
+set(handles.response_sigma, 'String', sprintf('%g', ...
+    detrend_param.response_sigma));
+set(handles.response_prob, 'String', sprintf('%g', ...
+    detrend_param.response_prob));
 
 
 
@@ -366,9 +385,13 @@ set(handles.train, 'Enable', 'on');
 
 % --- Executes on slider movement.
 function xscale_Callback(hObject, eventdata, handles)
+global axes2_tracks_axes1;
+
 last_xlim = get(handles.axes1, 'XLim');
-set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
-set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
+set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30]);
+if axes2_tracks_axes1
+    set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30]);
+end
 new_xlim = get(handles.axes1, 'XLim');
 % It seems that the whole graph isn't drawn--expanding the view region
 % results in blank areas. In this case, replot.
@@ -379,9 +402,12 @@ end
 
 % --- Executes on slider movement.
 function yscale_Callback(hObject, eventdata, handles)
-set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
-set(handles.axes2, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+global axes2_tracks_axes1;
 
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-1 1]*1e3*0.3);
+if axes2_tracks_axes1
+    set(handles.axes2, 'YLim', (2^(get(handles.yscale, 'Value')))*[-1 1]*1e3*0.3);
+end
 
 % --- Executes during object creation, after setting all properties.
 function yscale_CreateFcn(hObject, eventdata, handles)
@@ -540,12 +566,14 @@ function response_indicator_Callback(hObject, eventdata, handles)
 
 
 
-function response_detection_threshold_Callback(hObject, eventdata, handles)
+function response_sigma_Callback(hObject, eventdata, handles)
 global detrend_param;
-%detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
-disp('Deactivated because... well... look for sdklfjg in inspect.m');
+detrend_param.response_sigma = str2double(get(hObject,'String'));
+plot_stimulation([], handles, true);
 
-function response_detection_threshold_CreateFcn(hObject, eventdata, handles)
+
+
+function response_sigma_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -570,3 +598,14 @@ if exist('detrend_param_orig', 'var') & ~isempty(detrend_param_orig)
 end
 
 
+
+function response_prob_Callback(hObject, eventdata, handles)
+global detrend_param;
+detrend_param.response_prob = str2double(get(hObject,'String'));
+plot_stimulation([], handles, true);
+
+
+function response_prob_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

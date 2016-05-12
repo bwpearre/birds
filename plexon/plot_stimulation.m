@@ -82,8 +82,6 @@ if isempty(u) | length(u) < 5
     return;
 end
 
-axes1legend = {};
-
 sz = size(d.response);
 
 % Shall we compute the average of time-aligned responses?
@@ -101,9 +99,6 @@ end
 
     
 
-%[ detrended_all trend_all ] = detrend_response(d.response, d, data, detrend_param);
-%[spikes r] = look_for_spikes_xcorr(d, data, detrend_param);
-
 linewidths = 0.3*ones(1, nchannels);
 %linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes))));
 
@@ -111,7 +106,7 @@ linewidths = 0.3*ones(1, nchannels);
 % get(handles.response_show_all, 'Value')
 
 if get(handles.response_filter, 'Value')
-    [B A] = ellip(2, .000001, 30, [100]/(d.fs/2), 'high');
+    [B A] = ellip(2, .001, 30, [300 3000]/(d.fs/2));
     for i = 1:size(response_plot, 1)
         response_plot(i,:,:) = filtfilt(B, A, squeeze(response_plot(i,:,:)));
     end
@@ -171,7 +166,6 @@ end
 
 
 clear h; % Handles for plot -- if empty, there will be no legend, title, etc 
-
 for channel = show_channels
     
     % Raw (or filtered) response
@@ -181,51 +175,49 @@ for channel = show_channels
             1e6*reshape(response_plot(:,u,channel), [size(response_plot, 1) length(u)])', ...
             'Color', colours(channel, :), 'LineWidth', linewidths(channel));
     end
-    legendhandles(1) = h(1);
     
+    
+    % Trend
     if show_trend
         if show_avg
             h = plot(handles.axes1, 1e3*roitimes, ...
                 1e6*reshape(mean(d.response_trend(:, roii, channel), 1), [1 length(roii)])', ...
-                'Color', [0 1 0]);
+                'Color', colours(channel, :));
         else
             h = plot(handles.axes1, 1e3*roitimes, ...
                 1e6*reshape(d.response_trend(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
-                'Color', [0 1 0]);
+                'Color', colours(channel, :));
         end
-        axes1legend{end+1} = 'Trend';
     end
-    legendhandles(2) = h(1);
 
     % Detrended
     if show_detrended
         if show_avg
             h = plot(handles.axes1, 1e3*roitimes, ...
                 1e6*reshape(mean(d.response_detrended(:, roii, channel), 1), [1 length(roii)])', ...
-                'Color', [1 0 0], 'LineWidth', 2);
+                'Color', colours(channel, :), 'LineWidth', 2);
         else
             h = plot(handles.axes1, 1e3*roitimes, ...
                 1e6*reshape(d.response_detrended(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
-                'Color', [1 0 0], 'LineWidth', linewidths(channel));
+                'Color', colours(channel, :), 'LineWidth', linewidths(channel));
         end
     end
-    legendhandles(3) = h(1);
-    %if exist('h', 'var')
-    %    legend_handles(end+1) = h(1);
-    %    legend_names(end+1) = strcat(d.names(channel), ' (', sigfig(d.spikes_r(channel), 4), ')');
-    %end
+    
+    % Add whatever we've got to the legend bookkeeper
+    if exist('h', 'var')
+        legend_handles(end+1) = h(1);
+        legend_names(end+1) = strcat(d.names(channel), ' (', sigfig(d.spikes_r(channel), 4), ')');
+    end
     
 end
 hold(handles.axes1, 'off');
-legend(handles.axes1, legendhandles, {'Raw', 'Trend', 'Detrended'});
+%legend(handles.axes1, legendhandles, {'Raw', 'Trend', 'Detrended'});
 %legend_names = d.names(d.show);
 if exist('h', 'var')
-    if false
     try
         legend(handles.axes1, legend_handles, legend_names);
     catch ME
         disp('Legend error: inconsistent legend state.');
-    end
     end
 
     title(handles.axes1, 'Response');

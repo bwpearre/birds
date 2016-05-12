@@ -95,14 +95,12 @@ if true % For my X--HVC experiment
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
     detrend_param.response_baseline = [0.012 0.025];
-    detrend_param.response_detection_threshold = Inf * ones(1, 16);
     voltage_limit = 3;
 else
     detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
     detrend_param.range = [0.0007 0.02];
     detrend_param.response_roi = [0.0007 0.002];
     detrend_param.response_baseline = [0.005 0.02];
-    detrend_param.response_detection_threshold = Inf * ones(1, 16);
     voltage_limit = 7;
 end
 
@@ -183,7 +181,7 @@ end
 
 bird = 'noname';
 
-data_basedir = strcat(homedir, filesep, 'Data', filesep, 'stim');
+data_basedir = strcat(homedir, filesep, 'Data', filesep, 'plexon');
 datadir = strcat(data_basedir, filesep, bird, '-', datestr(now, 'yyyy-mm-dd'));
 increase_type = 'current'; % or 'time'
 default_halftime_s = 200e-6;
@@ -1895,8 +1893,13 @@ set(handles.roi0, 'String', sprintf('%g', detrend_param.response_roi(1)*1000));
 set(handles.roi1, 'String', sprintf('%g', detrend_param.response_roi(2)*1000));
 set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1)*1000));
 set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
-set(handles.response_detection_threshold, 'String', sprintf('%g', ...
-    detrend_param.response_detection_threshold));
+%set(handles.response_detection_threshold, 'String', sprintf('%g', ...
+%    detrend_param.response_detection_threshold));
+set(handles.response_sigma, 'String', sprintf('%g', ...
+    detrend_param.response_sigma));
+set(handles.response_prob, 'String', sprintf('%g', ...
+    detrend_param.response_prob));
+
 set(handles.voltage_limit, 'String', sigfig(voltage_limit, 2));
 for i = 2:length(ni_response_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, ni_response_channels(i)));
@@ -2047,8 +2050,7 @@ function response_indicator_Callback(hObject, eventdata, handles)
 
 function response_detection_threshold_Callback(hObject, eventdata, handles)
 global detrend_param;
-%detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
-disp('Don''t touch that!');
+detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
 
 function response_detection_threshold_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -2491,7 +2493,9 @@ STIM_CURRENT_NO_RESPONSE = 1;
 stim.current_uA = STIM_CURRENT_NO_RESPONSE;
 stim.tdt_valid = ones(1, 16);
 stim.tdt_show = stim.tdt_valid;
-detrend_param.response_detection_threshold = zeros(1,16);
+detrend_param.response_detection_threshold = 5;
+detrend_param.response_sigma = 5;
+detrend_param.response_prob = 0.5;
 
 nactive = sum(stim.tdt_valid);
 

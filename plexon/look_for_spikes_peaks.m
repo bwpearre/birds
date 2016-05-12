@@ -1,5 +1,6 @@
 function [ spikes r ] = look_for_spikes_xcorr(d, data, detrend_param, response_detrended, handles);
 
+MAX_JITTER = 0.0002; % seconds
 
 [ nstims nsamples nchannels ] = size(d.response_detrended);
 times = d.times_aligned;
@@ -55,14 +56,6 @@ else
 end
 
 
-[B A] = ellip(2, .5, 40, [500 1000]/((d.fs))/2);
-parfor channel = 1:nchannels
-    for stim = 1:nstims
-%        response_detrended(stim, :, channel) = filtfilt(B, A, squeeze(response_detrended(stim, :, channel)));
-    end
-end
-
-
 if exist('handles') & false
     set(handles.axes2, 'ColorOrder', distinguishable_colors(nchannels));
     cla(handles.axes2);
@@ -76,92 +69,62 @@ if exist('handles') & false
     hold(handles.axes2, 'off');
 end
 
-RESPONSE_DETECTION_THRESHOLD = 4;
-
 % Find the std dev of the non-roi.  BASERMS is indexed in matrix indices [1 2 3...]
-peaks{1} = [];
-peaks{2} = [];
-kclusts = [];
-probs = zeros(1, nchannels, 2);
-min_peaks = 3;
-g = {};
 
+pp = zeros(2, nchannels);
+ppos = NaN * zeros(2, nchannels);
 for channel = 1:nchannels
+    peaks{1,channel} = [];
+    peaks{2,channel} = [];
     basestd(channel) = std(reshape(response_detrended(:, baselinei, channel), 1, []));
+
     for stim = 1:nstims
         [ ~, x ] = findpeaks(response_detrended(stim, roii, channel), times(roii), ...
-            'MinPeakHeight', RESPONSE_DETECTION_THRESHOLD*basestd(channel), ...
+            'MinPeakHeight', detrend_param.response_sigma*basestd(channel), ...
             'MinPeakDistance', 0.001);
-        peaks{1} = [peaks{1} x];
+        peaks{1,channel} = [peaks{1,channel} x];
         [ ~, x ] = findpeaks(-response_detrended(stim, roii, channel), times(roii), ...
-            'MinPeakHeight', RESPONSE_DETECTION_THRESHOLD*basestd(channel), ...
+            'MinPeakHeight', detrend_param.response_sigma*basestd(channel), ...
             'MinPeakDistance', 0.001);
-        peaks{2} = [peaks{2} x];
+        peaks{2,channel} = [peaks{2,channel} x];
     end
 
     
     for posneg = [1 2]
-        clust_k = [2:10]; % Try these k-cluster values
-        if length(peaks{posneg}) >= min_peaks
-            for k = clust_k
-                try
-                    g{k} = fitgmdist(peaks{posneg}', k);
-                    aic(k) = g{k}.AIC;
-                    if k > 1 & aic(k) > aic(k-1)
-                        break;
-                    end
-                catch ME
-                    break;
-                end
-            end
-            [~, kclusts(posneg)] = min(aic);
-        
-            
-            gmm_final{posneg} = g{kclusts(posneg)};
-            clust = cluster(gmm_final{posneg}, peaks{posneg}');
-            % For each cluster with sigma < 100 us, how many members does the cluster have?
-            for c = 1:kclusts(posneg)
-                gmm_counts{posneg}(c) = sum(abs(peaks{posneg}(find(clust==c)) - gmm_final{posneg}.mu(c)) < 0.0002);
-                
-                probs(c, channel, posneg) = sum(abs(peaks{posneg} - gmm_final{posneg}.mu(c)) < 0.0001);
-            end
+        % How big is each group of spikes within 100us of each other?
+        dists = squareform(pdist(peaks{posneg,channel}'));
+        counts{posneg,channel} = sum(dists <= MAX_JITTER);
+        if max(counts{posneg,channel}) > 0
+            [pp(posneg,channel) ppos(posneg,channel)] = max(counts{posneg,channel});
         end
     end
 end
 
-if isempty(g)
-    r = zeros(1, nchannels);
-    spikes = zeros(1, nchannels);
-    return;
-end
+pp = pp / nstims;
+r = max(pp);
+spikes = r >= detrend_param.response_prob;
 
-probs = probs / nstims;
-% Find most probable cluster
-for channel = 1:nchannels
-    for posneg = 1:2
-        r(channel) = max(max(probs(:,channel,:)));
-    end
-end
-spikes = r > 0.3;
-
-
-% Draw some stuff?
 channel = 1;
-posneg = 2;
 if exist('handles')
-    v = gmm_final{posneg}.pdf(times(roii)');
-    v = v / max(v);
-    
-    axes(handles.axes2);
+    axes(handles.axes4);
     cla;
     hold on;
-    %histogram(positives,50);
-    h = histogram(peaks{posneg}*1000, 30);
-    plot(times(roii)*1000, v*max(h.Values));
+    plot(times(roii)*1e3, squeeze(response_detrended(:,roii,channel))*1e3);
+    line((1e3*[1;1]*[times(roii(1)) times(roii(end))])', ...
+        (1e3*[1 1; -1 -1]*detrend_param.response_sigma*basestd(channel))');
+    if pp(1,channel) >= detrend_param.response_prob
+        scatter(peaks{1,channel}(ppos(1,channel))*1e3, ...
+            0, ...
+            200, [1 0 0], '^', 'filled');
+    end
+    if pp(2,channel) >= detrend_param.response_prob
+        scatter(peaks{2,channel}(ppos(2,channel))*1e3, ...
+            0, ...
+            200, [1 0 0], 'v', 'filled');
+    end
+    
     hold off;
-    title(handles.axes2, sprintf('Spikes on channel %d', channel));
+    ylabel('\mu V');
     xlabel('ms');
 end
-
 a=1;
-
