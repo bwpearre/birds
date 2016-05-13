@@ -61,6 +61,10 @@ roi(2) = min(detrend_param.range(2), maxendtime);
 %disp(sprintf('detrend_response using range [%g %g] ms', roi(1)*1000, roi(2)*1000));
 
 roii = find(d.times_aligned >= roi(1) & d.times_aligned < roi(2));
+if max(roii) > size(response,2)
+    roii = roii(find(roii<=size(response,2)));
+    disp('Shortening roii in detrend_response.m');
+end
 roitimes = d.times_aligned(roii);
 
 

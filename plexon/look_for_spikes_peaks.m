@@ -1,6 +1,6 @@
-function [ spikes r ] = look_for_spikes_xcorr(d, data, detrend_param, response_detrended, handles);
+function [ spikes r ] = look_for_spikes_peaks(d, data, detrend_param, response_detrended, handles);
 
-MAX_JITTER = 0.0002; % seconds
+MAX_JITTER = 0.0001; % seconds
 
 [ nstims nsamples nchannels ] = size(d.response_detrended);
 times = d.times_aligned;
@@ -25,6 +25,10 @@ baseline(2) = min(baseline(2), maxendtime);
 
 roii = find(times > roi(1) & times < roi(2));
 baselinei = find(times > baseline(1) & times < baseline(2));
+%if max(baselinei) > size(response_detrended, 2)
+%    baselinei = baselinei(find(baselinei <= size(response_detrended, 2)));
+%    disp('Shortening baselinei');
+%end
 %validi = find(times > roi(1) & times < baseline(2));
 
 
@@ -32,7 +36,7 @@ baselinei = find(times > baseline(1) & times < baseline(2));
 %disp(sprintf('Look for spikes: toi [%g %g] ms, baseline [%g %g] ms', ...
 %    roi(1)*1000, roi(2)*1000, baseline(1)*1000, baseline(2)*1000));
 if length(baselinei) < 10
-    disp('   ...the baseline region is too short!');
+    disp(sprintf('   ...the baseline region is too short!: %d', length(baselinei)));
     r = zeros(1, nchannels);
     spikes = zeros(1, nchannels);
     return;
@@ -48,7 +52,7 @@ if ~isfield(d, 'response_detrended') ...
         | (exist('detrend_param') & ~isempty(detrend_param) ...
            & ~isequal(detrend_param, data.detrend_param) ...
            & isempty(response_detrended))
-    disp('look_for_spikes_xcorr: re-detrending as follows:');
+    disp('look_for_spikes_peaks: re-detrending as follows:');
     detrend_param
     response_detrended = detrend_response(d, data, detrend_param);
 else

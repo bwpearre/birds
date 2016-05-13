@@ -62,6 +62,9 @@ global axes2_tracks_axes1;
 
 look_for_spikes = @look_for_spikes_peaks;
 
+% We don't need to know when there are no spikes.
+warning('off', 'signal:findpeaks:largeMinPeakHeight');
+warning('off', 'stats:gmdistribution:FailedToConverge');
 
 
 clear global detrend_param;
@@ -95,11 +98,7 @@ for i = 1:16
                         'Callback',{@tdt_show_channel_Callback}, 'Units', 'pixels');
 end
 
-%do_file(hObject, handles, 1, true);
-
-% We don't need to know when there are no spikes.
-warning('off', 'signal:findpeaks:largeMinPeakHeight');
-warning('off', 'stats:gmdistribution:FailedToConverge');
+do_file(hObject, handles, 1, true);
 
 guidata(hObject, handles);
 
@@ -240,6 +239,11 @@ set(handles.response_sigma, 'String', sprintf('%g', ...
     detrend_param.response_sigma));
 set(handles.response_prob, 'String', sprintf('%g', ...
     detrend_param.response_prob));
+if isnan(detrend_param.response_prob)
+    set(handles.response_prob, 'BackgroundColor', [1 0 0]);
+else
+    set(handles.response_prob, 'BackgroundColor', 0.94 * [1 1 1]);
+end
 
 
 
@@ -602,6 +606,11 @@ end
 function response_prob_Callback(hObject, eventdata, handles)
 global detrend_param;
 detrend_param.response_prob = str2double(get(hObject,'String'));
+if isnan(detrend_param.response_prob)
+    set(handles.response_prob, 'BackgroundColor', [1 0 0]);
+else
+    set(handles.response_prob, 'BackgroundColor', 0.94 * [1 1 1]);
+end
 plot_stimulation([], handles, true);
 
 

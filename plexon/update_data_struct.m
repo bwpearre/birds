@@ -172,10 +172,10 @@ if data.version < 22
     
     if isfield(data, 'tdt')
         [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes(data.tdt, ...
-            data, [], [], handles);
+            data, [], []);
      elseif isfield(data, 'ni')
         [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes(data.ni, ...
-            data, [], [], handles);
+            data, [], []);
      end
 
 end
