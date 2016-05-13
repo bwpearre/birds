@@ -54,24 +54,13 @@ end
 
 tansig = @(a, mu, x) 0.5 + 0.5*tanh(a*(x-mu));
 
-if true
+if false
     show = 'V';
 else
     show = '?A';
 end
 
-
-if strcmp(show, 'V')
-    % The voltage should be the maximum voltage across any channel at a given current.  I need to do
-    % something drastic and throw out all samples for which I don't know the maximum voltage.
-    
-    % Voltage sweeps are indexed as:
-    %    i = find(diff(monitor{pp(p)}) > 0) % (and one more on either side?)
-    %    j = find(diff([Inf i]) ~= 1)
-    %    k = diff([j length(i)+1]);
-    %    ind(s) = i(j(s)):i(j(s))+k(s)
-    %  current{pp(p)}(i(j(s)):i(j(s))+k(s)) % should all be the same
-
+xlimhigh = -Inf;
 sp1 = ceil(sqrt(length(pp)));
 for p = 1:length(pp)
     clear indices j V;
@@ -122,19 +111,28 @@ for p = 1:length(pp)
     subplot(sp1, sp1, p);
     cla;
     hold on;
-    scatter(xData, yData, 5, 'b', 'filled');
-    %set(gca, 'XLim', [0 60]);
+    scatter(xData+random('unif', -0.01, 0.01, size(yData)), ...
+        yData+random('unif', -0.01, 0.01, size(yData)), ...
+        20, 1:length(xData), 'filled');
+    xlimhigh = max(xlimhigh, max(xData));
     xlabel(show);
     ylabel('Pr(r)');
     title(sprintf('%s: %s %s', pattern_string{pp(p)}, sigfig(fits{p}.mu), show));
     set(gca, 'YLim', [0 1]);
     scatter(fits{p}.mu, 0.5, 20, [1 0 0], '+');
     
-    % plot fit
-    domain = get(gca, 'xlim');
-    fitx = linspace(domain(1), domain(2), 50);
-    plot(fitx, tansig(fits{p}.a, fits{p}.mu, fitx));
     %scatter(current{pp(p)}, prob{pp(p)}(8,:), 5, 'r', 'filled');
     hold off;
 end
 
+for p = 1:length(pp)
+    subplot(sp1, sp1, p);
+    set(gca, 'xlim', [0 xlimhigh]);
+    
+    % plot fit
+    hold on;
+    domain = get(gca, 'xlim');
+    fitx = linspace(domain(1), domain(2), 50);
+    plot(fitx, tansig(fits{p}.a, fits{p}.mu, fitx));
+    hold off;
+end
