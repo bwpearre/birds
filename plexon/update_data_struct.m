@@ -196,5 +196,5 @@ if data.version < 25
     % Here I changed response detection to look_for_spikes_peaks.m, which uses a different
     % threshold: RMS noise = sigma; spike >= 5sigma.
     data.detrend_param.response_sigma = 5;
-    data.detrend_param.response_prob = NaN; % This forces detrend_param != detrend_param
+    data.detrend_param.response_prob = NaN;
 end

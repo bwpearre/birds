@@ -45,13 +45,26 @@ sortorder(1:n_valid) = sortorder(pos);
 % (Why?)
 %  sortorder(n_valid+1:end) = sortorder(end:-1:n_valid+1);
 
-figure(1);
+figure(2);
 clf;
 
 % Bar with errorbars
 if true
     hBar = barwitherr(channel_voltage_95(sortorder), channel_voltage_means(sortorder));
 end
+
+% Pull in the maximum-likelihood sigmoid fit results:
+if exist('reanalysed_thresholds.mat', 'file')
+    load('reanalysed_thresholds.mat');
+end
+for i = 1:length(polarities)
+    foo = find(reanalysed_thresholds(:,1) == polarities(i) & reanalysed_thresholds(:,2) ~= 0);
+    if length(foo) == 1
+        reanalysed_voltage_loc(i) = foo;
+    end
+end
+reanalysed_reordered = reanalysed_thresholds(reanalysed_voltage_loc,:);
+
 
 % Plot each datum as well, in red
 hold on;
@@ -66,12 +79,31 @@ for ii=1:length(channel_voltage_means)
     end
 end
 hold off;
+autoylim = get(gca, 'YLim');
+hold on;
+for ii=1:length(channel_voltage_means)
+    scatter(ii+0.2, reanalysed_reordered(sortorder(ii),2), ...
+        40*reanalysed_reordered(sortorder(ii),3), [0 1 0], 'x');
+    if reanalysed_reordered(sortorder(ii),4) > 0 && reanalysed_reordered(sortorder(ii),4) < 3.5
+        line([1 1]*ii+0.2, reanalysed_reordered(sortorder(ii),4:5), ...
+            'Color', [0 1 0], 'LineWidth', reanalysed_reordered(sortorder(ii),3));
+    end
+end
+hold off;
+set(gca, 'YLim', autoylim);
+
 
 set(gca, 'XLim', [0 npolarities+1]);
 xticklabel_rotate((1:npolarities)-0.4, 90, labels(sortorder), 'Fontsize', 8);
 ylabel('Volts');
-xlabel('CSC');
+%xlabel('CSC');
 title('Maximum absolute voltage of any electrode vs. CSC');
+
+
+axfoo = axes('Position', [0 0 1 1], 'Visible', 'off');
+axes(axfoo);
+mstext = text(0.5, 0.03, 'Current Steering Configuration', 'HorizontalAlignment', 'center');
+
 
 
 

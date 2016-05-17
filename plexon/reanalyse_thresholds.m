@@ -12,6 +12,9 @@ detrend_param.response_sigma = 5;
 detrend_param.response_prob = NaN;
 detrend_param.response_detection_threshold = Inf;
 
+warning('off', 'curvefit:fit:invalidStartPoint');
+warning('off', 'signal:findpeaks:largeMinPeakHeight');
+warning('off', 'stats:gmdistribution:FailedToConverge');
 
 current = {};
 voltage = {};
@@ -31,7 +34,10 @@ for f = 1:length(files)
     
     pattern = 2.^[0:15] * data.stim.negativefirst' + 1;
     pp = unique([pp pattern]);
-    pattern_string{pattern} = sprintf('%d', data.stim.negativefirst(find(data.stim.active_electrodes)));
+    act = find(data.stim.active_electrodes);
+    pattern_for_bar{pattern} = bin2dec(sprintf('%d', data.stim.negativefirst(act(end:-1:1))));
+    % Reverse order of pattern_string for consistency with plot_max_voltage_bar.m
+    pattern_string{pattern} = sprintf('%d', data.stim.negativefirst(act(end:-1:1)));
 
     if pattern > length(current)
         current{pattern} = [];
@@ -45,87 +51,106 @@ for f = 1:length(files)
     monitor{pattern} = [monitor{pattern} data.stim.plexon_monitor_electrode];
     foo = zeros(16,1);
     foo(d.index_recording) = p;
-    if isempty(prob{pattern})
-        prob{pattern} = foo;
-    else
-        prob{pattern} = [prob{pattern} foo];
-    end
+    prob{pattern} = [prob{pattern} foo];
 end
 
-tansig = @(a, mu, x) 0.5 + 0.5*tanh(a*(x-mu));
+mytansig = @(a, mu, x) 0.5 + 0.5*tanh(a*(x-mu));
 
-if false
+if true
     show = 'V';
 else
     show = '?A';
 end
-
+ELECTRODE=3;
+sortable = [];
 xlimhigh = -Inf;
+clear xData yData;
 sp1 = ceil(sqrt(length(pp)));
 for p = 1:length(pp)
     clear indices j V;
 
     if strcmp(show, 'V')
-        [xData, yData] = prepareCurveData(voltage{pp(p)}, prob{pp(p)}(3,:));
-        
         i = find(diff(monitor{pp(p)}) > 0);
         j = find(diff([Inf i]) ~= 1);
         k = diff([j length(i)+1]);
+        if length(j) == 0
+            disp(sprintf('No sweeps found in config %s', pattern_string{pp(p)}));
+            continue;
+        end
         for s = 1:length(j)
             indices{s} = i(j(s)):i(j(s))+k(s);
             if length(unique(current{pp(p)}(indices{s}))) ~= 1
                 disp('Different values for current in a sweep!');
             end
             V{s} = max(voltage{pp(p)}(indices{s})) * ones(1, k(s)+1);
+            cur_s{p}(s) = current{pp(p)}(indices{s}(1));
+            vol_s{p}(s,:) = voltage{pp(p)}(indices{s});
         end
-        xData = [];
-        yData = [];
+        xData{p} = [];
+        yData{p} = [];
         for s = 1:length(j)
-            xData = [xData V{s}];
-            yData = [yData prob{pp(p)}(3,indices{s})];
+            xData{p} = [xData{p} V{s}];
+            yData{p} = [yData{p} prob{pp(p)}(ELECTRODE,indices{s})];
         end
-        [xData, yData] = prepareCurveData(xData, yData);
-
+        
+        [xData{p}, yData{p}] = prepareCurveData(xData{p}, yData{p});
     else
-        [xData, yData] = prepareCurveData(current{pp(p)}, prob{pp(p)}(3,:));
+        [xData{p}, yData{p}] = prepareCurveData(current{pp(p)}, prob{pp(p)}(ELECTRODE,:));
     end
     
-    if length(xData) < 5
+    if length(xData{p}) < 5
         continue;
     end
 
     % Set up fittype and options.
-    ft = fittype( tansig, 'independent', 'x', 'dependent', 'y' );
+    ft = fittype( mytansig, 'independent', 'x', 'dependent', 'y' );
     opts = fitoptions( 'Method', 'NonlinearLeastSquares' );
     opts.Display = 'Off';
+    opts.StartPoint = [1 1];
     opts.Lower = [0 -Inf];
-    opts.StartPoint = [0.1 0];
     opts.Upper      = [Inf Inf];
 
     % Fit model to data.
-    fits{p} = fit( xData, yData, ft, opts );
-    
-    
+    fits{p} = fit( xData{p}, yData{p}, ft, opts );
+    foo = confint(fits{p});
+    reanalysed_thresholds(p,:) = [ pattern_for_bar{pp(p)} fits{p}.mu fits{p}.a foo(:,2)'];
+    sortable(p) = fits{p}.mu;
+end
+
+
+save('reanalysed_thresholds.mat', 'reanalysed_thresholds');
+
+[~, order] = sort(sortable);
+
+figure(1);
+for p = 1:length(order)
     %% Draw stuff...
-    figure(1);
+    if isempty(xData{order(p)})
+        continue;
+    end
     subplot(sp1, sp1, p);
     cla;
     hold on;
-    scatter(xData+random('unif', -0.01, 0.01, size(yData)), ...
-        yData+random('unif', -0.01, 0.01, size(yData)), ...
-        20, 1:length(xData), 'filled');
-    xlimhigh = max(xlimhigh, max(xData));
+    scatter(xData{order(p)}+random('unif', -0.01, 0.01, size(yData{order(p)})), ...
+        yData{order(p)}+random('unif', -0.01, 0.01, size(yData{order(p)})), ...
+        20, 1:length(xData{order(p)}), 'filled');
+    xlimhigh = max(xlimhigh, max(xData{order(p)}));
     xlabel(show);
     ylabel('Pr(r)');
-    title(sprintf('%s: %s %s', pattern_string{pp(p)}, sigfig(fits{p}.mu), show));
+    title(sprintf('%s: %s %s', pattern_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show, ...
+        sigfig(fits{order(p)}.a)));
     set(gca, 'YLim', [0 1]);
-    scatter(fits{p}.mu, 0.5, 20, [1 0 0], '+');
+    scatter(fits{order(p)}.mu, 0.5, 20, [1 0 0], '+');
     
     %scatter(current{pp(p)}, prob{pp(p)}(8,:), 5, 'r', 'filled');
     hold off;
+    drawnow;
 end
 
-for p = 1:length(pp)
+for p = 1:length(order)
+    if isempty(fits{order(p)})
+        continue;
+    end
     subplot(sp1, sp1, p);
     set(gca, 'xlim', [0 xlimhigh]);
     
@@ -133,6 +158,17 @@ for p = 1:length(pp)
     hold on;
     domain = get(gca, 'xlim');
     fitx = linspace(domain(1), domain(2), 50);
-    plot(fitx, tansig(fits{p}.a, fits{p}.mu, fitx));
+    plot(fitx, mytansig(fits{order(p)}.a, fits{order(p)}.mu, fitx));
     hold off;
+end
+
+figure(11);
+for p = 1:length(order)
+    if isempty(xData{order(p)})
+        continue;
+    end
+    subplot(sp1, sp1, p);
+    plot(vol_s{order(p)}');
+    title(sprintf('%s: %s %s (%s)', pattern_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show, ...
+        sigfig(fits{order(p)}.a)));
 end

@@ -113,9 +113,18 @@ guidata(hObject, handles);
 function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
 global detrend_param detrend_param_orig look_for_spikes;
+persistent last_file;
 
 %set(handles.listbox1, 'Enable', 'inactive');
 drawnow;
+
+if isempty(file) & ~isempty(last_file)
+    file = last_file;
+else
+    last_file = file;
+end
+
+disp(sprintf('File #%d', file))
 
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
@@ -200,7 +209,7 @@ if doplot
         end
         
         if isfield(data.stim, 'negativefirst')
-            tabledata{5,1} = sprintf('%d ', data.stim.negativefirst);
+            tabledata{5,1} = sprintf('%d ', data.stim.negativefirst(find(data.stim.active_electrodes)));
         else
             tabledata{5,1} = '?'; % negative pulse first
         end
@@ -611,8 +620,7 @@ if isnan(detrend_param.response_prob)
 else
     set(handles.response_prob, 'BackgroundColor', 0.94 * [1 1 1]);
 end
-plot_stimulation([], handles, true);
-
+do_file(hObject, handles, [], true);
 
 function response_prob_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
