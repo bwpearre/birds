@@ -17,7 +17,7 @@ if data.version < 8
         = chop_and_align(data.data_raw, ...
                          data.data_raw(:, 4), ...
                          data.time', ...
-                         Inf, ...
+                         data.n_repetitions, ...
                          data.fs);
     data.times_aligned = data.time - data.triggertime;
 end
@@ -93,11 +93,15 @@ end
 
 
 if data.version < 18
-
-    data.detrend_param.model = 'fourier8';
-    data.detrend_param.range = [0.003 0.025];
-    data.detrend_param.response_roi = [0.003 0.008];
-    data.detrend_param.response_baseline = [0.012 0.025];
+    
+    if isempty(detrend_param)
+        detrend_param.model = 'fourier8';
+        detrend_param.range = [0.003 0.025];
+        detrend_param.response_roi = [0.003 0.008];
+        detrend_param.response_baseline = [0.012 0.025];
+        detrend_param.response_detection_threshold = Inf;
+    end
+    data.detrend_param = detrend_param;
 end
 
 
@@ -156,16 +160,22 @@ end
 
 
 if data.version < 22
+    global look_for_spikes;
+    
      % These could be corrected if needed...
     data.time = 0;
     data.filename = '';
     
+    % These were added for v25, but needed here.
+    data.detrend_param.response_sigma = 5;
+    data.detrend_param.response_prob = NaN; % This forces detrend_param != detrend_param
+    
     if isfield(data, 'tdt')
-        [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes_xcorr(data.tdt, ...
-            data, [], [], handles);
+        [ data.tdt.spikes data.tdt.spikes_r ]= look_for_spikes(data.tdt, ...
+            data, [], []);
      elseif isfield(data, 'ni')
-        [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes_xcorr(data.ni, ...
-            data, [], [], handles);
+        [ data.ni.spikes data.ni.spikes_r ]= look_for_spikes(data.ni, ...
+            data, [], []);
      end
 
 end
@@ -179,4 +189,12 @@ if data.version < 24
     if length(data.detrend_param.response_detection_threshold) == 1
         data.detrend_param.response_detection_threshold = ones(1, 16) * data.detrend_param.response_detection_threshold;
     end
+end
+
+
+if data.version < 25
+    % Here I changed response detection to look_for_spikes_peaks.m, which uses a different
+    % threshold: RMS noise = sigma; spike >= 5sigma.
+    data.detrend_param.response_sigma = 5;
+    data.detrend_param.response_prob = NaN;
 end

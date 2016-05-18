@@ -24,7 +24,7 @@ end
 
 for n = length(trigger_ind):-1:1
     start_ind = trigger_ind(n) - trigger_ind(1) + 1;
-    data_aligned(n,:,:) = data(start_ind:start_ind+ceil(0.025*fs),:);
+    data_aligned(n,:,:) = data(start_ind:start_ind+ceil(0.030*fs),:);
 end
 
 
@@ -35,5 +35,4 @@ if isempty(triggertime)
     triggertime = NaN;
     return;
 end
-
 
