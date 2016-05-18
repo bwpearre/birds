@@ -4,6 +4,8 @@ global currently_reconfiguring;
 global scriptdir;
 global monitor_struct;
 
+persistent last_stim;
+
 
 while currently_reconfiguring
     disp('Still reconfiguring the hardware... please wait (about 5 seconds, usually)...');

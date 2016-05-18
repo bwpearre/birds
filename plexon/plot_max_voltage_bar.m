@@ -49,9 +49,7 @@ figure(2);
 clf;
 
 % Bar with errorbars
-if true
-    hBar = barwitherr(channel_voltage_95(sortorder), channel_voltage_means(sortorder));
-end
+hBar = bar(channel_voltage_means(sortorder));
 
 % Pull in the maximum-likelihood sigmoid fit results:
 if exist('reanalysed_thresholds.mat', 'file')
@@ -65,28 +63,51 @@ for i = 1:length(polarities)
 end
 reanalysed_reordered = reanalysed_thresholds(reanalysed_voltage_loc,:);
 
-
-% Plot each datum as well, in red
+%scatterrand = (rand(1,size(channel_voltage,1))-0.5)*0.5;
+scatterrand = linspace(-0.2, 0.2, size(channel_voltage,1));
+% Plot each datum as well, invisibly, to get auto-limit scaling
 hold on;
 for ii=1:length(channel_voltage_means)
     tmp = channel_voltage(:,sortorder(ii)); %temporarily store data in variable "tmp"
     x = repmat(ii,1,length(tmp)); %the x axis location
-    x = x+(rand(size(x))-0.5)*0.3; %add a little random "jitter" to aid visibility
+    x = x+scatterrand(1:length(x)); %add a little random "jitter" to aid visibility
     if channel_voltage_counts(sortorder(ii)) == nfrequencies
         plot(x, tmp, '.r')
     else
-        plot(x, tmp, 'or', 'MarkerSize', 10 - 1.2*channel_voltage_counts(sortorder(ii)));
+        plot(x, tmp, 'or', 'MarkerSize', 30 - 1.2*channel_voltage_counts(sortorder(ii)));
     end
 end
 hold off;
 autoylim = get(gca, 'YLim');
+
 hold on;
+errorbars_offset = 0.1;
 for ii=1:length(channel_voltage_means)
-    scatter(ii+0.2, reanalysed_reordered(sortorder(ii),2), ...
-        40*reanalysed_reordered(sortorder(ii),3), [0 1 0], 'x');
+    % Plot centres for the maximum-likelihood estimates
+    scatter(ii+errorbars_offset, reanalysed_reordered(sortorder(ii),2), ...
+        40*reanalysed_reordered(sortorder(ii),3), [0 0.5 0], '+');
+    
+    % Plot error bars for the maximum-likelihood estimates
     if reanalysed_reordered(sortorder(ii),4) > 0 && reanalysed_reordered(sortorder(ii),4) < 3.5
-        line([1 1]*ii+0.2, reanalysed_reordered(sortorder(ii),4:5), ...
-            'Color', [0 1 0], 'LineWidth', reanalysed_reordered(sortorder(ii),3));
+        line([1 1]*ii+errorbars_offset, reanalysed_reordered(sortorder(ii),4:5), ...
+            'Color', [0 0.5 0], 'LineWidth', 2);
+            %'Color', [0 0.5 0], 'LineWidth', reanalysed_reordered(sortorder(ii),3));
+    end
+    
+    % Plot error bars for the threshold-scan bars
+    line([1 1]*ii-errorbars_offset, ...
+        channel_voltage_means(sortorder(ii))+[-1 1]*channel_voltage_95(sortorder(ii)), ...
+        'Color', [0 0 0], 'LineWidth', 2);
+    
+    
+    % Replot scatter of each sample, so they will be on top:
+    tmp = channel_voltage(:,sortorder(ii)); %temporarily store data in variable "tmp"
+    x = repmat(ii,1,length(tmp)); %the x axis location
+    x = x+scatterrand(1:length(x)); %add a little random "jitter" to aid visibility
+    if channel_voltage_counts(sortorder(ii)) == nfrequencies
+        plot(x, tmp, '.r')
+    else
+        plot(x, tmp, 'or', 'MarkerSize', 50 - 5*channel_voltage_counts(sortorder(ii)));
     end
 end
 hold off;
@@ -103,8 +124,6 @@ title('Maximum absolute voltage of any electrode vs. CSC');
 axfoo = axes('Position', [0 0 1 1], 'Visible', 'off');
 axes(axfoo);
 mstext = text(0.5, 0.03, 'Current Steering Configuration', 'HorizontalAlignment', 'center');
-
-
 
 
 %set(gcf,'PaperPositionMode','auto'); 

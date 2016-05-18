@@ -65,7 +65,6 @@ ELECTRODE=3;
 sortable = [];
 xlimhigh = -Inf;
 clear xData yData;
-sp1 = ceil(sqrt(length(pp)));
 for p = 1:length(pp)
     clear indices j V;
 
@@ -122,6 +121,9 @@ save('reanalysed_thresholds.mat', 'reanalysed_thresholds');
 
 [~, order] = sort(sortable);
 
+%order = order(2:17)
+sp1 = ceil(sqrt(length(order)));
+
 figure(1);
 for p = 1:length(order)
     %% Draw stuff...
@@ -137,8 +139,7 @@ for p = 1:length(order)
     xlimhigh = max(xlimhigh, max(xData{order(p)}));
     xlabel(show);
     ylabel('Pr(r)');
-    title(sprintf('%s: %s %s', pattern_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show, ...
-        sigfig(fits{order(p)}.a)));
+    title(sprintf('%s: %s %s', pattern_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
     set(gca, 'YLim', [0 1]);
     scatter(fits{order(p)}.mu, 0.5, 20, [1 0 0], '+');
     
@@ -169,6 +170,5 @@ for p = 1:length(order)
     end
     subplot(sp1, sp1, p);
     plot(vol_s{order(p)}');
-    title(sprintf('%s: %s %s (%s)', pattern_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show, ...
-        sigfig(fits{order(p)}.a)));
+    title(sprintf('%s: %s %s', pattern_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
 end
