@@ -64,7 +64,7 @@ global bird;
 global hardware stim;
 global in_stim_loop;
 
-global homedir datadir intandir;
+global homedir data_basedir datadir intandir;
 global change;
 global axes1;
 global axes1_yscale;
@@ -82,10 +82,8 @@ global saving_stimulations;
 global recording_amplifier_gain;
 global ni_recording_channel_ranges;
 global valid_electrodes; % which electrodes seem valid for stimulation?
-global impedances_x;
 global ni_response_channels;
 global currently_reconfiguring;
-global show_device; % for now it will be "ni" or "tdt"
 global start_uAmps min_uAmps max_uAmps increase_step;
 global inter_trial_s;
 global voltage_limit;
@@ -97,14 +95,12 @@ if true % For my X--HVC experiment
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
     detrend_param.response_baseline = [0.012 0.025];
-    detrend_param.response_detection_threshold = Inf * ones(1, 16);
     voltage_limit = 3;
 else
     detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
     detrend_param.range = [0.0007 0.02];
     detrend_param.response_roi = [0.0007 0.002];
     detrend_param.response_baseline = [0.005 0.02];
-    detrend_param.response_detection_threshold = Inf * ones(1, 16);
     voltage_limit = 7;
 end
 
@@ -184,7 +180,9 @@ end
 
 
 bird = 'noname';
-datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
+
+data_basedir = strcat(homedir, filesep, 'Data', filesep, 'plexon');
+datadir = strcat(data_basedir, filesep, bird, '-', datestr(now, 'yyyy-mm-dd'));
 increase_type = 'current'; % or 'time'
 default_halftime_s = 200e-6;
 stim.halftime_s = default_halftime_s;
@@ -638,9 +636,8 @@ if false
     file_format = 'yyyymmdd_HHMMSS.FFF';
     file_basename = 'vvsi';
     datafile_name = [ file_basename '_' datestr(now, file_format) '.mat' ];
-    if ~exist(datadir, 'dir')
-        mkdir(datadir);
-    end
+    mkdir_p(datadir);
+    
     save(fullfile(datadir, datafile_name), 'vvsi', '-v7.3');
 end
 
@@ -1391,14 +1388,12 @@ saving_stimulations = get(hObject, 'Value');
 
 
 function birdname_Callback(hObject, eventdata, handles)
-global scriptdir datadir;
+global scriptdir data_basedir, datadir;
 global bird;
 
 bird = get(hObject,'String');
-datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
-if ~exist(datadir, 'dir')
-    mkdir(datadir);
-end
+datadir = strcat(data_basedir, filesep, bird, '-', datestr(now, 'yyyy-mm-dd'));
+mkdir_p(datadir);
 set(handles.datadir_box, 'String', datadir);
 
 set(hObject, 'BackgroundColor', [0 0.8 0]);
@@ -1519,9 +1514,7 @@ global valid_electrodes;
 global bird;
 
 
-if ~exist(datadir, 'dir')
-    mkdir(datadir);
-end
+mkdir_p(datadir);
 
 %% Try to grab any Intan impedance files that may be
 %% lying about... if they were created within the last 30 minutes.
@@ -1531,11 +1524,10 @@ for i = 1:length(csvs)
     % datenum's unit is days, so 1/48 of a day is 30 minutes
     if datenum(now) - csvs(i).datenum <= 1/48
         %disp('Warning: copying x.csv, not moving it as god intended');
-        copyfile(strcat(intandir, csvs(i).name), strcat(datadir, '\impedances-', csvs(i).name));
+        copyfile(strcat(intandir, csvs(i).name), strcat(datadir, filesep, 'impedances-', csvs(i).name));
         disp(sprintf('Copied %s to %s', ...
             strcat(intandir, csvs(i).name), ...
-            strcat(datadir, '\impedances-', csvs(i).name)));
-
+            strcat(datadir, filesep, 'impedances-', csvs(i).name)));
     end
 end
 
@@ -1546,10 +1538,10 @@ for i = 1:length(csvs)
     % datenum's unit is days, so 1/48 of a day is 30 minutes
     if datenum(now) - csvs(i).datenum <= 1/48
         %disp('Warning: copying x.csv, not moving it as god intended');
-        copyfile(strcat(intandir, csvs(i).name), strcat(datadir, '\intan-recordings-', csvs(i).name));
+        copyfile(strcat(intandir, csvs(i).name), strcat(datadir, filesep, 'intan-recordings-', csvs(i).name));
         disp(sprintf('Copied %s to %s', ...
             strcat(intandir, csvs(i).name), ...
-            strcat(datadir, '\intan-recordings-', csvs(i).name)));
+            strcat(datadir, filesep, 'intan-recordings-', csvs(i).name)));
     end
 end
 if exist(strcat(intandir, 'plexon-compatible.isf'), 'file')
@@ -1557,8 +1549,8 @@ if exist(strcat(intandir, 'plexon-compatible.isf'), 'file')
 end
 
 %% If the Area X file exists, display its contents:
-if exist(strcat(datadir, '\impedances-x.csv'), 'file')
-    fid = fopen(strcat(datadir, '\impedances-x.csv'));
+if exist(strcat(datadir, filesep, 'impedances-x.csv'), 'file')
+    fid = fopen(strcat(datadir, filesep, 'impedances-x.csv'));
     a = textscan(fid, '%s', 8, 'Delimiter', ',');
     b = textscan(fid, '%s%s%s%d%f%f%f%f', 'Delimiter', ',');
     fclose(fid);
@@ -1822,7 +1814,7 @@ save(savename, 'saved', '-v7.3');
 
 function restore_globals_Callback(hObject, eventdata, handles)
 [save_vars savename] = get_save_vars();
-global datadir scriptdir;
+global data_basedir datadir scriptdir;
 
 load(savename);
 
@@ -1832,7 +1824,7 @@ for i = save_vars
     eval(sprintf('global %s;', j));
     eval(sprintf('%s = saved.%s;', j, j));
 end
-datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
+datadir = strcat(data_basedir, filesep, bird, '-', datestr(now, 'yyyy-mm-dd'));
 update_gui_values(hObject, handles);
 handles = configure_acquisition_devices(hObject, handles);
 
@@ -1862,6 +1854,7 @@ savename = strcat(scriptdir, '/saved.mat');
 
 function update_gui_values(hObject, handles);
 global hardware scriptdir;
+global data_basedir;
 
 save_vars = get_save_vars(); % Just for the list!
 
@@ -1878,7 +1871,7 @@ for i = 1:16
 end
 set(handles.monitor_electrode_control, 'String', newvals);
 set(handles.tdt_monitor_channel, 'String', newvals);
-datadir = strcat(scriptdir, '/', bird, '-', datestr(now, 'yyyy-mm-dd'));
+datadir = strcat(data_basedir, filesep, bird, '-', datestr(now, 'yyyy-mm-dd'));
 
 
 %%%%% From save_vars %%%%%
@@ -1900,8 +1893,13 @@ set(handles.roi0, 'String', sprintf('%g', detrend_param.response_roi(1)*1000));
 set(handles.roi1, 'String', sprintf('%g', detrend_param.response_roi(2)*1000));
 set(handles.baseline0, 'String', sprintf('%g', detrend_param.response_baseline(1)*1000));
 set(handles.baseline1, 'String', sprintf('%g', detrend_param.response_baseline(2)*1000));
-set(handles.response_detection_threshold, 'String', sprintf('%g', ...
-    detrend_param.response_detection_threshold));
+%set(handles.response_detection_threshold, 'String', sprintf('%g', ...
+%    detrend_param.response_detection_threshold));
+set(handles.response_sigma, 'String', sprintf('%g', ...
+    detrend_param.response_sigma));
+set(handles.response_prob, 'String', sprintf('%g', ...
+    detrend_param.response_prob));
+
 set(handles.voltage_limit, 'String', sigfig(voltage_limit, 2));
 for i = 2:length(ni_response_channels)
     eval(sprintf('set(handles.hvc%d, ''Value'', %d);', i, ni_response_channels(i)));
@@ -1955,9 +1953,7 @@ end
 
 
 
-if ~exist(datadir, 'dir')
-    mkdir(datadir);
-end
+mkdir_p(datadir);
 
 guidata(hObject, handles);
 
@@ -2054,8 +2050,7 @@ function response_indicator_Callback(hObject, eventdata, handles)
 
 function response_detection_threshold_Callback(hObject, eventdata, handles)
 global detrend_param;
-%detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
-disp('Don''t touch that!');
+detrend_param.response_detection_threshold = str2double(get(hObject,'String'));
 
 function response_detection_threshold_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -2301,9 +2296,7 @@ else
 end
 
 
-if ~exist(datadir, 'dir')
-    mkdir(datadir);
-end
+mkdir_p(datadir);
 
 if exist(fullfile(datadir, 'current_thresholds.mat', 'file'))
     error('duplicatefile:warning', 'Error: ''%s'' already exists. Rename or delete.', ...
@@ -2500,7 +2493,9 @@ STIM_CURRENT_NO_RESPONSE = 1;
 stim.current_uA = STIM_CURRENT_NO_RESPONSE;
 stim.tdt_valid = ones(1, 16);
 stim.tdt_show = stim.tdt_valid;
-detrend_param.response_detection_threshold = zeros(1,16);
+detrend_param.response_detection_threshold = 5;
+detrend_param.response_sigma = 5;
+detrend_param.response_prob = 0.5;
 
 nactive = sum(stim.tdt_valid);
 

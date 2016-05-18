@@ -79,10 +79,10 @@ end
 
 
 xcorr_nsamples = ceil(0.0002 * d.fs);
-parfor channel = 1:nchannels
+for channel = 1:nchannels
     % foo dimensions: [ channel time_offset stimXstim ]
-    foo(channel,:,:) = xcorr(response_detrended(:, roii, channel)', xcorr_nsamples, 'coeff');
-    cow(channel,:,:) = xcorr(response_detrended(:, baselinei, channel)', xcorr_nsamples, 'coeff');
+    foo(channel,:,:) = xcorr(response_detrended(:, roii, channel)', xcorr_nsamples, 'none');
+    cow(channel,:,:) = xcorr(response_detrended(:, baselinei, channel)', xcorr_nsamples, 'none');
     %foo(channel,:,:) = cov(response_detrended(:, roii, channel)');
     %cow(channel,:,:) = cov(response_detrended(:, baselinei, channel)');
 end
@@ -106,8 +106,10 @@ if exist('handles') & false
 end
 
 % For each stimXstim pair, find maximum xcorrelation over the time interval xcorr_nsamples
-xcfoo = log10(max(foo, [], 2));
+xcfoo = log10(max(foo, [], 2));  % FIXME Is this the right function?
 xccow = log10(max(cow, [], 2));
+xcfoo = log10(mean(abs(foo), 2));  % FIXME Is this the right function?
+xccow = log10(mean(abs(cow), 2));
 
 % Average over stimXstim pairs
 %mean(xcfoo, 3)
@@ -124,5 +126,9 @@ try
     spikes = r >= detrend_param.response_detection_threshold(find(data.stim.tdt_valid));
 catch ME
     disp('look_for_spikes_xcorr: using mean of response_detection_threshold');
-    spikes = r >= mean(detrend_param.response_detection_threshold(find(data.stim.tdt_valid)));
+    if isfield(data, 'tdt')
+        spikes = r >= mean(detrend_param.response_detection_threshold(find(data.stim.tdt_valid)));
+    elseif isfield(data, 'ni')
+        spikes = r >= mean(detrend_param.response_detection_threshold);
+    end
 end

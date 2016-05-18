@@ -82,8 +82,6 @@ if isempty(u) | length(u) < 5
     return;
 end
 
-axes1legend = {};
-
 sz = size(d.response);
 
 % Shall we compute the average of time-aligned responses?
@@ -101,9 +99,6 @@ end
 
     
 
-%[ detrended_all trend_all ] = detrend_response(d.response, d, data, detrend_param);
-%[spikes r] = look_for_spikes_xcorr(d, data, detrend_param);
-
 linewidths = 0.3*ones(1, nchannels);
 %linewidths(find(d.spikes)) = ones(1, length(linewidths(find(d.spikes))));
 
@@ -111,7 +106,7 @@ linewidths = 0.3*ones(1, nchannels);
 % get(handles.response_show_all, 'Value')
 
 if get(handles.response_filter, 'Value')
-    [B A] = ellip(2, .000001, 30, [100]/(d.fs/2), 'high');
+    [B A] = ellip(2, .001, 30, [300 3000]/(d.fs/2));
     for i = 1:size(response_plot, 1)
         response_plot(i,:,:) = filtfilt(B, A, squeeze(response_plot(i,:,:)));
     end
@@ -171,47 +166,52 @@ end
 
 
 clear h; % Handles for plot -- if empty, there will be no legend, title, etc 
-
 for channel = show_channels
     
     % Raw (or filtered) response
     if show_raw
         h = plot(handles.axes1, ...
-            times_aligned(u), ...
-            reshape(response_plot(:,u,channel), [size(response_plot, 1) length(u)])', ...
+            1e3*times_aligned(u), ...
+            1e6*reshape(response_plot(:,u,channel), [size(response_plot, 1) length(u)])', ...
             'Color', colours(channel, :), 'LineWidth', linewidths(channel));
     end
+    
+    
+    % Trend
+    if show_trend
+        if show_avg
+            h = plot(handles.axes1, 1e3*roitimes, ...
+                1e6*reshape(mean(d.response_trend(:, roii, channel), 1), [1 length(roii)])', ...
+                'Color', colours(channel, :));
+        else
+            h = plot(handles.axes1, 1e3*roitimes, ...
+                1e6*reshape(d.response_trend(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
+                'Color', colours(channel, :));
+        end
+    end
+
     % Detrended
     if show_detrended
         if show_avg
-            h = plot(handles.axes1, roitimes, ...
-                reshape(mean(d.response_detrended(:, roii, channel), 1), [1 length(roii)])', ...
-                'Color', colours(channel, :), 'LineWidth', linewidths(channel));
+            h = plot(handles.axes1, 1e3*roitimes, ...
+                1e6*reshape(mean(d.response_detrended(:, roii, channel), 1), [1 length(roii)])', ...
+                'Color', colours(channel, :), 'LineWidth', 2);
         else
-            h = plot(handles.axes1, roitimes, ...
-                reshape(d.response_detrended(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
+            h = plot(handles.axes1, 1e3*roitimes, ...
+                1e6*reshape(d.response_detrended(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
                 'Color', colours(channel, :), 'LineWidth', linewidths(channel));
         end
     end
-    if show_trend
-        if show_avg
-            plot(handles.axes1, roitimes, ...
-                reshape(mean(d.response_trend(:, roii, channel), 1), [1 length(roii)])', ...
-                'Color', colours(channel,:), 'LineStyle', ':');
-        else
-            plot(handles.axes1, roitimes, ...
-                reshape(d.response_trend(:, roii, channel), [size(d.response_detrended, 1) length(roii)])', ...
-                'Color', colours(channel,:), 'LineStyle', ':');
-        end
-        axes1legend{end+1} = 'Trend';
-    end
-
+    
+    % Add whatever we've got to the legend bookkeeper
     if exist('h', 'var')
         legend_handles(end+1) = h(1);
         legend_names(end+1) = strcat(d.names(channel), ' (', sigfig(d.spikes_r(channel), 4), ')');
     end
+    
 end
 hold(handles.axes1, 'off');
+%legend(handles.axes1, legendhandles, {'Raw', 'Trend', 'Detrended'});
 %legend_names = d.names(d.show);
 if exist('h', 'var')
     try
@@ -224,9 +224,10 @@ if exist('h', 'var')
     xl = get(handles.axes1, 'XLim');
     xl(1) = beforetrigger;
     set(handles.axes1, ...
-        'XLim', [beforetrigger aftertrigger], ...
-        'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
-    ylabel(handles.axes1, 'volts');
+        'XLim', 1e3*[beforetrigger aftertrigger], ...
+        'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]*1e3);
+    ylabel(handles.axes1, 'voltage (\mu V)');
+    xlabel(handles.axes1, 'time (ms)');
     grid(handles.axes1, 'on');
 end
 
@@ -262,7 +263,7 @@ title(handles.axes3, sprintf('Stimulation (%sV, %snC)', sigfig(data.voltage, 3),
     sigfig(data.stim.current_uA * data.stim.halftime_s * 1e3, 3)));
 
 xtick = get(handles.axes1, 'XTick');
-set(handles.axes1, 'XTick', xtick(1):0.001:aftertrigger);
+set(handles.axes1, 'XTick', xtick(1):aftertrigger*1e3);
 %figure(1);
 %plot(times_aligned(u), reshape(data.data_aligned(:,u,data.channels_out), [ length(u) length(data.channels_out)])');
 

@@ -167,7 +167,7 @@ end
 
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 24;
+data.version = 25;
 
 
 data.bird = bird;
