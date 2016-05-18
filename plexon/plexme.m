@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 13-Mar-2016 13:23:57
+% Last Modified by GUIDE v2.5 18-May-2016 15:44:51
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -94,12 +94,14 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if false % For my X--HVC experiment
+if true % For my X--HVC experiment
     detrend_param.model = 'fourier8';
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
     detrend_param.response_baseline = [0.012 0.025];
     detrend_param.response_detection_threshold = 0.5;
+    detrend_param.response_sigma = 5;
+    detrend_param.response_prob = 0.5;
     voltage_limit = 3;
 else
     detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
@@ -107,6 +109,8 @@ else
     detrend_param.response_roi = [0.0007 0.002];
     detrend_param.response_baseline = [0.005 0.02];
     detrend_param.response_detection_threshold = 0.5;
+    detrend_param.response_sigma = 5;
+    detrend_param.response_prob = 0.5;
     voltage_limit = 7;
 end
 
@@ -264,9 +268,6 @@ axes1_yscale = handles.yscale;
 axes2 = handles.axes2;
 axes4 = handles.axes4;
 axes3 = handles.axes3;
-gca = handles.stupidaxis;
-text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
-axis off;
 
 
 set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
@@ -284,6 +285,9 @@ else
     handles = configure_acquisition_devices_OFFSITE(hObject, handles);
 end
 
+% We don't need to know when there are no spikes.
+warning('off', 'signal:findpeaks:largeMinPeakHeight');
+warning('off', 'stats:gmdistribution:FailedToConverge');
 
 
 update_gui_values(hObject, handles);
@@ -928,20 +932,25 @@ end
 
 
 function stim_loop(hObject, handles)
-global stop_button_pressed
-global in_stim_loop
+global stop_button_pressed;
+global in_stim_loop;
 
 if in_stim_loop
-   return; 
+    disp('stim_loop: already in stim_loop');
+    return;
 end
 
 if ~sufficient_active_electrodes
+    disp('stim_loop: insufficient active electrodes');
     return;
 end
 
 in_stim_loop = true;
-
 plexon_start_timer_callback([], [], hObject, handles);
+
+if stop_button_pressed
+    disp('stim_loop: stop_button was pressed and not reset.');
+end
 
 while ~stop_button_pressed
     disp('Stimulating now')
@@ -959,6 +968,9 @@ global change;
 global increase_type increase_step;
 global stim;
 global default_halftime_s;
+global stop_button_pressed;
+
+stop_button_pressed = false;
 
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
@@ -975,6 +987,9 @@ global change increase_step;
 global increase_type;
 global stim;
 global default_halftime_s;
+global stop_button_pressed;
+
+stop_button_pressed = false;
 
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
@@ -991,6 +1006,9 @@ global change;
 global increase_type;
 global stim;
 global default_halftime_s;
+global stop_button_pressed;
+
+stop_button_pressed = false;
 
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
@@ -999,13 +1017,13 @@ change = 1;
 stim_loop(hObject, handles);
 % disp('Stim_loop done')
 
-guidata(hObject, handles);
-
 
 % --- Executes on button press in stop.
 function stop_Callback(hObject, eventdata, handles)
 global stop_button_pressed;
+
 stop_button_pressed = true; % Used to abort long sequences...
+
 stop_everything(handles);
 
 
@@ -1017,6 +1035,7 @@ global increase_type;
 global stim_timer;
 global thewaitbar;
 global stop_button_pressed;
+global in_stim_loop;
 
 if ~isempty(thewaitbar)
     delete(thewaitbar);
@@ -1065,7 +1084,7 @@ if ~exist('paused', 'var')
     set(handles.pause, 'BackgroundColor', [1 1 1]*0.94, 'String', 'Pause');
 end
 
-
+in_stim_loop = false;
 
 
 function currentcurrent_Callback(hObject, eventdata, handles)
@@ -1074,7 +1093,7 @@ global max_uAmps min_uAmps;
 
 newcurrent = str2double(get(hObject, 'String'));
 if isnan(newcurrent)
-        set(hObject, 'String', sigfig(stim.current_uA, 3));
+        set(hObject, 'String', sigfig(max(abs(stim.current_uA)), 3));
 elseif newcurrent < min_uAmps
         stim.current_uA = min_uAmps;
 elseif newcurrent > max_uAmps
@@ -1189,12 +1208,6 @@ global hardware stim;
 
 whichone = str2num(hObject.String);
 newval = get(hObject, 'Value');
-if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(stim.active_electrodes) > 0
-    for i = find(stim.active_electrodes)
-        eval(sprintf('set(handles.stim%d, ''Value'', 0);', i));
-        stim.active_electrodes(i) = 0;
-    end
-end
 stim.active_electrodes(whichone) = newval;
 
 if stim.active_electrodes(whichone)
@@ -1385,26 +1398,6 @@ end
 
   
   
-% --- Executes on button press in stimMultiple.
-function stimMultiple_Callback(hObject, eventdata, handles)
-global valid_electrodes stim;
-
-val = get(hObject, 'Value');
-if val
-    set(handles.select_all_valid, 'Enable', 'on');
-else
-    set(handles.select_all_valid, 'Enable', 'off');
-end
-if ~val & sum(stim.active_electrodes) > 1
-    % Turn off stimulation to all electrodes
-    stim.active_electrodes = zeros(1, 16);
-    for i = 1:16
-        eval(sprintf('set(handles.stim%d, ''Value'', false);', i));
-    end
-    update_monitor_electrodes(hObject, handles)
-end
-guidata(hObject, handles);
-
 
 % --- Executes on button press in vvsi_auto_safe.
 function vvsi_auto_safe_Callback(hObject, eventdata, handles)
@@ -3242,3 +3235,52 @@ end
 set(hObject, 'String', num2str(newVal));
 smoothnessParams.pauseStep = newVal;
   
+function pauseStep_CreateFcn(a, b, c)
+
+function ampStep_CreateFcn(a, b, c)
+
+
+
+function response_sigma_Callback(hObject, eventdata, handles)
+% hObject    handle to response_sigma (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of response_sigma as text
+%        str2double(get(hObject,'String')) returns contents of response_sigma as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function response_sigma_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to response_sigma (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function response_prob_Callback(hObject, eventdata, handles)
+% hObject    handle to response_prob (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of response_prob as text
+%        str2double(get(hObject,'String')) returns contents of response_prob as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function response_prob_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to response_prob (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

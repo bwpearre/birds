@@ -5,7 +5,9 @@ global scriptdir;
 global monitor_struct;
 
 persistent last_stim;
+tic
 
+stim
 
 while currently_reconfiguring
     disp('Still reconfiguring the hardware... please wait (about 5 seconds, usually)...');
@@ -180,10 +182,13 @@ stim.target_current = target_current;
 [ data, response_detected, voltage, errors ] ...
     = organise_data(stim, hardware, detrend_param, hardware.ni.session, event, handles);
 
+last_stim = stim;
 
+disp(sprintf('stimulate: elapsed time is %s s', sigfig(toc)));
 
+tic
 plot_stimulation(data, handles);
-
+disp(sprintf('plot_stimulation: elapsed time is %s s', sigfig(toc)));
 
 
 
@@ -218,3 +223,4 @@ fprintf(fid, '%d\n%d\n', round(StimParam.A2*1000), round(StimParam.W2));
 
 % Close file
 fclose(fid);
+

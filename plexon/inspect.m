@@ -126,6 +126,12 @@ end
 
 disp(sprintf('File #%d', file))
 
+if file > length(handles.files)
+    disp(sprintf('inspect.m: Requested file %d, but only %d files', ...
+        file, length(handles.files)));
+    return;
+end
+
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
 
