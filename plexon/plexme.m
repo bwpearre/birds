@@ -259,7 +259,7 @@ set(handles.halftime, 'BackgroundColor', offcolour);
 set(handles.delaytime, 'BackgroundColor', offcolour);
 set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
 set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
-set(handles.apply_params, 'BackgroundColor', offcolour);
+set(handles.apply_params, 'BackgroundColor', [1 0 0], 'Visible', 'off');
 
 %set(handles.n_repetitions_box, 'Enable', 'off');
 
@@ -275,6 +275,8 @@ for i = 2:7
     eval(sprintf('handles.disable_on_run{end+1} = handles.hvc%d;', i));
 end
 
+handles.disable_on_reconfigure = { handles.increase handles.decrease handles.hold ...
+    handles.full_threshold_scan handles.smoothness_scan};
 
 
 axes1 = handles.axes1;
@@ -789,7 +791,7 @@ end
 
 function halftime_Callback(hObject, eventdata, handles)
 set(hObject, 'BackgroundColor', [1 0 0]);
-set(handles.apply_params, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'Visible', 'on');
 
 
 function halftime_CreateFcn(hObject, eventdata, handles)
@@ -801,7 +803,7 @@ end
 
 function delaytime_Callback(hObject, eventdata, handles)
 set(hObject, 'BackgroundColor', [1 0 0]);
-set(handles.apply_params, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'Visible', 'on');
 
 
 
@@ -813,7 +815,7 @@ end
 
 function n_repetitions_box_Callback(hObject, eventdata, handles)
 set(hObject, 'BackgroundColor', [1 0 0]);
-set(handles.apply_params, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'Visible', 'on');
 
 
 function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
@@ -824,13 +826,49 @@ end
 
 function n_repetitions_hz_box_Callback(hObject, eventdata, handles)
 set(hObject, 'BackgroundColor', [1 0 0]);
-set(handles.apply_params, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'Visible', 'on');
 
 % --- Executes during object creation, after setting all properties.
 function n_repetitions_hz_box_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+function apply_params_Callback(hObject, eventdata, handles)
+global hardware stim;
+global default_halftime_s;
+
+default_halftime_s = str2double(get(handles.halftime, 'String')) / 1e6;
+stim.halftime_s = default_halftime_s;
+stim.interpulse_s = str2double(get(handles.delaytime, 'String'))/1e6;
+stim.n_repetitions = str2double(get(handles.n_repetitions_box, 'String'));
+stim.repetition_Hz = str2double(get(handles.n_repetitions_hz_box, 'String'));
+if stim.repetition_Hz > 40
+    stim.repetition_Hz = 40;
+    set(hObject, 'String', sigfig(stim.repetition_Hz, 3));
+end
+
+for i = 1:length(handles.disable_on_reconfigure)
+    set(handles.disable_on_reconfigure{i}, 'Enable', 'off');
+end
+
+offcolour = [0.9 0.9 1];
+set(handles.halftime, 'BackgroundColor', offcolour);
+set(handles.delaytime, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
+set(hObject, 'BackgroundColor', offcolour, 'Visible', 'off');
+
+handles = configure_acquisition_devices(hObject, handles);
+
+for i = 1:length(handles.disable_on_reconfigure)
+    set(handles.disable_on_reconfigure{i}, 'Enable', 'on');
+end
+
+guidata(hObject, handles);
+
+
 
 
 
@@ -3236,32 +3274,3 @@ end
 
 
 
-% --- Executes on button press in apply_params.
-function apply_params_Callback(hObject, eventdata, handles)
-global hardware stim;
-global default_halftime_s;
-
-default_halftime_s = str2double(get(handles.halftime, 'String')) / 1e6;
-stim.halftime_s = default_halftime_s;
-stim.interpulse_s = str2double(get(handles.delaytime, 'String'))/1e6;
-stim.n_repetitions = str2double(get(handles.n_repetitions_box, 'String'));
-stim.repetition_Hz = str2double(get(handles.n_repetitions_hz_box, 'String'));
-if stim.repetition_Hz > 40
-    stim.repetition_Hz = 40;
-    set(hObject, 'String', sigfig(stim.repetition_Hz, 3));
-end
-
-
-offcolour = [0.9 0.9 1];
-set(handles.halftime, 'BackgroundColor', offcolour);
-set(handles.delaytime, 'BackgroundColor', offcolour);
-set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
-set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
-set(hObject, 'BackgroundColor', offcolour);
-
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
-
-% hObject    handle to apply_params (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
