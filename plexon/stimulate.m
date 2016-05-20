@@ -5,6 +5,7 @@ global scriptdir;
 global monitor_struct;
 
 persistent last_stim;
+persistent filenames;
 tic
 
 while currently_reconfiguring
@@ -22,27 +23,40 @@ set(handles.halftime, 'String', sigfig(stim.halftime_s * 1e6, 3));
 
 % Create new file for each electrode
 % Store values for each electrode in cell of structs
-filenames = cell(16,1);
 
 if isempty(last_stim)
     same_per_electrode = zeros(size(stim.active_electrodes));
     same_waveform = same_per_electrode;
     same_shared = 0;
     same_monitor = 0;
+    same_session = 0;
 else
-    % Bypass same-as-last-time settings for faster reprogramming
-    same_per_electrode = stim.active_electrodes == last_stim.active_electrodes ...
-        & stim.prepulse_us == last_stim.prepulse_us ...
-        & stim.current_scale == last_stim.current_scale;
-    same_shared = stim.current_uA == last_stim.current_uA ...
-        & stim.n_repetitions == last_stim.n_repetitions ...
+    %% Bypass same-as-last-time settings for faster reprogramming
+    % The device was not reconfigured in the meantime:
+    same_session = stim.n_repetitions == last_stim.n_repetitions ...
         & stim.repetition_Hz == last_stim.repetition_Hz ...
         & stim.interpulse_s == last_stim.interpulse_s;
-    same_waveform = same_per_electrode ...
+
+    % This electrode doesn't need updating: 
+    same_per_electrode = same_session ...
+        & stim.active_electrodes == last_stim.active_electrodes ...
+        & stim.prepulse_us == last_stim.prepulse_us ...
+        & stim.current_scale == last_stim.current_scale;
+    
+    %% The loaded waveform is still valid:
+    same_waveform = same_session ...
+        & same_per_electrode ...
         & stim.current_uA == last_stim.current_uA ...
         & stim.interpulse_s == last_stim.interpulse_s ...
         & stim.halftime_s == last_stim.halftime_s;
-    same_monitor = stim.plexon_monitor_electrode == last_stim.plexon_monitor_electrode;
+    
+    %% Using the same monitor channel:
+    same_monitor = same_session ...
+        & stim.plexon_monitor_electrode == last_stim.plexon_monitor_electrode;
+end
+
+if ~same_session
+    last_stim = {};
 end
 
 for i = 1:16
@@ -138,7 +152,7 @@ for channel = find(stim.active_electrodes | newly_maybe_inactive_electrodes)
     end
     
     if true
-        % This is not that slow: ~200 us...
+        % This is not that slow: ~200 us total over all iterations of for loop...
         if channel == stim.plexon_monitor_electrode
             np = PS_GetNPointsArbPattern(hardware.plexon.id, channel);
             target_current = [];

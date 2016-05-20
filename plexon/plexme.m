@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 18-May-2016 15:44:51
+% Last Modified by GUIDE v2.5 20-May-2016 13:43:18
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -100,6 +100,7 @@ if true % For my X--HVC experiment
     detrend_param.response_roi = [0.0025 0.008];
     detrend_param.response_baseline = [0.012 0.025];
     detrend_param.response_detection_threshold = 0.5;
+    detrend_param.spike_detect = @look_for_spikes_peaks;
     detrend_param.response_sigma = 5;
     detrend_param.response_prob = 0.5;
     voltage_limit = 3;
@@ -109,6 +110,7 @@ else
     detrend_param.response_roi = [0.0007 0.002];
     detrend_param.response_baseline = [0.005 0.02];
     detrend_param.response_detection_threshold = 0.5;
+    detrend_param.spike_detect = @look_for_spikes_peaks;
     detrend_param.response_sigma = 5;
     detrend_param.response_prob = 0.5;
     voltage_limit = 7;
@@ -252,6 +254,12 @@ for i = 1:16
         'Enable', 'off');
 end
 
+offcolour = [0.9 0.9 1];
+set(handles.halftime, 'BackgroundColor', offcolour);
+set(handles.delaytime, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
+set(handles.apply_params, 'BackgroundColor', offcolour);
 
 %set(handles.n_repetitions_box, 'Enable', 'off');
 
@@ -314,15 +322,19 @@ global offsiteTest;
 
 currently_reconfiguring = true;
 
-
+disp('Opening NI session...');
 init_ni(hObject, handles);
+disp('...done.');
+disp('Opening TDT session...');
 handles = init_tdt(hObject, handles);
+disp('...done.');
+disp('Opening Plexon session...');
 init_plexon(hObject, handles);
-
-
-guidata(hObject, handles);
+disp('...done');
 
 currently_reconfiguring = false;
+guidata(hObject, handles);
+
 
 
 
@@ -331,14 +343,14 @@ function [] = init_plexon(hObject, handles)
 global hardware;
 % Open the stimulator
 
-
+disp('PS_CloseAllStim 1...');
 PS_CloseAllStim;
 if hardware.plexon.open
     hardware.plexon.open = false;
 end
+disp('...done.');
 
-
-
+disp('PS_InitAllStim...');
 err = PS_InitAllStim;
 switch err
     case 1
@@ -352,41 +364,52 @@ switch err
     otherwise
         hardware.plexon.open = true;
 end
+disp('...done.');
 
 
+disp('PS_GetNStim...');
 nstim = PS_GetNStim;
 if nstim > 1
+    disp('   PS_CloseAllStim 2...');
     err = PS_CloseAllStim;
+    disp('   ...done.');
     hardware.plexon.open = false;
     error('plexon:init', 'Plexon: %d devices available, but that dolt Ben assumed only 1!', nstim);
     return;
 end
+disp('...done.');
 
 
 %try
-    %err = PS_SetDigitalOutputMode(hardware.plexon.id, 0); % Keep digital out HIGH in interpulse
-    %if err
-    %    ME = MException('plexon:init', 'Plexon: digital output on "%d".', hardware.plexon.id);
-    %    throw(ME);
-    %end
+%    disp('PS_SetDigitalOutputMode...');
+%    err = PS_SetDigitalOutputMode(hardware.plexon.id, 0); % Keep digital out HIGH in interpulse
+%    if err
+%        ME = MException('plexon:init', 'Plexon: digital output on "%d".', hardware.plexon.id);
+%        throw(ME);
+%    end
+%    disp('...done.');
+    disp('PS_GetNChannels...');
     [nchan, err] = PS_GetNChannels(hardware.plexon.id);
     if err
         ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', hardware.plexon.id);
         throw(ME);
     else
-        %disp(sprintf('Plexon show_device %d has %d channels.', hardware.plexon.id, nchan));
+        disp(sprintf('Plexon show_device %d has %d channels.', hardware.plexon.id, nchan));
     end
     if nchan ~= 16
         ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
         throw(ME);
     end
+    disp('...done.');
 
 
+    disp('PS_SetTriggerMode...');
     err = PS_SetTriggerMode(hardware.plexon.id, 0);
     if err
         ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', hardware.plexon.id);
         throw(ME);
     end
+    disp('...done.');
 
 %catch ME
 %    disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
@@ -673,8 +696,8 @@ if ~isempty(hardware.ni.session)
 end
 disp('...done.');
 
-disp('Shutting down Plexon session...');
-if hardware.plexon.open
+disp('Shutting down Plexon session... NOT closing Plexon box!');
+if hardware.plexon.open & false
     err = PS_CloseAllStim;
     if err
         msgbox({'ERROR CLOSING STIMULATOR', 'Could not contact Plexon stimulator for shutdown!'});
@@ -765,16 +788,10 @@ end
 
 
 function halftime_Callback(hObject, eventdata, handles)
-global hardware stim;
-global default_halftime_s;
+set(hObject, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'BackgroundColor', [1 0 0]);
 
-default_halftime_s = str2double(get(hObject,'String')) / 1e6;
-stim.halftime_s = default_halftime_s;
 
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
-
-% --- Executes during object creation, after setting all properties.
 function halftime_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
@@ -783,19 +800,39 @@ end
 
 
 function delaytime_Callback(hObject, eventdata, handles)
-global hardware stim;
-
-stim.interpulse_s = str2double(get(hObject,'String'))/1e6;
-
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
+set(hObject, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'BackgroundColor', [1 0 0]);
 
 
-% --- Executes during object creation, after setting all properties.
+
 function delaytime_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+function n_repetitions_box_Callback(hObject, eventdata, handles)
+set(hObject, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'BackgroundColor', [1 0 0]);
+
+
+function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+function n_repetitions_hz_box_Callback(hObject, eventdata, handles)
+set(hObject, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'BackgroundColor', [1 0 0]);
+
+% --- Executes during object creation, after setting all properties.
+function n_repetitions_hz_box_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
 
 
 function electrode_universal_callback(hObject, eventdata, handles)
@@ -1472,40 +1509,6 @@ plot_stimulation([], handles, true);
 
 
 
-function n_repetitions_box_Callback(hObject, eventdata, handles)
-global hardware stim;
-
-stim.n_repetitions = str2double(get(hObject, 'String'));
-
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
-
-
-function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-function n_repetitions_hz_box_Callback(hObject, eventdata, handles)
-global hardware stim;
-
-stim.repetition_Hz = str2double(get(hObject, 'String'));
-if stim.repetition_Hz > 40
-    stim.repetition_Hz = 40;
-    set(hObject, 'String', sigfig(stim.repetition_Hz, 3));
-end
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
-
-
-% --- Executes during object creation, after setting all properties.
-function n_repetitions_hz_box_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
 
 % --- Executes on button press in load_impedances.
 function load_impedances_Callback(hObject, eventdata, handles)
@@ -1923,8 +1926,9 @@ for i = 1:16
     eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, foo));
     eval(sprintf('set(handles.stim%d, ''Value'', %d);', i, stim.active_electrodes(i)));
     eval(sprintf('set(handles.stimscale%d, ''Enable'', ''%s'');', i, foo));
-    eval(sprintf('set(handles.stimscale%d, ''Value'', %s);', i, sigfig(stim.current_scale(i))));
 end
+stim_scale_update_gui(handles);
+prepulse_us_update_gui(handles);
 set(handles.datadir_box, 'String', datadir);
 set(handles.birdname, 'String', bird, 'BackgroundColor', [0 0.8 0]);
 update_monitor_electrodes(hObject, handles);
@@ -2597,7 +2601,7 @@ function [ data, response_detected, voltage] = stimulate_wrapper(stim, hardware,
 
 [ data, response_detected, voltage, errors] = stimulate(stim, hardware, detrend_param, handles);
 
-if errors.val ~= 0
+if ~isempty(errors) & errors.val ~= 0
     for i = 1:length(errors.name)
         disp(errors.name{i});
     end
@@ -3189,22 +3193,11 @@ function ampStep_CreateFcn(a, b, c)
 
 
 function response_sigma_Callback(hObject, eventdata, handles)
-% hObject    handle to response_sigma (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of response_sigma as text
-%        str2double(get(hObject,'String')) returns contents of response_sigma as a double
+global detrend_param;
+detrend_param.response_sigma = str2double(get(hObject,'String'));
 
 
-% --- Executes during object creation, after setting all properties.
 function response_sigma_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to response_sigma (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -3212,24 +3205,49 @@ end
 
 
 function response_prob_Callback(hObject, eventdata, handles)
-% hObject    handle to response_prob (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+global detrend_param;
+detrend_param.response_prob = str2double(get(hObject,'String'));
+if isnan(detrend_param.response_prob)
+    set(handles.response_prob, 'BackgroundColor', [1 0 0]);
+else
+    set(handles.response_prob, 'BackgroundColor', 0.94 * [1 1 1]);
+end
 
-% Hints: get(hObject,'String') returns contents of response_prob as text
-%        str2double(get(hObject,'String')) returns contents of response_prob as a double
 
-
-% --- Executes during object creation, after setting all properties.
 function response_prob_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to response_prob (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
 
+
+
+% --- Executes on button press in apply_params.
+function apply_params_Callback(hObject, eventdata, handles)
+global hardware stim;
+global default_halftime_s;
+
+default_halftime_s = str2double(get(handles.halftime, 'String')) / 1e6;
+stim.halftime_s = default_halftime_s;
+stim.interpulse_s = str2double(get(handles.delaytime, 'String'))/1e6;
+stim.n_repetitions = str2double(get(handles.n_repetitions_box, 'String'));
+stim.repetition_Hz = str2double(get(handles.n_repetitions_hz_box, 'String'));
+if stim.repetition_Hz > 40
+    stim.repetition_Hz = 40;
+    set(hObject, 'String', sigfig(stim.repetition_Hz, 3));
+end
+
+
+offcolour = [0.9 0.9 1];
+set(handles.halftime, 'BackgroundColor', offcolour);
+set(handles.delaytime, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
+set(hObject, 'BackgroundColor', offcolour);
+
+handles = configure_acquisition_devices(hObject, handles);
+guidata(hObject, handles);
+
+% hObject    handle to apply_params (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)

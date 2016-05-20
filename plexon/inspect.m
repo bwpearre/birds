@@ -55,12 +55,8 @@ path(sprintf('%s/../lib', scriptpath), path);
 global responses_detrended;
 global wait_bar;
 global tdt_show_now tdt_show_data tdt_show_data_last tdt_show_last_chosen;
-global detrend_param;
-global look_for_spikes;
 global axes2_tracks_axes1;
 
-
-look_for_spikes = @look_for_spikes_peaks;
 
 % We don't need to know when there are no spikes.
 warning('off', 'signal:findpeaks:largeMinPeakHeight');
@@ -106,13 +102,16 @@ guidata(hObject, handles);
 
 
 
+
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% This is the main function!
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
-global detrend_param detrend_param_orig look_for_spikes;
+global detrend_param detrend_param_orig;
 persistent last_file;
 
 %set(handles.listbox1, 'Enable', 'inactive');
@@ -168,12 +167,12 @@ if ~isequal(detrend_param, data.detrend_param)
     if isfield(data, 'tdt')
         [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
             = detrend_response(data.tdt, data, detrend_param);
-        [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes(data.tdt, ...
+        [ data.tdt.spikes data.tdt.spikes_r ] = detrend_param.spike_detect(data.tdt, ...
             data, detrend_param, [], handles);
     else
         [ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
             = detrend_response(data.ni, data, detrend_param);
-        [ data.ni.spikes data.ni.spikes_r ] = look_for_spikes(data.ni, ...
+        [ data.ni.spikes data.ni.spikes_r ] = detrend_param.spike_detect(data.ni, ...
             data, detrend_param, [], handles);
     end
 end
