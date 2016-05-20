@@ -124,8 +124,6 @@ else
     last_file = file;
 end
 
-disp(sprintf('File #%d', file))
-
 if file > length(handles.files)
     disp(sprintf('inspect.m: Requested file %d, but only %d files', ...
         file, length(handles.files)));
@@ -200,8 +198,6 @@ end
 %end
 
 
-
-
 if doplot
         if data.version >= 6
             tabledata{1,1} = data.bird;
@@ -209,17 +205,15 @@ if doplot
         tabledata{2,1} = sprintf('%d ', data.stim.active_electrodes);
         tabledata{3,1} = sprintf('%.3g uA', data.stim.current_uA);
         if isfield(data.stim, 'halftime_us')
-            tabledata{4,1} = sprintf('%d us', round(data.halftime_s)*1e6);
+            tabledata{4,1} = sprintf('%d', round(data.stim.halftime_us));
+        elseif isfield(data.stim, 'halftime_s')
+            tabledata{4,1} = sprintf('%d', round(data.stim.halftime_s*1e6));
         else
             tabledata{4,1} = '?';
         end
-        
-        if isfield(data.stim, 'negativefirst')
-            tabledata{5,1} = sprintf('%d ', data.stim.negativefirst(find(data.stim.active_electrodes)));
-        else
-            tabledata{5,1} = '?'; % negative pulse first
-        end
-        tabledata{6,1} = sprintf('%d', data.stim.plexon_monitor_electrode);
+        tabledata{5,1} = sprintf('%s ', sigfig(data.stim.current_scale(find(data.stim.active_electrodes))));
+        tabledata{6,1} = sprintf('%d ', data.stim.prepulse_us(find(data.stim.active_electrodes)));
+        tabledata{7,1} = sprintf('%d', data.stim.plexon_monitor_electrode);
         if isfield(data, 'comments')
             set(handles.comments, 'String', data.comments);
         end
