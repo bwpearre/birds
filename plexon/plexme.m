@@ -322,6 +322,8 @@ function [handles] = configure_acquisition_devices(hObject, handles);
 global currently_reconfiguring;
 global offsiteTest;
 
+tic
+
 currently_reconfiguring = true;
 
 disp('Opening NI session...');
@@ -337,7 +339,7 @@ disp('...done');
 currently_reconfiguring = false;
 guidata(hObject, handles);
 
-
+disp(sprintf('Reconfiguring finished.  Elapsed time %s s.', sigfig(toc)));
 
 
 
@@ -345,14 +347,11 @@ function [] = init_plexon(hObject, handles)
 global hardware;
 % Open the stimulator
 
-disp('PS_CloseAllStim 1...');
 PS_CloseAllStim;
 if hardware.plexon.open
     hardware.plexon.open = false;
 end
-disp('...done.');
 
-disp('PS_InitAllStim...');
 err = PS_InitAllStim;
 switch err
     case 1
@@ -366,64 +365,42 @@ switch err
     otherwise
         hardware.plexon.open = true;
 end
-disp('...done.');
 
 
-disp('PS_GetNStim...');
 nstim = PS_GetNStim;
 if nstim > 1
-    disp('   PS_CloseAllStim 2...');
     err = PS_CloseAllStim;
-    disp('   ...done.');
     hardware.plexon.open = false;
     error('plexon:init', 'Plexon: %d devices available, but that dolt Ben assumed only 1!', nstim);
     return;
 end
-disp('...done.');
 
 
-%try
-%    disp('PS_SetDigitalOutputMode...');
-%    err = PS_SetDigitalOutputMode(hardware.plexon.id, 0); % Keep digital out HIGH in interpulse
+%    err = PS_SetDigitalOutputMode(hardware.plexon.id, 0); % Keep digital
+%    out HIGH in interpulse BUT this seems to break everything...?!?!?!
 %    if err
 %        ME = MException('plexon:init', 'Plexon: digital output on "%d".', hardware.plexon.id);
 %        throw(ME);
 %    end
-%    disp('...done.');
-    disp('PS_GetNChannels...');
-    [nchan, err] = PS_GetNChannels(hardware.plexon.id);
-    if err
-        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', hardware.plexon.id);
-        throw(ME);
-    else
-        disp(sprintf('Plexon show_device %d has %d channels.', hardware.plexon.id, nchan));
-    end
-    if nchan ~= 16
-        ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
-        throw(ME);
-    end
-    disp('...done.');
+
+[nchan, err] = PS_GetNChannels(hardware.plexon.id);
+if err
+    ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', hardware.plexon.id);
+    throw(ME);
+else
+    disp(sprintf('Plexon show_device %d has %d channels.', hardware.plexon.id, nchan));
+end
+if nchan ~= 16
+    ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
+    throw(ME);
+end
 
 
-    disp('PS_SetTriggerMode...');
-    err = PS_SetTriggerMode(hardware.plexon.id, 0);
-    if err
-        ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', hardware.plexon.id);
-        throw(ME);
-    end
-    disp('...done.');
-
-%catch ME
-%    disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
-%    report = getReport(ME)
-%    err = PS_CloseAllStim;
-%    if err
-%        disp('ERROR closing Plexon stim');
-%    else
-%        hardware.plexon.open = false;
-%    end
-%    rethrow(ME);
-%end
+err = PS_SetTriggerMode(hardware.plexon.id, 0);
+if err
+    ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', hardware.plexon.id);
+    throw(ME);
+end
 
 
 guidata(hObject, handles);
@@ -839,6 +816,10 @@ function apply_params_Callback(hObject, eventdata, handles)
 global hardware stim;
 global default_halftime_s;
 
+for i = 1:length(handles.disable_on_reconfigure)
+    set(handles.disable_on_reconfigure{i}, 'Enable', 'off');
+end
+
 default_halftime_s = str2double(get(handles.halftime, 'String')) / 1e6;
 stim.halftime_s = default_halftime_s;
 stim.interpulse_s = str2double(get(handles.delaytime, 'String'))/1e6;
@@ -847,10 +828,6 @@ stim.repetition_Hz = str2double(get(handles.n_repetitions_hz_box, 'String'));
 if stim.repetition_Hz > 40
     stim.repetition_Hz = 40;
     set(hObject, 'String', sigfig(stim.repetition_Hz, 3));
-end
-
-for i = 1:length(handles.disable_on_reconfigure)
-    set(handles.disable_on_reconfigure{i}, 'Enable', 'off');
 end
 
 offcolour = [0.9 0.9 1];
@@ -2263,9 +2240,24 @@ function [ voltages ] = check_all_stim_voltages(hObject, handles);
 global stop_button_pressed;
 global stim hardware detrend_param;
 
-orig_monitor_electrode = stim.plexon_monitor_electrode;
+stim_orig = stim;
+
+%one_pulse = false;
 
 voltages = NaN * zeros(size(stim.active_electrodes));
+
+% For a voltage scan we can speed things up by only doing one pulse per
+% channel.  BUT I've been using the data from the voltage scans, so this is
+% actually quite a bad idea, generally.  Keeping it here in case it is
+% useful at some point...
+%if sum(stim.active_electrodes) >= 4
+%    stim.n_repetitions = 1;
+%    set(handles.n_repetitions_box, 'String', '1');
+%    handles = configure_acquisition_devices(hObject, handles);
+%    guidata(hObject, handles);
+%    one_pulse = true;
+%    % Also, turn off de-trending etc. on the response recording end!
+%end
 
 for i = find(stim.active_electrodes)
     
@@ -2279,7 +2271,7 @@ for i = find(stim.active_electrodes)
     if stop_button_pressed
         disp('stop button pressed');
         stop_button_pressed = false;
-        stim.plexon_monitor_electrode = orig_monitor_electrode;
+        stim = stim_orig;
         update_monitor_electrodes(hObject, handles);
         break;
     end
@@ -2287,7 +2279,13 @@ for i = find(stim.active_electrodes)
     [ data, response_detected, voltages(i)] = stimulate_wrapper(stim, hardware, detrend_param, handles);
 end
 
-stim.plexon_monitor_electrode = orig_monitor_electrode;
+stim = stim_orig;
+
+%if one_pulse
+%    handles = configure_acquisition_devices(hObject, handles);    
+%    guidata(hObject, handles);
+%end
+
 update_monitor_electrodes(hObject, handles);
 
 
@@ -2493,12 +2491,12 @@ global datadir;
 voltages = check_all_stim_voltages(hObject, handles);
 
 
-polarity_string = '';
-for i = find(stim.active_electrodes)
-    polarity_string = strcat(polarity_string, sigfig(stim.negativefirst(i), 1));
-end
-save(fullfile(datadir, sprintf('voltages_%s.mat', polarity_string)), ...
-    'stim', 'voltages', '-v7.3');
+%polarity_string = '';
+%for i = find(stim.active_electrodes)
+%    polarity_string = strcat(polarity_string, sigfig(stim.stim_current(i)));
+%end
+%save(fullfile(datadir, sprintf('voltages_%s.mat', polarity_string)), ...
+%    'stim', 'voltages', '-v7.3');
 
 
 
@@ -2506,7 +2504,7 @@ save(fullfile(datadir, sprintf('voltages_%s.mat', polarity_string)), ...
 
 function voltage_limit_Callback(hObject, eventdata, handles)
 global voltage_limit;
-voltage_limit = str2double(get(hObject,'String'));
+voltage_limit = str2double(get(hObject, 'String'));
 
 
 function voltage_limit_CreateFcn(hObject, eventdata, handles)

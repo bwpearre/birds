@@ -8,7 +8,7 @@ persistent last_stim;
 persistent filenames;
 tic
 
-while currently_reconfiguring
+if currently_reconfiguring
     disp('Still reconfiguring the hardware... please wait (about 5 seconds, usually)...');
     pause(2);
     data = [];
