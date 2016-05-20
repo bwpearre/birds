@@ -167,7 +167,7 @@ end
 
 
 %%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 25;
+data.version = 26;
 
 
 data.bird = bird;
@@ -205,7 +205,7 @@ if ~isempty(data.ni.index_recording)
     tic;
     [ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
         = detrend_response(data.ni, data, detrend_param);
-    [ data.ni.spikes data.ni.spikes_r ] = look_for_spikes_xcorr(data.ni, data, [], []);
+    [ data.ni.spikes data.ni.spikes_r ] = detrend_param.spike_detect(data.ni, data, [], []);
     fprintf('Time for detrending and detecting on NI: %s s\n', sigfig(toc, 2));
 end
 
@@ -235,7 +235,8 @@ if ~isempty(hardware.tdt)
     if ~isempty(data.tdt.index_recording)
         [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
             = detrend_response(data.tdt, data, detrend_param);
-        [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes_xcorr(data.tdt, data, [], []);
+        %[ data.tdt.spikes data.tdt.spikes_r ] = detrend_param.spike_detect(data.tdt, data, [], []);
+        [ data.tdt.spikes data.tdt.spikes_r ] = detrend_param.spike_detect(data.tdt, data, [], []);
     end
     
     %fprintf('Time for detrending and detecting on TDT: %s s\n', sigfig(toc, 2));

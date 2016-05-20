@@ -55,12 +55,8 @@ path(sprintf('%s/../lib', scriptpath), path);
 global responses_detrended;
 global wait_bar;
 global tdt_show_now tdt_show_data tdt_show_data_last tdt_show_last_chosen;
-global detrend_param;
-global look_for_spikes;
 global axes2_tracks_axes1;
 
-
-look_for_spikes = @look_for_spikes_peaks;
 
 % We don't need to know when there are no spikes.
 warning('off', 'signal:findpeaks:largeMinPeakHeight');
@@ -106,13 +102,16 @@ guidata(hObject, handles);
 
 
 
+
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% This is the main function!
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
-global detrend_param detrend_param_orig look_for_spikes;
+global detrend_param detrend_param_orig;
 persistent last_file;
 
 %set(handles.listbox1, 'Enable', 'inactive');
@@ -124,7 +123,11 @@ else
     last_file = file;
 end
 
-disp(sprintf('File #%d', file))
+if file > length(handles.files)
+    disp(sprintf('inspect.m: Requested file %d, but only %d files', ...
+        file, length(handles.files)));
+    return;
+end
 
 load(handles.files{file});
 data = update_data_struct(data, detrend_param, handles);
@@ -164,12 +167,12 @@ if ~isequal(detrend_param, data.detrend_param)
     if isfield(data, 'tdt')
         [ data.tdt.response_detrended data.tdt.response_trend data.detrend_param ] ...
             = detrend_response(data.tdt, data, detrend_param);
-        [ data.tdt.spikes data.tdt.spikes_r ] = look_for_spikes(data.tdt, ...
+        [ data.tdt.spikes data.tdt.spikes_r ] = detrend_param.spike_detect(data.tdt, ...
             data, detrend_param, [], handles);
     else
         [ data.ni.response_detrended data.ni.response_trend data.detrend_param ] ...
             = detrend_response(data.ni, data, detrend_param);
-        [ data.ni.spikes data.ni.spikes_r ] = look_for_spikes(data.ni, ...
+        [ data.ni.spikes data.ni.spikes_r ] = detrend_param.spike_detect(data.ni, ...
             data, detrend_param, [], handles);
     end
 end
@@ -194,8 +197,6 @@ end
 %end
 
 
-
-
 if doplot
         if data.version >= 6
             tabledata{1,1} = data.bird;
@@ -203,17 +204,15 @@ if doplot
         tabledata{2,1} = sprintf('%d ', data.stim.active_electrodes);
         tabledata{3,1} = sprintf('%.3g uA', data.stim.current_uA);
         if isfield(data.stim, 'halftime_us')
-            tabledata{4,1} = sprintf('%d us', round(data.halftime_s)*1e6);
+            tabledata{4,1} = sprintf('%d', round(data.stim.halftime_us));
+        elseif isfield(data.stim, 'halftime_s')
+            tabledata{4,1} = sprintf('%d', round(data.stim.halftime_s*1e6));
         else
             tabledata{4,1} = '?';
         end
-        
-        if isfield(data.stim, 'negativefirst')
-            tabledata{5,1} = sprintf('%d ', data.stim.negativefirst(find(data.stim.active_electrodes)));
-        else
-            tabledata{5,1} = '?'; % negative pulse first
-        end
-        tabledata{6,1} = sprintf('%d', data.stim.plexon_monitor_electrode);
+        tabledata{5,1} = sprintf('%s ', sigfig(data.stim.current_scale(find(data.stim.active_electrodes))));
+        tabledata{6,1} = sprintf('%d ', data.stim.prepulse_us(find(data.stim.active_electrodes)));
+        tabledata{7,1} = sprintf('%d', data.stim.plexon_monitor_electrode);
         if isfield(data, 'comments')
             set(handles.comments, 'String', data.comments);
         end

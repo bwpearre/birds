@@ -45,7 +45,7 @@ for f = 1:length(files)
         voltage{pattern} = [];
         monitor{pattern} = [];
     end
-    [~, p] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
+    [~, p] = detrend_param.spike_detect(d, data, detrend_param, d.response_detrended);
     current{pattern} = [current{pattern} data.stim.current_uA];
     voltage{pattern} = [voltage{pattern} data.voltage];
     monitor{pattern} = [monitor{pattern} data.stim.plexon_monitor_electrode];

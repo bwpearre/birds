@@ -198,3 +198,12 @@ if data.version < 25
     data.detrend_param.response_sigma = 5;
     data.detrend_param.response_prob = NaN;
 end
+
+
+if data.version < 26
+    % Introduce Sam's changes: individualised current_uA scaling and timing
+    data.stim.current_scale = (data.stim.negativefirst - 0.5) * -2;
+    data.stim.prepulse_s = zeros(1,16);
+    data.detrend_param.response_prob = 0.5; % With spike_detect (below) this is obviated.
+    data.detrend_param.spike_detect = @look_for_spikes_peaks;
+end

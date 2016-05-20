@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 16-Dec-2015 12:38:09
+% Last Modified by GUIDE v2.5 20-May-2016 13:43:18
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -61,8 +61,12 @@ handles.output = hObject;
 
 global bird;
 
-global hardware stim;
+global offsiteTest;
 global in_stim_loop;
+
+global hardware stim;
+global safeParams;
+global smoothnessParams;
 
 global homedir data_basedir datadir intandir;
 global change;
@@ -74,7 +78,7 @@ global axes4;
 global vvsi;
 global comments;
 global electrode_last_stim;
-global max_current;
+% global max_current;
 global default_halftime_s;
 global increase_type;
 global max_halftime;
@@ -90,21 +94,33 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if true % For my X--HVC experiment
+if false % For my X--HVC experiment
     detrend_param.model = 'fourier8';
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
     detrend_param.response_baseline = [0.012 0.025];
+    detrend_param.response_detection_threshold = 0.5;
+    detrend_param.spike_detect = @look_for_spikes_peaks;
+    detrend_param.response_sigma = 5;
+    detrend_param.response_prob = 0.5;
     voltage_limit = 3;
 else
     detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
     detrend_param.range = [0.0007 0.02];
     detrend_param.response_roi = [0.0007 0.002];
     detrend_param.response_baseline = [0.005 0.02];
+    detrend_param.response_detection_threshold = 0.5;
+    detrend_param.spike_detect = @look_for_spikes_peaks;
+    detrend_param.response_sigma = 5;
+    detrend_param.response_prob = 0.5;
     voltage_limit = 7;
 end
 
+% Offsite testing? (Cannot use the DAQ boards or other hardware)
+offsiteTest = false;
+
 currently_reconfiguring = true;
+
 in_stim_loop = false;
 
 max_uAmps = 100;
@@ -116,7 +132,10 @@ inter_trial_s = 0.01; % Additional time between sets; not really used.
 hardware.plexon.id = 1;   % Assume (hardcode) 1 Plexon box
 hardware.plexon.open = false;
 change = increase_step;
-
+smoothnessParams.ampStep = .1;
+smoothnessParams.pauseStep = 50;
+smoothnessParams.ampNumSteps = 10;
+smoothnessParams.pauseNumSteps = 10;
 
 stim.n_repetitions = 10;
 stim.repetition_Hz = 25;
@@ -187,9 +206,13 @@ increase_type = 'current'; % or 'time'
 default_halftime_s = 200e-6;
 stim.halftime_s = default_halftime_s;
 stim.interpulse_s = 0;
+stim.prepulse_us = zeros(1,16); % Number of microseconds that this electrode's pulse will be delayed
+stim.current_scale = ones(1,16); % Factor to multiply current_uA with to get this electrode's stimulation current
 stim.plexon_monitor_electrode = 1;
+safeParams.max_current = 150; % Maximum (or negative of minimum) allowed current
+safeParams.max_prepulse_us = 200; % Maximum allowed prepulse pause
 electrode_last_stim = 0;
-max_current = NaN * ones(1, 16);
+% max_current = 0 * ones(1, 16);
 max_halftime = NaN * ones(1, 16);
 hardware.intan.gain = 515;
 recording_amplifier_gain = 1; % For display only!
@@ -200,13 +223,9 @@ handles.TerminalConfig = {'SingleEndedNonReferenced'};
 intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
 ni_response_channels = [ 0 0 0 0 0 0 0 ];
 
-
-
 %handles.TerminalConfig = 'SingleEnded';
 vvsi = [];
 comments = '';
-
-stim.negativefirst = zeros(1,16);
 
 ni_recording_channel_ranges = 2 * [ 1 1 1 1 1 1 1 1 ];
 
@@ -226,7 +245,21 @@ handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ..
 %        sprintf('%d', handles.PIN_NAMES(3,i))));
 %end
 
+for i = 1:16
+    handles.prepulse_us{i} = uicontrol('Style', 'edit', ...
+        'String', '', ...
+        'Tag', sprintf('%d', i), ...
+        'Position', [588 764-22*(i-1) 40 20], ...
+        'Callback',{@prepulse_us_Callback}, ...
+        'Enable', 'off');
+end
 
+offcolour = [0.9 0.9 1];
+set(handles.halftime, 'BackgroundColor', offcolour);
+set(handles.delaytime, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
+set(handles.apply_params, 'BackgroundColor', [1 0 0], 'Visible', 'off');
 
 %set(handles.n_repetitions_box, 'Enable', 'off');
 
@@ -242,6 +275,8 @@ for i = 2:7
     eval(sprintf('handles.disable_on_run{end+1} = handles.hvc%d;', i));
 end
 
+handles.disable_on_reconfigure = { handles.increase handles.decrease handles.hold ...
+    handles.full_threshold_scan handles.smoothness_scan};
 
 
 axes1 = handles.axes1;
@@ -249,20 +284,26 @@ axes1_yscale = handles.yscale;
 axes2 = handles.axes2;
 axes4 = handles.axes4;
 axes3 = handles.axes3;
-gca = handles.stupidaxis;
-text(0.5, 0.5, 'M\Omega', 'Interpreter', 'tex');
-axis off;
 
 
 set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
-handles = configure_acquisition_devices(hObject, handles);
-if isfield(hardware, 'tdt')
-    % This should not be in the TDT init code, as that may be called on
-    % reconfiguration and this should only appear once.
-    for i = 1:16
+if (~offsiteTest)
+    handles = configure_acquisition_devices(hObject, handles);
+    
+    if isfield(hardware, 'tdt')
+        % This should not be in the TDT init code, as that may be called on
+        % reconfiguration and this should only appear once.
+        for i = 1:16
             eval(sprintf('handles.disable_on_run{end+1} = handles.tdt_valid_buttons{%d};', i));
+        end
     end
+else
+    handles = configure_acquisition_devices_OFFSITE(hObject, handles);
 end
+
+% We don't need to know when there are no spikes.
+warning('off', 'signal:findpeaks:largeMinPeakHeight');
+warning('off', 'stats:gmdistribution:FailedToConverge');
 
 
 update_gui_values(hObject, handles);
@@ -270,23 +311,35 @@ update_gui_values(hObject, handles);
 guidata(hObject, handles);
 
 
+function [handles] = configure_acquisition_devices_OFFSITE(hObject, handles);
+global hardware;
+
+% TDT fake initializations
+hardware.tdt.device = []; % Set empty so that parts of the code are skipped over
 
 
 function [handles] = configure_acquisition_devices(hObject, handles);
 global currently_reconfiguring;
+global offsiteTest;
+
+tic
 
 currently_reconfiguring = true;
 
+disp('Opening NI session...');
 init_ni(hObject, handles);
+disp('...done.');
+disp('Opening TDT session...');
 handles = init_tdt(hObject, handles);
+disp('...done.');
+disp('Opening Plexon session...');
 init_plexon(hObject, handles);
-
-guidata(hObject, handles);
+disp('...done');
 
 currently_reconfiguring = false;
+guidata(hObject, handles);
 
-
-
+disp(sprintf('Reconfiguring finished.  Elapsed time %s s.', sigfig(toc)));
 
 
 
@@ -294,13 +347,10 @@ function [] = init_plexon(hObject, handles)
 global hardware;
 % Open the stimulator
 
-
 PS_CloseAllStim;
 if hardware.plexon.open
     hardware.plexon.open = false;
 end
-
-
 
 err = PS_InitAllStim;
 switch err
@@ -326,42 +376,31 @@ if nstim > 1
 end
 
 
-%try
-    %err = PS_SetDigitalOutputMode(hardware.plexon.id, 0); % Keep digital out HIGH in interpulse
-    %if err
-    %    ME = MException('plexon:init', 'Plexon: digital output on "%d".', hardware.plexon.id);
-    %    throw(ME);
-    %end
-    [nchan, err] = PS_GetNChannels(hardware.plexon.id);
-    if err
-        ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', hardware.plexon.id);
-        throw(ME);
-    else
-        %disp(sprintf('Plexon show_device %d has %d channels.', hardware.plexon.id, nchan));
-    end
-    if nchan ~= 16
-        ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
-        throw(ME);
-    end
-
-
-    err = PS_SetTriggerMode(hardware.plexon.id, 0);
-    if err
-        ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', hardware.plexon.id);
-        throw(ME);
-    end
-
-%catch ME
-%    disp(sprintf('Caught initialisation error %s (%s).  Shutting down...', ME.identifier, ME.message));
-%    report = getReport(ME)
-%    err = PS_CloseAllStim;
+%    err = PS_SetDigitalOutputMode(hardware.plexon.id, 0); % Keep digital
+%    out HIGH in interpulse BUT this seems to break everything...?!?!?!
 %    if err
-%        disp('ERROR closing Plexon stim');
-%    else
-%        hardware.plexon.open = false;
+%        ME = MException('plexon:init', 'Plexon: digital output on "%d".', hardware.plexon.id);
+%        throw(ME);
 %    end
-%    rethrow(ME);
-%end
+
+[nchan, err] = PS_GetNChannels(hardware.plexon.id);
+if err
+    ME = MException('plexon:init', 'Plexon: invalid stimulator number "%d".', hardware.plexon.id);
+    throw(ME);
+else
+    disp(sprintf('Plexon show_device %d has %d channels.', hardware.plexon.id, nchan));
+end
+if nchan ~= 16
+    ME = MException('plexon:init', 'Ben assumed that there would always be 16 channels, but there are in fact %d', nchan);
+    throw(ME);
+end
+
+
+err = PS_SetTriggerMode(hardware.plexon.id, 0);
+if err
+    ME = MException('plexon:stimulate', 'Could not set trigger mode on stimbox %d', hardware.plexon.id);
+    throw(ME);
+end
 
 
 guidata(hObject, handles);
@@ -399,7 +438,7 @@ channel_labels{end+1} = 'Trigger';
 
 hardware.ni.channel_labels = channel_labels;
 
-daq.reset;
+% daq.reset;
 hardware.ni.session = daq.createSession('ni');
 hardware.ni.session.Rate = 100000;
 hardware.ni.session.IsContinuous = 0;
@@ -483,11 +522,11 @@ prepare(hardware.ni.session);
 
 
 
-
 function [handles] = init_tdt(hObject, handles)
 global hardware stim;
 global scriptdir;
 global recording_time;
+global stim_timer;
 
 
 if ~isfield(handles, 'tdt_valid_buttons')
@@ -551,7 +590,18 @@ set(handles.audio_monitor_gain, 'String', sprintf('%d', round(hardware.tdt.devic
 %disp(sprintf('TDT buffer %d, need %d', tdt.GetTagVal('dbuffer_size'), hardware.tdt.nsamples));
 tdt_dbuffer_size = hardware.tdt.device.GetTagVal('dbuffer_size');
 
-if ceil(hardware.tdt.nsamples*1.1) > tdt_dbuffer_size    
+if ceil(hardware.tdt.nsamples*1.1) > tdt_dbuffer_size
+    if ~isempty(stim_timer)
+        if isvalid(stim_timer)
+            %if timer_running(stim_timer)
+            disp('Stopping timer from tdt_configure...');
+            stop(stim_timer); % this also stops and closes the Plexon box
+            %end
+        else
+            disp('*** The timer was invalid!');
+        end
+    end
+    
     uiwait(msgbox({'The TDT buffer is too small for your chosen recording duration.  Increase Averaging Hz or decrease Averaging Pulses.', ...
         '', sprintf('Maximum recording duration is %g s.', tdt_dbuffer_size/1.1/hardware.tdt.samplerate)}, 'modal'));
     
@@ -611,18 +661,22 @@ function gui_close_callback(hObject, callbackdata, handles)
 global hardware stim;
 global vvsi;
 global datadir;
+global stim_timer;
 
 disp('Shutting down...');
 
 stop_everything(handles);
 
-
+disp('Shutting down NI session...');
 if ~isempty(hardware.ni.session)
     stop(hardware.ni.session);
     release(hardware.ni.session);
     hardware.ni.session = [];
 end
-if hardware.plexon.open
+disp('...done.');
+
+disp('Shutting down Plexon session... NOT closing Plexon box!');
+if hardware.plexon.open & false
     err = PS_CloseAllStim;
     if err
         msgbox({'ERROR CLOSING STIMULATOR', 'Could not contact Plexon stimulator for shutdown!'});
@@ -630,6 +684,7 @@ if hardware.plexon.open
         hardware.plexon.open = false;
     end
 end
+disp('...done.');
 
 
 if false
@@ -641,6 +696,7 @@ if false
     save(fullfile(datadir, datafile_name), 'vvsi', '-v7.3');
 end
 
+disp('Shutting down TDT session...');
 if ~isempty(hardware.tdt.device)
     try
         hardware.tdt.device.Halt;
@@ -648,6 +704,7 @@ if ~isempty(hardware.tdt.device)
         disp('Caught TDT-is-stupid error #2589723. Moving on.');
     end
 end
+disp('...done.');
 
 delete(hObject);
 
@@ -669,11 +726,6 @@ function [ plexon_pin] = map_intan_pin_to_plexon(intan_pin, handles)
 plexon_pin = handles.PIN_NAMES(1, find(handles.PIN_NAMES(2,:) == intan_pin));
 
 
-
-
-% --- Executes on button press in negativefirst.
-function negativefirst_Callback(hObject, eventdata, handles)
-% This is empty: read them as needed?
 
 
 function startcurrent_Callback(hObject, eventdata, handles)
@@ -715,16 +767,10 @@ end
 
 
 function halftime_Callback(hObject, eventdata, handles)
-global hardware stim;
-global default_halftime_s;
+set(hObject, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'Visible', 'on');
 
-default_halftime_s = str2double(get(hObject,'String')) / 1e6;
-stim.halftime_s = default_halftime_s;
 
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
-
-% --- Executes during object creation, after setting all properties.
 function halftime_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
@@ -733,19 +779,75 @@ end
 
 
 function delaytime_Callback(hObject, eventdata, handles)
-global hardware stim;
-
-stim.interpulse_s = str2double(get(hObject,'String'))/1e6;
-
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
+set(hObject, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'Visible', 'on');
 
 
-% --- Executes during object creation, after setting all properties.
+
 function delaytime_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+function n_repetitions_box_Callback(hObject, eventdata, handles)
+set(hObject, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'Visible', 'on');
+
+
+function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+function n_repetitions_hz_box_Callback(hObject, eventdata, handles)
+set(hObject, 'BackgroundColor', [1 0 0]);
+set(handles.apply_params, 'Visible', 'on');
+
+% --- Executes during object creation, after setting all properties.
+function n_repetitions_hz_box_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+function apply_params_Callback(hObject, eventdata, handles)
+global hardware stim;
+global default_halftime_s;
+
+for i = 1:length(handles.disable_on_reconfigure)
+    set(handles.disable_on_reconfigure{i}, 'Enable', 'off');
+end
+
+default_halftime_s = str2double(get(handles.halftime, 'String')) / 1e6;
+stim.halftime_s = default_halftime_s;
+stim.interpulse_s = str2double(get(handles.delaytime, 'String'))/1e6;
+stim.n_repetitions = str2double(get(handles.n_repetitions_box, 'String'));
+stim.repetition_Hz = str2double(get(handles.n_repetitions_hz_box, 'String'));
+if stim.repetition_Hz > 40
+    stim.repetition_Hz = 40;
+    set(hObject, 'String', sigfig(stim.repetition_Hz, 3));
+end
+
+offcolour = [0.9 0.9 1];
+set(handles.halftime, 'BackgroundColor', offcolour);
+set(handles.delaytime, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
+set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
+set(hObject, 'BackgroundColor', offcolour, 'Visible', 'off');
+
+handles = configure_acquisition_devices(hObject, handles);
+
+for i = 1:length(handles.disable_on_reconfigure)
+    set(handles.disable_on_reconfigure{i}, 'Enable', 'on');
+end
+
+guidata(hObject, handles);
+
+
+
+
 
 
 function electrode_universal_callback(hObject, eventdata, handles)
@@ -763,10 +865,13 @@ end
 % state of this button
 stim.active_electrodes(whichone) = 0;
 eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate));
-eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate));
+eval(sprintf('set(handles.stimscale%d, ''Enable'', ''%s'');', whichone, newstate));
 % "stimulate this electrode" should default to 0...
 eval(sprintf('set(handles.stim%d, ''Value'', 0);', whichone));
+stim_scale_set(handles, 0, whichone);
 update_monitor_electrodes(hObject, handles);
+stim_scale_update_gui(handles);
+prepulse_us_update_gui(handles);
 guidata(hObject, handles);
 
 
@@ -838,8 +943,31 @@ set(hObject, 'BackgroundColor', [0.8 0.2 0.1]);
 
 
 
+function start_timer(hObject, handles)
+global stim_timer inter_trial_s;
+
+% Clean up any stopped timers
+if isempty(stim_timer)
+    stim_timer = timer('Period', inter_trial_s, 'ExecutionMode', 'fixedSpacing');
+    stim_timer.TimerFcn = {@plexon_control_timer_callback_2, hObject, handles};
+    stim_timer.StartFcn = {@plexon_start_timer_callback, hObject, handles};
+    stim_timer.StopFcn = {@plexon_stop_timer_callback, hObject, handles};
+    stim_timer.ErrorFcn = {@plexon_error_timer_callback, hObject, handles};
+else
+    stim_timer.Period = inter_trial_s;
+end
+
+if ~timer_running(stim_timer)
+    disable_controls(hObject, handles);
+    start(stim_timer);
+end
+guidata(hObject, handles);
 
 
+
+% Stupid fucking matlab uses a string, not a boolean
+function s = timer_running(t)
+s = strcmp(t.running, 'on');
 
 function ready = sufficient_active_electrodes
 global stim
@@ -858,45 +986,34 @@ if stim.active_electrodes(stim.plexon_monitor_electrode) == 0
 end
 
 
-
-
-
 function stim_loop(hObject, handles)
 global stop_button_pressed;
 global in_stim_loop;
 
 if in_stim_loop
-   return; 
-end
-
-if ~sufficient_active_electrodes
+    disp('stim_loop: already in stim_loop.  Press "STOP" if necessary.');
     return;
 end
 
-try
-    in_stim_loop = true;
-    disable_controls(hObject, handles);
-    save_globals;
+if ~sufficient_active_electrodes
+    disp('stim_loop: insufficient active electrodes.');
+    return;
+end
 
-    stim_loop_init(hObject, handles);
+in_stim_loop = true;
+plexon_start_timer_callback([], [], hObject, handles);
 
-    while ~stop_button_pressed
-        disp('Stimulating now')
-        stim_loop_execute(hObject, handles)
-    end
-catch ME
-    in_stim_loop = false;
+if stop_button_pressed
+    disp('stim_loop: stop_button was pressed and not reset.');
+end
+
+while in_stim_loop & ~stop_button_pressed
+    plexon_control_timer_callback_2([], [], hObject, handles)
 end
 
 stop_button_pressed = false;
 in_stim_loop = false;
 enable_controls(handles);
-
-
-
-
-
-
 
 
 % --- Executes on button press in increase.
@@ -905,11 +1022,15 @@ global change;
 global increase_type increase_step;
 global stim;
 global default_halftime_s;
+global stop_button_pressed;
+
+stop_button_pressed = false;
 
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = increase_step;
-stim_loop(hObject, handles); % This will return if we're in_stim_loop, but 'change' is updated already
+% start_timer(hObject, handles);
+stim_loop(hObject, handles);
 
 guidata(hObject, handles);
 
@@ -920,11 +1041,15 @@ global change increase_step;
 global increase_type;
 global stim;
 global default_halftime_s;
+global stop_button_pressed;
+
+stop_button_pressed = false;
 
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = 1/increase_step;
-stim_loop(hObject, handles); % This will return if we're in_stim_loop, but 'change' is updated already
+% start_timer(hObject, handles);
+stim_loop(hObject, handles);
 
 guidata(hObject, handles);
 
@@ -935,54 +1060,41 @@ global change;
 global increase_type;
 global stim;
 global default_halftime_s;
+global stop_button_pressed;
+
+stop_button_pressed = false;
 
 stim.halftime_s = default_halftime_s;
 increase_type = 'current';
 change = 1;
-stim_loop(hObject, handles); % This will return if we're in_stim_loop, but 'change' is updated already
-
-guidata(hObject, handles);
+% start_timer(hObject, handles);
+stim_loop(hObject, handles);
+% disp('Stim_loop done')
 
 
 % --- Executes on button press in stop.
 function stop_Callback(hObject, eventdata, handles)
 global stop_button_pressed;
+
 stop_button_pressed = true; % Used to abort long sequences...
+
 stop_everything(handles);
 
 
 function stop_everything(handles);
-global vvsi;
-global stim;
 global thewaitbar;
+global stop_button_pressed;
+global in_stim_loop;
+global paused;
 
 if ~isempty(thewaitbar)
     delete(thewaitbar);
     thewaitbar = [];
 end
 
+%PS_StopStimAllChannels(hardware.plexon.id);
 
 disp('Stopping everything...');
-
-
-
-if ~isempty(vvsi)
-    this_electrode = find(vvsi(:,1) == stim.plexon_monitor_electrode);
-    if false
-        cla(axes1);
-        hold(axes1, 'on');
-        switch increase_type
-            case 'current'
-                abscissa = 2;
-            case 'time'
-                abscissa = 6;
-        end
-        scatter(axes1, vvsi(this_electrode,abscissa), vvsi(this_electrode,4), 'b');
-        scatter(axes1, vvsi(this_electrode,abscissa), vvsi(this_electrode,5), 'r');
-        hold(axes1, 'off');
-    end
-    %set(axes1, 'YLim', [min(vvsi(this_electrode,5)) max(vvsi(this_electrode,4))]);
-end
 
 enable_controls(handles);
 
@@ -993,7 +1105,7 @@ if ~exist('paused', 'var')
     set(handles.pause, 'BackgroundColor', [1 1 1]*0.94, 'String', 'Pause');
 end
 
-
+in_stim_loop = false;
 
 
 function currentcurrent_Callback(hObject, eventdata, handles)
@@ -1049,65 +1161,83 @@ end
 
 % When any of the "start sequence" buttons is pressed, open the Plexon box
 % and do some basic error checking.  Set all channels to nil.
-function stim_loop_init(hObject, handles)
+function plexon_start_timer_callback(obj, event, hObject, handles)
 global hardware stim;
+global stim_timer;
 
 save_globals;
 
-NullPattern.W1 = 0;
-NullPattern.W2 = 0;
-NullPattern.A1 = 0;
-NullPattern.A2 = 0;
-NullPattern.Delay = 0;
+%try
+    NullPattern.W1 = 0;
+    NullPattern.W2 = 0;
+    NullPattern.A1 = 0;
+    NullPattern.A2 = 0;
+    NullPattern.Delay = 0;
 
-% Set up all non-stimulating channels to nil
-for channel = find(~stim.active_electrodes)
-    % We will be using the rectangular pattern
-    err = PS_SetPatternType(hardware.plexon.id, channel, 0);
-    if err
-        ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
-        throw(ME);
+    % Set up all non-stimulating channels to nil
+    for channel = find(~stim.active_electrodes)
+        % We will be using the rectangular pattern
+        err = PS_SetPatternType(hardware.plexon.id, channel, 0);
+        if err
+            ME = MException('plexon:pattern', 'Could not set pattern type on channel %d', channel);
+            throw(ME);
+        end
+
+        % Set these channels to nothing.
+        err = PS_SetRectParam2(hardware.plexon.id, channel, NullPattern);
+        if err
+                ME = MException('plexon:pattern', 'Could not set NULL pattern parameters on channel %d', channel);
+                throw(ME);
+        end
+
+        err = PS_SetRepetitions(hardware.plexon.id, channel, 1);
+        if err
+            ME = MException('plexon:pattern', 'Could not set repetition on channel %d', channel);
+            throw(ME);
+        end
+
+        err = PS_LoadChannel(hardware.plexon.id, channel);
+        if err
+            ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', hardware.plexon.id, channel, PS_GetExtendedErrorInfo(err));    
+            throw(ME);
+        end
     end
-    
-    % Set these channels to nothing.
-    err = PS_SetRectParam2(hardware.plexon.id, channel, NullPattern);
-    if err
-        ME = MException('plexon:pattern', 'Could not set NULL pattern parameters on channel %d', channel);
-        throw(ME);
-    end
-    
-    err = PS_SetRepetitions(hardware.plexon.id, channel, 1);
-    if err
-        ME = MException('plexon:pattern', 'Could not set repetition on channel %d', channel);
-        throw(ME);
-    end
-    
-    err = PS_LoadChannel(hardware.plexon.id, channel);
-    if err
-        ME = MException('plexon:stimulate', 'Could not stimulate on box %d channel %d: %s', hardware.plexon.id, channel, PS_GetExtendedErrorInfo(err));
-        throw(ME);
-    end
-end
+%catch ME
+%    if timer_running(stim_timer)
+%        stop(stim_timer);
+%    end
+%    disp(sprintf('Caught the error %s (%s).  Shutting down...', ME.identifier, ME.message));
+%    report = getReport(ME)
+%    PS_StopStimAllChannels(hardware.plexon.id);
+%    guidata(hObject, handles);
+%    rethrow(ME);
+%end
 
 guidata(hObject, handles);
 
 
+function plexon_stop_timer_callback(obj, event, hObject, handles)
+enable_controls(handles);
+save_globals;
+
+function plexon_error_timer_callback(obj, event, hObject, handles)
+stop_everything(handles);
+save_globals;
 
 function stim_universal_callback(hObject, eventdata, handles)
 global hardware stim;
 
 whichone = str2num(hObject.String);
 newval = get(hObject, 'Value');
-if get(handles.stimMultiple, 'Value') == false & newval == 1 & sum(stim.active_electrodes) > 0
-    for i = find(stim.active_electrodes)
-        eval(sprintf('set(handles.stim%d, ''Value'', 0);', i));
-        stim.active_electrodes(i) = 0;
-    end
-end
 stim.active_electrodes(whichone) = newval;
 
 if stim.active_electrodes(whichone)
     stim.plexon_monitor_electrode = whichone;
+    stim_scale_set(handles, 1, whichone);
+    prepulse_us_set(handles, 0, whichone);
+else
+    stim_scale_set(handles, 0, whichone);
+    prepulse_us_set(handles, 0, whichone);
 end
 update_monitor_electrodes(hObject, handles);
 guidata(hObject, handles);
@@ -1117,9 +1247,21 @@ guidata(hObject, handles);
 function update_monitor_electrodes(hObject, handles)
 global stim;
 
+changed = false;
+if ~stim.active_electrodes(stim.plexon_monitor_electrode)
+    stim.plexon_monitor_electrode = find(stim.active_electrodes, 1);
+    if isempty(stim.plexon_monitor_electrode)
+        stim.plexon_monitor_electrode = 1;
+    end
+    changed = true;
+end
 set(handles.monitor_electrode_control, 'Value', stim.plexon_monitor_electrode);
 if stim.active_electrodes(stim.plexon_monitor_electrode)
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
+    if changed
+        set(handles.monitor_electrode_control, 'BackgroundColor', [1 1 0]);
+    else
+        set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
+    end
 else
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.2 0.1]);
 end
@@ -1194,11 +1336,14 @@ function select_all_valid_Callback(hObject, eventdata, handles)
 global valid_electrodes stim;
 
 for i = find(valid_electrodes)
-    stim.active_electrodes(i) = 1;
-    eval(sprintf('set(handles.stim%d, ''Value'', 1);', i));
+    if ~stim.active_electrodes(i)
+        stim.active_electrodes(i) = 1;
+        eval(sprintf('set(handles.stim%d, ''Value'', 1);', i));
+        stim_scale_set(handles, 1, i);
+        prepulse_us_set(handles, 0, i);
+    end
 end
 update_monitor_electrodes(hObject, handles);
-guidata(hObject, handles);
 
 
 
@@ -1207,19 +1352,43 @@ guidata(hObject, handles);
 
 
 
+function stim = safety_check(stim,safeParams)
+% Check magnitude of current delivered
+for i = 1:16
+    stim.current_scale(i) = check_current_magnitude(stim.current_scale(i), stim.current_uA, safeParams);
+    stim.current_scale(i) = check_pause_magnitude(stim.prepulse_us(i), safeParams);
+end
 
+function newPause = check_pause_magnitude(pause, safeParams)
+newPause = pause;
+if (newPause > safeParams.max_prepulse_us)
+    % Pause is too high, bring it back down to max value
+    newPause = safeParams.max_prepulse_us;
+end
 
-function stim_loop_execute(hObject, handles)
+function newScale = check_current_magnitude(scale, current_uA, safeParams)
+newScale = scale;
+if (newScale*current_uA > safeParams.max_current)
+    % Stim current is too high, bring it back down to max value
+    newScale = safeParams.max_current/current_uA;
+elseif (newScale*current_uA < -safeParams.max_current)
+    % Stim current is too far negative, bring it back up to min value
+    newScale = -safeParams.max_current/current_uA;
+end
+
+function plexon_control_timer_callback_2(obj, event, hObject, handles)
 global hardware stim;
-% The above are not used in this function, but in stimulate(), which this
-% calls.
-
-
+global safeParams;
 global detrend_param;
 global increase_type;
 global max_uAmps min_uAmps;
 global default_halftime_s;
+% global max_current;
+global max_halftime;
 global change;
+global voltage_range_last_stim;
+global electrode_last_stim;
+global stim_timer;
 
 switch increase_type
     case 'current'
@@ -1241,86 +1410,15 @@ if false
     queueOutputData(hardware.ni.session, outputSignal);
 end
 
-
-[ data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+%stim = safety_check(stim, safeParams); % Check stimulation for being safe
+[ data, response_detected, voltage ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
 if isempty(data)
-    disp('stimulate() did not capture any data.  Trying again...');
+    disp('timer callback: stimulate() did not capture any data.');
     return;
 end
 
-if errors.val ~= 0
-    for i = 1:length(errors.name)
-        disp(errors.name{i});
-    end
-    stop_callback(hObject, handles);
-end
-
-
-
   
   
-% --- Executes on button press in stimMultiple.
-function stimMultiple_Callback(hObject, eventdata, handles)
-global valid_electrodes stim;
-
-val = get(hObject, 'Value');
-if val
-    set(handles.select_all_valid, 'Enable', 'on');
-else
-    set(handles.select_all_valid, 'Enable', 'off');
-end
-if ~val & sum(stim.active_electrodes) > 1
-    % Turn off stimulation to all electrodes
-    stim.active_electrodes = zeros(1, 16);
-    for i = 1:16
-        eval(sprintf('set(handles.stim%d, ''Value'', false);', i));
-    end
-    update_monitor_electrodes(hObject, handles)
-end
-guidata(hObject, handles);
-
-
-% --- Executes on button press in vvsi_auto_safe.
-function vvsi_auto_safe_Callback(hObject, eventdata, handles)
-% Set us up as if we'd reset to 1 and hit "increase"
-global increase_type;
-global default_halftime_s;
-global change;
-global hardware stim;
-global max_halftime;
-global valid_electrodes;
-global start_uAmps;
-global inter_trial_s;
-
-change = 1.1;
-
-max_halftime = NaN * ones(1, 16);
-
-inter_trial_s = 0.01;
-
-increase_type = 'time';
-
-for i = find(valid_electrodes)
-    stim.halftime_s = 50e-6;
-    stim.current_uA = start_uAmps;
-    stim.active_electrodes = zeros(1, 16);
-    stim.active_electrodes(i) = 1;
-    stim.plexon_monitor_electrode = i;
-    set(handles.monitor_electrode_control, 'Value', i);
-        
-    start_timer(hObject, handles);
-end
-
-stim.halftime_s = default_halftime_s;
-
-valid_electrodes = valid_electrodes & ~(~isnan(max_halftime) & max_halftime < default_halftime_s)
-
-for i = find(~valid_electrodes)
-    eval(sprintf('set(handles.electrode%d, ''Value'', 0, ''Enable'', ''off'');', i));
-    stim.active_electrodes(i) = 0;
-    eval(sprintf('set(handles.stim%d, ''Value'', 0, ''Enable'', ''off'');', i));
-end
-
 
 
 
@@ -1341,42 +1439,12 @@ for whichone = find(valid_electrodes)
     % state of this button
     eval(sprintf('set(handles.electrode%d, ''Value'', 1);', whichone));
     eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate));
-    eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate));
+    %eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate));
 end
 update_monitor_electrodes(hObject, handles);
 
 guidata(hObject, handles);
 
-
-% --- Executes on button press in vvsi_auto_full.
-function vvsi_auto_full_Callback(hObject, eventdata, handles)
-% Set us up as if we'd reset to 1 and hit "increase"
-global hardware stim;
-global increase_type increase_step;
-global default_halftime_s;
-global start_uAmps;
-global change;
-global max_current;
-global valid_electrodes;
-global inter_trial_s;
-
-max_current = NaN * ones(1, 16);
-
-change = increase_step;
-stim.halftime_s = default_halftime_s;
-inter_trial_s = 0.01;
-
-increase_type = 'current';
-
-for i = find(valid_electrodes)
-    stim.current_uA = start_uAmps;
-    stim.active_electrodes = zeros(1, 16);
-    stim.active_electrodes(i) = 1;
-    stim.plexon_monitor_electrode = i;
-    set(handles.monitor_electrode_control, 'Value', i);
-        
-    start_timer(hObject, handles);
-end
 
 
 
@@ -1388,7 +1456,7 @@ saving_stimulations = get(hObject, 'Value');
 
 
 function birdname_Callback(hObject, eventdata, handles)
-global scriptdir data_basedir, datadir;
+global scriptdir data_basedir datadir;
 global bird;
 
 bird = get(hObject,'String');
@@ -1421,19 +1489,19 @@ end
 
 % --- Executes on slider movement. DUPLICATED in inspect.m
 function xscale_Callback(hObject, eventdata, handles)
+axes2_tracks_axes1 = false; % kludge
 last_xlim = get(handles.axes1, 'XLim');
-set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
-%set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
-new_xlim = get(handles.axes1, 'XLim');
-% It seems that the whole graph isn't drawn--expanding the view region
-% results in blank areas. In this case, replot.
-if new_xlim(2) > last_xlim(2)
-    plot_stimulation([], handles, 1);
+set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30]);
+if axes2_tracks_axes1
+    set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30]);
 end
+new_xlim = get(handles.axes1, 'XLim');
+
 
 % --- Executes on slider movement. DUPLICATED in inspect.m
 function yscale_Callback(hObject, eventdata, handles)
-set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+%set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-1 1]*1e3*0.3);
 %plot_stimulation([], handles, 1);
 
 
@@ -1468,40 +1536,6 @@ plot_stimulation([], handles, true);
 function response_filter_Callback(hObject, eventdata, handles)
 plot_stimulation([], handles, true);
 
-
-
-function n_repetitions_box_Callback(hObject, eventdata, handles)
-global hardware stim;
-
-stim.n_repetitions = str2double(get(hObject, 'String'));
-
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
-
-
-function n_repetitions_box_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-function n_repetitions_hz_box_Callback(hObject, eventdata, handles)
-global hardware stim;
-
-stim.repetition_Hz = str2double(get(hObject, 'String'));
-if stim.repetition_Hz > 40
-    stim.repetition_Hz = 40;
-    set(hObject, 'String', sigfig(stim.repetition_Hz, 3));
-end
-handles = configure_acquisition_devices(hObject, handles);
-guidata(hObject, handles);
-
-
-% --- Executes during object creation, after setting all properties.
-function n_repetitions_hz_box_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
 
 
 
@@ -1578,85 +1612,92 @@ guidata(hObject, handles);
 
 
     
-function negfirst_toggle_all_Callback(hObject, eventdata, handles)
-global valid_electrodes stim;
-for i = find(stim.active_electrodes)
-    % Toggle all valid?  Or just toggle all active?
-    h = eval(sprintf('handles.negfirst%d', i));
-    stim.negativefirst(i) = ~get(h, 'Value');
-    set(h, 'Value', stim.negativefirst(i));
-end
+function stimscale_reset_all_Callback(hObject, eventdata, handles)
+stim_scale_set(handles, ones(1,16));
 
-function negfirst_universal_callback(hObject, handles)
-global stim;
-whichone = str2num(hObject.String);
-value = get(hObject, 'Value');
-stim.negativefirst(whichone) = value;
+
+function stimscaling_universal_callback(hObject, handles)
+global stim safeParams;
+% Go through each electrode and check value (allows function to be called
+% anywhere, not just as a callback)
+
+n = get(hObject, 'Tag');
+i = str2double(n(10:end));
+
+newVal = str2double(get(hObject, 'String'));
+   
+% Make sure it's a number
+if isnan(newVal)
+    % If it is not a number, replace the editbox's contents with its old
+    % value (taken from stim.current_scale)
+    newVal = stim.current_scale(i);
+end
+   
+stim_scale_set(handles, newVal, i);
 
 
 % I could set the callback in each of the GUI elements to
 % *_universal_callback, but all that clicking in guide would kill me.  I
 % could do it programmatically (at the risk of confusing guide in the
 % future), but apparently writing this comment is marginally easier...
-function negfirst1_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale1_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst2_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale2_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst3_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale3_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst4_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale4_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst5_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale5_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst6_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale6_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst7_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale7_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst8_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale8_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst9_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale9_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst10_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale10_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst11_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale11_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst15_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale12_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst16_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale13_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst14_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale14_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst12_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
+function stimscale15_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
-function negfirst13_Callback(hObject, eventdata, handles)
-negfirst_universal_callback(hObject, handles);
-
-
+function stimscale16_Callback(hObject, eventdata, handles)
+stimscaling_universal_callback(hObject, handles)
 
 
 
-% --- Executes on button press in debug.
+
 function debug_Callback(hObject, eventdata, handles)
 globalVars = who('global');
 for iVar = 1:numel(globalVars)
   eval(sprintf('global %s', globalVars{iVar}));  % [EDITED]
 end
-a(0)
+disp('Made all vars global.  Not throwing an error.  Edit plexme.m if you want that.');
+% a(0)
 
 
 
@@ -1913,9 +1954,10 @@ for i = 1:16
     eval(sprintf('set(handles.electrode%d, ''Value'', %d);', i, valid_electrodes(i)));
     eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, foo));
     eval(sprintf('set(handles.stim%d, ''Value'', %d);', i, stim.active_electrodes(i)));
-    eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', i, foo));
-    eval(sprintf('set(handles.negfirst%d, ''Value'', %d);', i, stim.negativefirst(i)));
+    eval(sprintf('set(handles.stimscale%d, ''Enable'', ''%s'');', i, foo));
 end
+stim_scale_update_gui(handles);
+prepulse_us_update_gui(handles);
 set(handles.datadir_box, 'String', datadir);
 set(handles.birdname, 'String', bird, 'BackgroundColor', [0 0.8 0]);
 update_monitor_electrodes(hObject, handles);
@@ -2067,7 +2109,7 @@ global stim hardware detrend_param;
 global start_uAmps min_uAmps max_uAmps voltage_limit;
 global stop_button_pressed;
 global increase_step;
-            
+
 
 factor = increase_step;
 final_factor = 1.02;
@@ -2100,7 +2142,7 @@ while ~done
     errorcounter = 0;
 
     while isempty(data)
-        [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+        [ data, response, voltage ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
         errorcounter = errorcounter + 1;
         if errorcounter > 5
             a(0)
@@ -2198,9 +2240,24 @@ function [ voltages ] = check_all_stim_voltages(hObject, handles);
 global stop_button_pressed;
 global stim hardware detrend_param;
 
-orig_monitor_electrode = stim.plexon_monitor_electrode;
+stim_orig = stim;
+
+%one_pulse = false;
 
 voltages = NaN * zeros(size(stim.active_electrodes));
+
+% For a voltage scan we can speed things up by only doing one pulse per
+% channel.  BUT I've been using the data from the voltage scans, so this is
+% actually quite a bad idea, generally.  Keeping it here in case it is
+% useful at some point...
+%if sum(stim.active_electrodes) >= 4
+%    stim.n_repetitions = 1;
+%    set(handles.n_repetitions_box, 'String', '1');
+%    handles = configure_acquisition_devices(hObject, handles);
+%    guidata(hObject, handles);
+%    one_pulse = true;
+%    % Also, turn off de-trending etc. on the response recording end!
+%end
 
 for i = find(stim.active_electrodes)
     
@@ -2214,15 +2271,21 @@ for i = find(stim.active_electrodes)
     if stop_button_pressed
         disp('stop button pressed');
         stop_button_pressed = false;
-        stim.plexon_monitor_electrode = orig_monitor_electrode;
+        stim = stim_orig;
         update_monitor_electrodes(hObject, handles);
         break;
     end
     
-    [ data, response_detected, voltages(i), errors] = stimulate(stim, hardware, detrend_param, handles);
+    [ data, response_detected, voltages(i)] = stimulate_wrapper(stim, hardware, detrend_param, handles);
 end
 
-stim.plexon_monitor_electrode = orig_monitor_electrode;
+stim = stim_orig;
+
+%if one_pulse
+%    handles = configure_acquisition_devices(hObject, handles);    
+%    guidata(hObject, handles);
+%end
+
 update_monitor_electrodes(hObject, handles);
 
 
@@ -2275,17 +2338,17 @@ if exist('repeat_experiment', 'var')
 
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
-elseif true
-    NPOLARITIES = 14;
+elseif false
+    NPOLARITIES = 6;
     
-    frequencies = [ 24 24 24 24 24 24 24 24 ]
+    frequencies = [ 20 20 20 ]
     durations = [200e-6]
     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
     polarities = polarities(1:min([length(polarities) NPOLARITIES]));
     % Always test non-current-steering configurations!
     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
 else
-    NPOLARITIES = 20;
+    NPOLARITIES = 6;
     
     frequencies = [ 27 27 27 27 27 ]
     durations = [150 200 300]*1e-6;
@@ -2325,9 +2388,11 @@ disp(sprintf('Doing %d threshold searches.', nsearches));
 freqs_completed = 0;
 
 for frequency = 1:length(frequencies)
+    % Go through different repitition frequencies
     stim.repetition_Hz = frequencies(frequency);
 
     for dur = 1:length(durations)
+        % Go through different durations
         stim.halftime_s = durations(dur);
         
         handles = configure_acquisition_devices(hObject, handles);
@@ -2343,12 +2408,13 @@ for frequency = 1:length(frequencies)
                 return;
             end
             electrode_bit = 0; % run over all stim polarities...
-            stim.negativefirst = zeros(size(stim.active_electrodes));
             for electrode = find(stim.active_electrodes)
                 electrode_bit = electrode_bit + 1;
-                stim.negativefirst(electrode) = bitget(polarities(polarity), electrode_bit);
-                eval(sprintf('set(handles.negfirst%d, ''Value'', %d);', ...
-                    electrode, stim.negativefirst(electrode)));
+                if bitget(polarities(polarity), electrode_bit)
+                    stim_scaling_set(handles, -1, electrode);
+                else
+                    stim_scaling_set(handles, 1, electrode);
+                end
             end
             
             
@@ -2358,8 +2424,9 @@ for frequency = 1:length(frequencies)
                 return;
             end
 
-
+            
             if stop_button_pressed
+                % Should there be a "stop_button_pressed = false" here?
                 return;
             end
             
@@ -2424,12 +2491,12 @@ global datadir;
 voltages = check_all_stim_voltages(hObject, handles);
 
 
-polarity_string = '';
-for i = find(stim.active_electrodes)
-    polarity_string = strcat(polarity_string, sigfig(stim.negativefirst(i), 1));
-end
-save(fullfile(datadir, sprintf('voltages_%s.mat', polarity_string)), ...
-    'stim', 'voltages', '-v7.3');
+%polarity_string = '';
+%for i = find(stim.active_electrodes)
+%    polarity_string = strcat(polarity_string, sigfig(stim.stim_current(i)));
+%end
+%save(fullfile(datadir, sprintf('voltages_%s.mat', polarity_string)), ...
+%    'stim', 'voltages', '-v7.3');
 
 
 
@@ -2437,7 +2504,7 @@ save(fullfile(datadir, sprintf('voltages_%s.mat', polarity_string)), ...
 
 function voltage_limit_Callback(hObject, eventdata, handles)
 global voltage_limit;
-voltage_limit = str2double(get(hObject,'String'));
+voltage_limit = str2double(get(hObject, 'String'));
 
 
 function voltage_limit_CreateFcn(hObject, eventdata, handles)
@@ -2479,61 +2546,52 @@ end
 function xcorr_threshold_auto_Callback(hObject, eventdata, handles)
 global stim hardware detrend_param;
 global datadir;
-global cow ste;
+global cow ste wayout;
 global stop_button_pressed;
 
-stop_button_pressed = false;
-
-% Set stim to something that should not generate a response (say 3 uA),
-% stimulate a bunch of times, and get a
+% Set stim to the minimum (30 nA),  stimulate a bunch of times, and get a
 % range of xcorrelation values, per valid recording channel. How many
 
-STIM_CURRENT_NO_RESPONSE = 1;
-
-stim.current_uA = STIM_CURRENT_NO_RESPONSE;
+stim.current_uA = 200;
 stim.tdt_valid = ones(1, 16);
 stim.tdt_show = stim.tdt_valid;
-detrend_param.response_detection_threshold = 5;
+detrend_param.response_detection_threshold = zeros(size(stim.tdt_valid));
 detrend_param.response_sigma = 5;
 detrend_param.response_prob = 0.5;
 
 nactive = sum(stim.tdt_valid);
 
 colours = distinguishable_colors(nactive);
+tdt_valid_mapping = find(stim.tdt_valid);
 
-xcorr_min_threshold = -0.8; % Is this even reasonable?
+xcorr_min_threshold = -10.1; % Is this even reasonable?
 
 % One goes first. Given the way for loops work, this is easiest.
-data = stimulate(stim, hardware, detrend_param, handles);
-clear cow ste;
-for i = 1:40
-    % Vary the current a little, just in case
-    stim.current_uA = STIM_CURRENT_NO_RESPONSE * (exp(rand)-0.7);
-    disp(sprintf('In loop, iteration %d, stim %s', i, sigfig(stim.current_uA)));
-    
-
+data = stimulate_wrapper(stim, hardware, detrend_param, handles);
+clear cow ste wayout;
+for i = 1:20
     if stop_button_pressed
-        disp('Stop button was pressed. Aborting.');
         stop_button_pressed = false;
         break;
     end
     
-    
-    data = stimulate(stim, hardware, detrend_param, handles);
+    data = stimulate_wrapper(stim, hardware, detrend_param, handles);
 
     cow(i,:) = data.tdt.spikes_r;
     if i > 1
         m = mean(cow);
+        wayout(i,:) = m + 3*std(cow);
         ste95 = std(cow) * 1.96 / sqrt(i);
         
-        %m(find(m <= xcorr_min_threshold)) = Inf;
+        m(find(m <= xcorr_min_threshold)) = Inf;
         
         % This just lets us monitor progress: shouldn't see pinkness by end
-        detrend_param.response_detection_threshold = mean(cow) + 3*std(cow);
+        detrend_param.response_detection_threshold = m + ste95 + 3*std(cow);
 
-        for pchan = 1:16
+        for j = 1:size(wayout, 2)
+            pchan = tdt_valid_mapping(j);
             h = eval(sprintf('handles.maxi%d', pchan));
-            set(h, 'String', sprintf('%s', sigfig(detrend_param.response_detection_threshold(pchan), 4)));
+            set(h, 'String', sprintf('%s', sigfig(wayout(i,j), 4)));
         end
         
         %axes(handles.axes2);
@@ -2551,7 +2609,7 @@ for i = 1:40
             xlabel(handles.axes2, 'trial');
             ylabel(handles.axes2, 'xcorr');
             title(handles.axes2, 'Channel response thresholds');
-            set(handles.axes2, 'YLim', [-1.1 0]);
+            set(handles.axes2, 'YLim', [-11 -9]);
         end
         hold(handles.axes2, 'off');
         set(handles.axes2, 'XLim', [0 j+1]);
@@ -2563,12 +2621,13 @@ m = mean(cow);
 stim.tdt_valid = m > xcorr_min_threshold;
 stim.tdt_show = stim.tdt_valid;
 
-detrend_param.response_detection_threshold = mean(cow) + 3*std(cow);
-detrend_param.response_detection_threshold
+detrend_param.response_detection_threshold ...
+    = m(find(stim.tdt_valid)) + ste95(find(stim.tdt_valid)) + 3*std(cow(find(stim.tdt_valid)));
 
-for pchan = 1:16
+for j = 1:size(wayout, 2)
+    pchan = tdt_valid_mapping(j);
     h = eval(sprintf('handles.maxi%d', pchan));
-    set(h, 'String', sprintf('%s', sigfig(detrend_param.response_detection_threshold(pchan), 4)));
+    set(h, 'String', sprintf('%s', sigfig(wayout(i,j), 4)));
 end
 
 for i = 1:16
@@ -2583,5 +2642,633 @@ end
 
 datafile_name = sprintf('corr_thresholds_%suA.mat', sigfig(stim.current_uA));
 save(fullfile(datadir, datafile_name), 'cow', '-v7.3');
+
+
+%% Since Matlab can't call subfunctions across files, and stimulate() is in
+%% its own file, I have to jump through some hoop to handle errors in a
+%% unified way.  I choose this way.
+function [ data, response_detected, voltage] = stimulate_wrapper(stim, hardware, detrend_param, handles)
+
+[ data, response_detected, voltage, errors] = stimulate(stim, hardware, detrend_param, handles);
+
+if ~isempty(errors) & errors.val ~= 0
+    for i = 1:length(errors.name)
+        disp(errors.name{i});
+    end
+    
+    stop_everything(handles);
+end
+
+
+% --- Executes on button press in smoothness_scan.
+function smoothness_scan_Callback(hObject, eventdata, handles)
+global stim hardware detrend_param safeParams;
+global stop_button_pressed;
+global response_thresholds;
+global datadir;
+global thewaitbar;
+global scriptdir;
+global paused;
+
+expName = 'smoothness_scan'; % Experiment name
+
+if ~exist('pause', 'var')
+    paused = false;
+end
+
+disable_controls(hObject, handles);
+stop_button_pressed = false;
+
+
+
+% Repeat experiment put on hold until the continuous experiment has been
+% developed
+
+% %%% Repeat a previous experiment, as given in this threshold scan file and
+% %%% this stimulation file:
+% %repeat_experiment = strcat(scriptdir, '/lw95rhp-2015-11-19/current_thresholds_8.mat');
+% %repeat_stim_file = strcat(scriptdir, '/lw95rhp-2015-11-19/stim_20151119_175100.405.mat');
+% 
+% 
+% if exist('repeat_experiment', 'var')
+%     if ~exist(repeat_experiment, 'file') | ~exist(repeat_stim_file, 'file')
+%         error('continue:wrongfiles', 'You are trying to continue an experiment, but the files are not found.');
+%     end
+%     repeatme = load(repeat_experiment);
+%     repeat = load(repeat_stim_file);
+%     
+%     disp(sprintf('*** Continuing the experiment from %s...', repeat_experiment));
+% 
+%     frequencies = repeatme.frequencies;
+%     durations = repeatme.durations;
+%     detrend_param = repeatme.detrend_param;
+%     polarities = repeatme.polarities;
+%     
+%     % This copies across frequency, repetitions, active electrodes, pulse
+%     % width, choice of TDT channels... the other stuff will be overwritten
+%     % as necessary.
+%     disp(sprintf('    Using hardware configuration recorded in %s:', repeat_stim_file));
+%     stim = repeat.data.stim
+% 
+%     update_gui_values(hObject, handles);
+%     handles = configure_acquisition_devices(hObject, handles);
+% elseif false
+%     NPOLARITIES = 6;
+%     
+%     frequencies = [ 20 20 20 ]
+%     durations = [200e-6]
+%     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
+%     polarities = polarities(1:min([length(polarities) NPOLARITIES]));
+%     % Always test non-current-steering configurations!
+%     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
+% else
+%     NPOLARITIES = 6;
+%     
+%     frequencies = [ 27 27 27 27 27 ]
+%     durations = [150 200 300]*1e-6;
+%     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
+%     polarities = polarities(1:min([length(polarities) NPOLARITIES]));
+%     % Always test non-current-steering configurations!
+%     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
+% end
+
+%% Save file
+
+if ~exist(datadir, 'dir')
+    mkdir(datadir);
+end
+
+if exist(fullfile(datadir, [expName '.mat']), 'file')
+    error('duplicatefile:warning', 'Error: ''%s'' already exists. Rename or delete.', ...
+        fullfile(datadir, [expName '.mat']));
+end
+
+response_thresholds = {};
+
+% detrend_param
+
+% disp(sprintf('Doing %d threshold searches.', nsearches));
+
+%% Do a smoothness check on some random permutation of active electrodes
+% (Can make current steering choice more exact later if needed)
+
+% Test if user has changed stimulation scales on any active electrodes
+% (indicating that they probably want a certain current steering condition)
+% If they have not changed the stim scale, select a random permutation of
+% electrodes to have negative current
+if all(stim.current_scale(stim.active_electrodes) == 1)
+    % Make a random perturbation of electrodes to test
+    numActiveElectrodes = sum(stim.active_electrodes); % Number of active electrodes
+    negElectrodes = logical(de2bi(randi([0 2^(numActiveElectrodes) - 1]), numActiveElectrodes)); % For each active electrode, binary to indicate neg-first
+    
+    % Make a negative amplitude scale for each of the randomly chosen
+    % electrodes
+    stim.current_scale(negElectrodes) = -stim.current_scale(negElectrodes);
+end
+
+% Determine the spaces over which amplitude and pre-stim pause will be
+% tested, as well as which electrode will be tested
+% Currently just goes between the current stimulation parameters
+% and the largest allowable stimulation parameters
+ampStepSize = min([smoothnessParams.ampNumSteps ceil((safeParams.max_current - stim.current_uA)/(stim.current_uA*smoothnessParams.ampStep))]); % Find the minimum number of amplitude steps (which are given by either smoothnessParams.ampNumSteps or smoothnessParams.ampStepS
+pauseStepSize = min([ceil(safeParams.max_prepulse_us/smoothnessParams.pauseStep) smoothnessParams.pauseNumSteps]); % Find the minimum number of amplitude steps (which are given by either smoothnessParams.ampNumSteps or smoothnessParams.ampStepS
+
+amplitudeScales = linspace(stim.current_uA,safeParams.max_current,ampStepSize)/stim.current_uA; % All amplitudes that will be checked (in the form of scaling factors)
+pauses = linspace(0,safeParams.max_prepulse_us,pauseStepSize); % All pause valuse that will be checked
+
+% Select the electrode to test on
+% activeElectrodeInds = find(stim.active_electrodes);
+% testedElectrode = stim.active_electrodes(activeElectrodeInds(randi(size(activeElectrodeInds,2)))); % Determine the index of the active electrode randomly
+% while stim.plexon_test_electrode == stim.plexon_monitor_electrode
+%     stim.plexon_test_electrode = stim.plexon_test_electrode + 1;
+%     if stim.plexon_test_electrode > 16
+%        stim.plexon_test_electrode = stim.plexon_test_electrode - 16; % Make sure that test electrode is not above 16
+%     end
+% end
+% 
+% testedElectrode = stim.plexon_test_electrode; % Test on the electrode selected by the user
+testedElectrode = stim.plexon_monitor_electrode; % Use the monitor electrode as the electrode which is changed
+
+%% Track progress...
+nsearches = length(amplitudeScales) * length(pauses);
+nsearches_done = 0;
+start_time = tic;
+if isempty(thewaitbar)
+    thewaitbar = waitbar(0, 'Time remaining: hundreds of years');
+else
+    waitbar(0, thewaitbar, 'Time remaining: hundreds of years');
+end
+
+warning('Test the thing that says TESTME');
+
+%% Do space search
+% Loop through regions of stimulation amplitude and pre-stim pause on the
+% chosen active electrode, and determine what the minimum stimulation
+% current is for each parameter pair to get a voltage response
+
+response_results = zeros(size(amplitudeScales,2),size(pauses,2)); % Matrix to hold the response detected results of the experiment
+voltage_results = nan(size(response_results)); % Matrix to hold the voltage results of the experiment
+errorFlag = false;
+for ampInd = 1:size(amplitudeScales,2)
+    % For each amplitude
+    stimAmpScale = amplitudeScales(ampInd); % Extract the current stimulation amlpitude scale
+    
+    for pauseInd = 1:size(pauses,2)
+        % For each pre-pulse pause duration
+        stimPause = pauses(pauseInd); % Extract the current pre-pulse pause duration
+        
+        %% Set up the stimulation parameters
+        % Set the parameters for the testing electrode
+        stim.current_scale(testedElectrode) = stimAmpScale;
+        stim.prepulse_us(testedElectrode) = stimPause;
+        
+        % Test the values, so that they are safe (redudant, but fast and
+        % safe)
+        stim = safety_check(stim, safeParams);
+        
+        %% Send stimulations
+        [data, response_detected, voltage ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
+        if isempty(data)
+            disp('smoothness check: stimulate() did not capture any data.');
+            return;
+        end
+                
+        % Record result
+        response_results(ampInd, pauseInd) = response_detected; % Record whether or not a response was seen at this voltage
+        voltage_results(ampInd, pauseInd) = voltage; % Record the voltage measured
+        
+        %% Update user
+        elapsed_time = toc(start_time);
+        nsearches_done = nsearches_done + 1;
+        total_expected_time = elapsed_time * nsearches / nsearches_done;
+        expected_remaining_time = (elapsed_time / nsearches_done) * (nsearches - nsearches_done);
+        if ishandle(thewaitbar)
+            waitbar(elapsed_time / total_expected_time, ...
+                thewaitbar, ...
+                sprintf('Expected remaining time: %s', expected_remaining_time));
+        end
+        
+    end
+    if errorFlag
+        break;
+    end
+end
+
+%% Plot results
+if ~errorFlag
+    figure;
+    mesh(amplitudeScales*stim.current_uA, pauses*1e6, response_results);
+    ylabel('Amplitude (uA)');
+    xlabel('Pre-pulse pause duration (us)');
+    zlabe('Response');
+    title('Neural response as a function of amplitude and pre-pulse pause duration');
+    
+    figure;
+    mesh(amplitudeScales*stim.current_uA, pauses*1e6, voltage_results);
+    ylabel('Amplitude (uA)');
+    xlabel('Pre-pulse pause duration (us)');
+    zlabe('Response');
+    title('Stimulation voltage as a function of amplitude and pre-pulse pause duration');
+end
+delete(thewaitbar);
+thewaitbar = [];
+
+enable_controls(handles);
+
+function optimize_over_stim_parameters(handles, policyFunction, optimizationFunction, finishingConds)
+% optimize_over_stim_parameters(handles, policyFunction, minimizationFunction, finishingConds)
+% 
+% This function will minimize the minimizationFunction by changing the
+% electrode parameters using the policyFunction.
+%
+% policyFunction must have the contract:
+% [newAmplitudes newPauseDurations newFunctionMemory] = policyFunction(currentAmplitudes, currentPauseDurations, lastFunctionResult, lastfunctionMemory)
+% where:
+% newAmplitudes are the previous amplitude for each electrode,
+% newPauseDurations are the previous pause durations for each electrode,
+% newFunctionMemory is data that policyFunction may generate that will be
+% passed back to it during the next iteration,
+% currentAmplitudes are the new amplitudes for each electrode,
+% currentPauseDurations are the new pause durations for each electrode,
+% lastFunctionResult is the output of the last call to
+% optimizationFunction, and
+% lastFunctionMemory is the newFunctionMemory generated by the previous
+% call to policyFunction (this variable will be initialized to NaN)
+%
+% optimizationFunction must have the contract:
+% result = optimizationFunction(stimData)
+% where:
+% result is a scalar to be optimized, and
+% stimData is the data output from stimulate()
+% If there is an error (no stimulation, etc.), optimizationFunction would
+% return NaN.  This can be handled by policyFunction.
+%
+% finishingConds is a structure that has the following fields
+% (= default value if field does not exist):
+% finishingConds.maxSteps (=10000) determines the maximum number of steps
+% the optimization can make
+% finishingConds.ampThresh (= 1) determines the threshold for the minimum
+% adjustment, in uA, that the policyFunction will make before finishing
+% (the largest step distance across all electrodes must be smaller than
+% this value)
+% finishingConds.pauseThresh (= 1) determines the threshold for the minimum
+% adjustment, in uS, that the policyFunction will make before finishing
+% (the largest step distance across all electrodes must be smaller than
+% this value)
+
+global stim hardware detrend_param safeParams;
+global stop_button_pressed;
+global response_thresholds;
+global datadir;
+global thewaitbar;
+global scriptdir;
+global paused;
+
+%% Fill in default finishingConds values
+if ~isfield(finishingConds, 'maxSteps')
+    finishingConds.maxSteps = 10000;
+end
+
+if ~isfield(finishingConds, 'ampThresh')
+    finishingConds.ampThresh = 1;
+end
+
+if ~isfield(finishingConds, 'pauseThresh')
+    finishingConds.pauseThresh = 1;
+end
+
+%% Save file
+expName = 'optimization'; % Experiment name
+
+if ~exist(datadir, 'dir')
+    mkdir(datadir);
+end
+
+if exist(fullfile(datadir, [expName '.mat']), 'file')
+    error('duplicatefile:warning', 'Error: ''%s'' already exists. Rename or delete.', ...
+        fullfile(datadir, [expName '.mat']));
+end
+
+%% Prepare GUI
+if ~exist('pause', 'var')
+    paused = false;
+end
+
+disable_controls(hObject, handles);
+stop_button_pressed = false;
+
+%% Track progress...
+% nsearches = 10;
+% nsearches_done = 0;
+% start_time = tic;
+% if isempty(thewaitbar)
+%     thewaitbar = waitbar(0, 'Time remaining: hundreds of years');
+% else
+%     waitbar(0, thewaitbar, 'Time remaining: hundreds of years');
+% end
+
+%% Do space search
+% Initialize matrices to record all amplitudes, pauseDurations, and results
+numRows = finishingConds.maxSteps + 1;
+amplitudes = zeros(numRows, size(stim.current_scale, 2));
+pauseDurations = zeros(numRows, size(stim.prepulse_us, 2));
+results = zeros(numRows, 1);
+
+% Initialize electrode parameters
+lastAmplitudes = stim.current_scale.*stim.current_uA;
+lastPauseDurations = stim.prepulse_us;
+amplitudes(1,:) = lastAmplitudes;
+pauseDurations(1,:) = lastPauseDurations;
+
+% Stimulate once to get initial result from optimization function
+stimData = stimulate_wrapper(stim, hardware, detrend_param, handles);
+if isempty(stimData)
+    disp('Initial conditions for optimization did not produce response.  Stopping optimization.');
+    return;
+end
+
+
+% Get initial result from optimization function
+lastFunctionResult = feval(optimizationFunction, stimData);
+results(1) = lastFunctionResult;
+
+% Initialize loop parameters
+policyMemory = NaN;
+currentLoop = 1;
+isDone = false;
+
+% Start optimization
+while ~isDone
+    %% Get new values from the policy
+    % Acquire new values
+    [newAmplitudes, newPauseDurations, policyMemory] = feval(policyFunction, lastAmplitudes, lastPauseDurations, lastFunctionResult, policyMemory);
+    
+    % Save new values from policy
+    amplitudes(currentLoop + 1,:) = newAmplitudes;
+    pauseDurations(currentLoop + 1,:) = newPauseDurations;
+    
+    % Convert the amplitude values to scale
+    newAmplitudeScales = newAmplitudes/stim.current_uA;
+    
+    % Assign the new values to the stim struct
+    stim_scale_set(handles, newAmplitudeScales);
+    stim.prepulse_us = newPauseDurations;
+    
+    %% Check the new values
+    % Check for safety
+    stim = safety_check(stim,safeParams);
+    
+    % Save values from safety check  if needed (SHOULD be the same as from
+    % the policyFunction, but may have been changed if they were unsafe)
+    if any(stim.current_scale ~= newAmplitudeScales) || any(stim.prepulse_us ~= newPauseDurations)
+        disp('Safety Check: Policy produced unsafe parameters.  Parameters have been changed.');
+        amplitudes(currentLoop + 1,:) = stim.current_scale*stim.current_uA;
+        pauseDurations(currentLoop + 1,:) = stim.prepulse_us;
+    end
+    
+    % Check if optimization is done
+    dAmplitudes = abs(newAmplitudes - lastAmplitudes);
+    dPauseDurations = abs(newPauseDurations - lastPauseDurations);
+    if (all(dAmplitudes < finishingConds.ampThresh) || all(dPauseDurations*1e6 < finishingConds.pauseThresh))
+       isDone = true;
+    end
+    
+    %% Save the old values
+    lastAmplitudes = newAmplitudes;
+    lastPauseDurations = newPauseDurations;
+    
+    %% Stimulate
+    [stimData ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
+    if isempty(data)
+        disp('optimization: stimulate() did not capture any data.');
+        return;
+    end
+    
+    if errors.val ~= 0
+        for i = 1:length(errors.name)
+            disp(errors.name{i});
+        end
+        isDone = true;
+    end
+    
+    %% Find value of optimizationFunction
+    lastFunctionResult = feval(optimizationFunction, stimData);
+    results(currentLoop + 1) = lastFunctionResult;
+    
+    
+    %% Iterate counter for next loop
+    currentLoop = currentLoop + 1;
+    
+    %% Check if max number of steps has been reached
+    if (currentLoop > finishingConds.maxSteps)
+       isDone = true; 
+    end
+end
+
+%% Save all data
+save(fullfile(datadir, [expName '.mat']),'amplitudes', 'pauseDurations',...
+    'results', '-v7.3');
+
+% delete(thewaitbar);
+% thewaitbar = [];
+
+enable_controls(handles);
+
+
+function ampStep_Callback(hObject, eventdata, handles)
+% hObject    handle to ampStep (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+global smoothnessParams;
+
+% Get the value
+newVal = str2double(get(hObject, 'String'));
+
+% Make sure it's a number
+if isnan(newVal)
+    % If it is not a number, replace the editbox's contents with its old
+    % value (taken from stim.current_scale)
+    newVal = smoothnessParams.ampStep;
+end
+
+% Make sure it's valid
+if newVal <= 0
+   newVal = smoothnessParams.ampStep;
+end
+
+
+% Set this (potentially changed) value back to the edit box, and save it
+% to stim
+set(hObject, 'String', num2str(newVal));
+smoothnessParams.ampStep = newVal;
+   
+
+
+function stim_scale_set(handles, val, electrodes)
+% If electrodes is not given:
+%    Set all electrodes to 'newscale'
+%        (will error if not 16)
+% else
+%    set whatever electrodes are named to the values in newscale
+% end
+% renormalise over the active electrodes
+% update GUI
+
+global stim;
+
+if ~exist('electrodes', 'var')
+    stim.current_scale = val;
+elseif length(electrodes) == length(val)
+    stim.current_scale(electrodes) = val;
+end
+
+stim_scale_renormalise(handles);
+
+
+
+function stim_scale_renormalise(handles);
+global stim;
+
+i = find(stim.active_electrodes);
+if length(i) < 1
+    return
+end
+stim.current_scale(i) = stim.current_scale(i) / max(abs(stim.current_scale(i)));
+stim.current_scale(find(~stim.active_electrodes)) = 0;
+
+stim_scale_update_gui(handles);
+
+
+
+function stim_scale_update_gui(handles)
+global stim;
+
+for i = 1:16
+   tag = ['stimscale' num2str(i)];
+   if stim.active_electrodes(i)
+       if stim.current_scale(i) > 0
+           set(handles.(tag), 'String', sigfig(stim.current_scale(i)), ...
+               'Enable', 'on', ...
+               'ForegroundColor', [0 0 0], ...
+               'BackgroundColor', [1 1 1] * (stim.current_scale(i)+1)/2);
+       else
+           set(handles.(tag), 'String', sigfig(stim.current_scale(i)), ...
+               'Enable', 'on', ...
+               'ForegroundColor', [1 1 1], ...
+               'BackgroundColor', [1 1 1] * (stim.current_scale(i)+1)/2);
+       end
+   else
+       set(handles.(tag), 'String', '', 'Enable', 'off');
+   end
+end
+
+
+function prepulse_us_Callback(hObject, eventdata)
+handles = guidata(hObject);
+
+whichone = str2double(get(hObject, 'Tag'));
+val = str2double(get(hObject, 'String'));
+prepulse_us_set(handles, val, whichone);
+
+
+function prepulse_us_set(handles, val, electrodes)
+% If electrodes is not given:
+%    Set all electrodes to 'newscale'
+%        (will error if not 16)
+% else
+%    set whatever electrodes are named to the values in newscale
+% end
+% renormalise over the active electrodes
+% update GUI
+
+global stim;
+
+if ~exist('electrodes', 'var')
+    stim.prepulse_us = val;
+elseif length(electrodes) == length(val)
+    stim.prepulse_us(electrodes) = val;
+end
+prepulse_us_update_gui(handles);
+
+
+
+function prepulse_us_update_gui(handles)
+global stim;
+
+for i = 1:16
+   if stim.active_electrodes(i)
+       set(handles.prepulse_us{i}, 'String', sprintf('%d', stim.prepulse_us(i)), ...
+           'Enable', 'on', ...
+           'ForegroundColor', [0 0 0], ...
+           'BackgroundColor', [1 1 1] * 1/(stim.prepulse_us(i)/20+1));
+       if stim.prepulse_us(i) > 20
+           set(handles.prepulse_us{i}, 'ForegroundColor', [1 1 1]);
+       end
+   else
+       set(handles.prepulse_us{i}, 'String', '', 'Enable', 'off');
+   end
+end
+
+
+function pauseStep_Callback(hObject, eventdata, handles)
+% hObject    handle to pauseStep (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+global smoothnessParams;
+
+% Get the value
+newVal = str2double(get(hObject, 'String'));
+
+% Make sure it's a number
+if isnan(newVal)
+    % If it is not a number, replace the editbox's contents with its old
+    % value (taken from stim.current_scale)
+    newVal = smoothnessParams.pauseStep;
+end
+
+% Make sure it's valid
+if newVal <= 0
+   newVal = smoothnessParams.pauseStep;
+end
+
+% Set this (potentially changed) value back to the edit box, and save it
+% to stim
+set(hObject, 'String', num2str(newVal));
+smoothnessParams.pauseStep = newVal;
+  
+function pauseStep_CreateFcn(a, b, c)
+
+function ampStep_CreateFcn(a, b, c)
+
+
+
+function response_sigma_Callback(hObject, eventdata, handles)
+global detrend_param;
+detrend_param.response_sigma = str2double(get(hObject,'String'));
+
+
+function response_sigma_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function response_prob_Callback(hObject, eventdata, handles)
+global detrend_param;
+detrend_param.response_prob = str2double(get(hObject,'String'));
+if isnan(detrend_param.response_prob)
+    set(handles.response_prob, 'BackgroundColor', [1 0 0]);
+else
+    set(handles.response_prob, 'BackgroundColor', 0.94 * [1 1 1]);
+end
+
+
+function response_prob_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
 
 
