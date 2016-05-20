@@ -94,7 +94,7 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if true % For my X--HVC experiment
+if false % For my X--HVC experiment
     detrend_param.model = 'fourier8';
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
@@ -1489,19 +1489,19 @@ end
 
 % --- Executes on slider movement. DUPLICATED in inspect.m
 function xscale_Callback(hObject, eventdata, handles)
+axes2_tracks_axes1 = false; % kludge
 last_xlim = get(handles.axes1, 'XLim');
-set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
-%set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30] / 1e3);
-new_xlim = get(handles.axes1, 'XLim');
-% It seems that the whole graph isn't drawn--expanding the view region
-% results in blank areas. In this case, replot.
-if new_xlim(2) > last_xlim(2)
-    plot_stimulation([], handles, 1);
+set(handles.axes1, 'XLim', get(handles.xscale, 'Value') * [-4 30]);
+if axes2_tracks_axes1
+    set(handles.axes2, 'XLim', get(handles.xscale, 'Value') * [-4 30]);
 end
+new_xlim = get(handles.axes1, 'XLim');
+
 
 % --- Executes on slider movement. DUPLICATED in inspect.m
 function yscale_Callback(hObject, eventdata, handles)
-set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+%set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-0.3 0.3]/1e3);
+set(handles.axes1, 'YLim', (2^(get(handles.yscale, 'Value')))*[-1 1]*1e3*0.3);
 %plot_stimulation([], handles, 1);
 
 
