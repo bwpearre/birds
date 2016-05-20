@@ -150,19 +150,7 @@ for channel = find(stim.active_electrodes | newly_maybe_inactive_electrodes)
             throw(ME);
         end
     end
-    
-    if true
-        % This is not that slow: ~200 us total over all iterations of for loop...
-        if channel == stim.plexon_monitor_electrode
-            np = PS_GetNPointsArbPattern(hardware.plexon.id, channel);
-            target_current = [];
-            target_current(1,:) = PS_GetArbPatternPointsX(hardware.plexon.id, channel)/1e6;
-            target_current(2,:) = PS_GetArbPatternPointsY(hardware.plexon.id, channel)/1e3;
-            target_current = [[-0.001; 0] [0; 0] target_current [target_current(1,end); 0] [target_current(1,end)+0.001; 0]]; % Add zeros for cleaner look
-        end
-    end
-    
-    
+        
     
     if isempty(last_stim) ...
             | stim.n_repetitions ~= last_stim.n_repetitions ...
@@ -221,6 +209,16 @@ for channel = find(stim.active_electrodes | newly_maybe_inactive_electrodes)
 end
 
 
+if stim.active_electrodes(stim.plexon_monitor_electrode)
+    np = PS_GetNPointsArbPattern(hardware.plexon.id, stim.plexon_monitor_electrode);
+    target_current = [];
+    target_current(1,:) = PS_GetArbPatternPointsX(hardware.plexon.id, stim.plexon_monitor_electrode)/1e6;
+    target_current(2,:) = PS_GetArbPatternPointsY(hardware.plexon.id, stim.plexon_monitor_electrode)/1e3;
+    target_current = [[-0.001; 0] [0; 0] target_current [target_current(1,end); 0] [target_current(1,end)+0.001; 0]];
+else
+    target_current = [0 0; 0 0];
+end
+    
 
 
 if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)

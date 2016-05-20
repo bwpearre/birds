@@ -855,6 +855,8 @@ eval(sprintf('set(handles.stimscale%d, ''Enable'', ''%s'');', whichone, newstate
 eval(sprintf('set(handles.stim%d, ''Value'', 0);', whichone));
 stim_scale_set(handles, 0, whichone);
 update_monitor_electrodes(hObject, handles);
+stim_scale_update_gui(handles);
+prepulse_us_update_gui(handles);
 guidata(hObject, handles);
 
 
@@ -1230,9 +1232,21 @@ guidata(hObject, handles);
 function update_monitor_electrodes(hObject, handles)
 global stim;
 
+changed = false;
+if ~stim.active_electrodes(stim.plexon_monitor_electrode)
+    stim.plexon_monitor_electrode = find(stim.active_electrodes, 1);
+    if isempty(stim.plexon_monitor_electrode)
+        stim.plexon_monitor_electrode = 1;
+    end
+    changed = true;
+end
 set(handles.monitor_electrode_control, 'Value', stim.plexon_monitor_electrode);
 if stim.active_electrodes(stim.plexon_monitor_electrode)
-    set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
+    if changed
+        set(handles.monitor_electrode_control, 'BackgroundColor', [1 1 0]);
+    else
+        set(handles.monitor_electrode_control, 'BackgroundColor', [0.1 0.8 0.1]);
+    end
 else
     set(handles.monitor_electrode_control, 'BackgroundColor', [0.8 0.2 0.1]);
 end
