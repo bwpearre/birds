@@ -62,7 +62,7 @@ handles.output = hObject;
 global bird;
 
 global offsiteTest;
-global in_stim_loop
+global in_stim_loop;
 
 global hardware stim;
 global safeParams;
@@ -665,19 +665,15 @@ disp('Shutting down...');
 
 stop_everything(handles);
 
-if ~isempty(stim_timer)
-    if isvalid(stim_timer)
-        stop(stim_timer);
-        delete(stim_timer);
-    end
-    stim_timer = [];
-end
-
+disp('Shutting down NI session...');
 if ~isempty(hardware.ni.session)
     stop(hardware.ni.session);
     release(hardware.ni.session);
     hardware.ni.session = [];
 end
+disp('...done.');
+
+disp('Shutting down Plexon session...');
 if hardware.plexon.open
     err = PS_CloseAllStim;
     if err
@@ -686,6 +682,7 @@ if hardware.plexon.open
         hardware.plexon.open = false;
     end
 end
+disp('...done.');
 
 
 if false
@@ -697,6 +694,7 @@ if false
     save(fullfile(datadir, datafile_name), 'vvsi', '-v7.3');
 end
 
+disp('Shutting down TDT session...');
 if ~isempty(hardware.tdt.device)
     try
         hardware.tdt.device.Halt;
@@ -704,6 +702,7 @@ if ~isempty(hardware.tdt.device)
         disp('Caught TDT-is-stupid error #2589723. Moving on.');
     end
 end
+disp('...done.');
 
 delete(hObject);
 
@@ -938,12 +937,12 @@ global stop_button_pressed;
 global in_stim_loop;
 
 if in_stim_loop
-    disp('stim_loop: already in stim_loop');
+    disp('stim_loop: already in stim_loop.  Press "STOP" if necessary.');
     return;
 end
 
 if ~sufficient_active_electrodes
-    disp('stim_loop: insufficient active electrodes');
+    disp('stim_loop: insufficient active electrodes.');
     return;
 end
 
@@ -954,7 +953,7 @@ if stop_button_pressed
     disp('stim_loop: stop_button was pressed and not reset.');
 end
 
-while ~stop_button_pressed
+while in_stim_loop & ~stop_button_pressed
     plexon_control_timer_callback_2([], [], hObject, handles)
 end
 
@@ -1029,14 +1028,10 @@ stop_everything(handles);
 
 
 function stop_everything(handles);
-global vvsi;
-global hardware stim;
-global axes1;
-global increase_type;
-global stim_timer;
 global thewaitbar;
 global stop_button_pressed;
 global in_stim_loop;
+global paused;
 
 if ~isempty(thewaitbar)
     delete(thewaitbar);
@@ -1045,36 +1040,7 @@ end
 
 %PS_StopStimAllChannels(hardware.plexon.id);
 
-if ~isempty(stim_timer)
-    if isvalid(stim_timer)
-        disp('Stopping timer for true...');
-        stop(stim_timer);
-    else
-        disp('*** The timer was invalid!');
-    end
-end
-
 disp('Stopping everything...');
-
-
-
-if ~isempty(vvsi)
-    this_electrode = find(vvsi(:,1) == stim.plexon_monitor_electrode);
-    if false
-        cla(axes1);
-        hold(axes1, 'on');
-        switch increase_type
-            case 'current'
-                abscissa = 2;
-            case 'time'
-                abscissa = 6;
-        end
-        scatter(axes1, vvsi(this_electrode,abscissa), vvsi(this_electrode,4), 'b');
-        scatter(axes1, vvsi(this_electrode,abscissa), vvsi(this_electrode,5), 'r');
-        hold(axes1, 'off');
-    end
-    %set(axes1, 'YLim', [min(vvsi(this_electrode,5)) max(vvsi(this_electrode,4))]);
-end
 
 enable_controls(handles);
 
@@ -1379,23 +1345,11 @@ if false
 end
 
 %stim = safety_check(stim, safeParams); % Check stimulation for being safe
-[ data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+[ data, response_detected, voltage ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
 if isempty(data)
     disp('timer callback: stimulate() did not capture any data.');
     return;
 end
-
-if errors.val ~= 0
-    for i = 1:length(errors.name)
-        disp(errors.name{i});
-    end
-    
-    if ~isempty(stim_timer) & timer_running(stim_timer)
-        stop(stim_timer);
-    end
-end
-
-
 
   
   
@@ -1419,7 +1373,7 @@ for whichone = find(valid_electrodes)
     % state of this button
     eval(sprintf('set(handles.electrode%d, ''Value'', 1);', whichone));
     eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate));
-    eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate));
+    %eval(sprintf('set(handles.negfirst%d, ''Enable'', ''%s'');', whichone, newstate));
 end
 update_monitor_electrodes(hObject, handles);
 
@@ -2155,7 +2109,7 @@ while ~done
     errorcounter = 0;
 
     while isempty(data)
-        [ data, response, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+        [ data, response, voltage ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
         errorcounter = errorcounter + 1;
         if errorcounter > 5
             a(0)
@@ -2274,7 +2228,7 @@ for i = find(stim.active_electrodes)
         break;
     end
     
-    [ data, response_detected, voltages(i), errors] = stimulate(stim, hardware, detrend_param, handles);
+    [ data, response_detected, voltages(i)] = stimulate_wrapper(stim, hardware, detrend_param, handles);
 end
 
 stim.plexon_monitor_electrode = orig_monitor_electrode;
@@ -2559,7 +2513,7 @@ tdt_valid_mapping = find(stim.tdt_valid);
 xcorr_min_threshold = -10.1; % Is this even reasonable?
 
 % One goes first. Given the way for loops work, this is easiest.
-data = stimulate(stim, hardware, detrend_param, handles);
+data = stimulate_wrapper(stim, hardware, detrend_param, handles);
 clear cow ste wayout;
 for i = 1:20
     if stop_button_pressed
@@ -2567,7 +2521,7 @@ for i = 1:20
         break;
     end
     
-    data = stimulate(stim, hardware, detrend_param, handles);
+    data = stimulate_wrapper(stim, hardware, detrend_param, handles);
 
     cow(i,:) = data.tdt.spikes_r;
     if i > 1
@@ -2634,6 +2588,22 @@ end
 
 datafile_name = sprintf('corr_thresholds_%suA.mat', sigfig(stim.current_uA));
 save(fullfile(datadir, datafile_name), 'cow', '-v7.3');
+
+
+%% Since Matlab can't call subfunctions across files, and stimulate() is in
+%% its own file, I have to jump through some hoop to handle errors in a
+%% unified way.  I choose this way.
+function [ data, response_detected, voltage] = stimulate_wrapper(stim, hardware, detrend_param, handles)
+
+[ data, response_detected, voltage, errors] = stimulate(stim, hardware, detrend_param, handles);
+
+if errors.val ~= 0
+    for i = 1:length(errors.name)
+        disp(errors.name{i});
+    end
+    
+    stop_everything(handles);
+end
 
 
 % --- Executes on button press in smoothness_scan.
@@ -2803,19 +2773,12 @@ for ampInd = 1:size(amplitudeScales,2)
         stim = safety_check(stim, safeParams);
         
         %% Send stimulations
-        [data, response_detected, voltage, errors ] = stimulate(stim, hardware, detrend_param, handles);
+        [data, response_detected, voltage ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
         if isempty(data)
             disp('smoothness check: stimulate() did not capture any data.');
             return;
         end
-        
-        if errors.val ~= 0
-            for i = 1:length(errors.name)
-                disp(errors.name{i});
-            end
-            errorFlag = true;
-        end
-        
+                
         % Record result
         response_results(ampInd, pauseInd) = response_detected; % Record whether or not a response was seen at this voltage
         voltage_results(ampInd, pauseInd) = voltage; % Record the voltage measured
@@ -2964,19 +2927,12 @@ amplitudes(1,:) = lastAmplitudes;
 pauseDurations(1,:) = lastPauseDurations;
 
 % Stimulate once to get initial result from optimization function
-[stimData, ~, ~, errors] = stimulate(stim, hardware, detrend_param, handles);
+stimData = stimulate_wrapper(stim, hardware, detrend_param, handles);
 if isempty(stimData)
     disp('Initial conditions for optimization did not produce response.  Stopping optimization.');
     return;
 end
 
-if errors.val ~= 0
-    for i = 1:length(errors.name)
-        disp(errors.name{i});
-    end
-    disp('Initial conditions for optimization produced error.  Stopping optimization.');
-    return;
-end
 
 % Get initial result from optimization function
 lastFunctionResult = feval(optimizationFunction, stimData);
@@ -3028,7 +2984,7 @@ while ~isDone
     lastPauseDurations = newPauseDurations;
     
     %% Stimulate
-    [stimData, ~, ~, errors ] = stimulate(stim, hardware, detrend_param, handles);
+    [stimData ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
     if isempty(data)
         disp('optimization: stimulate() did not capture any data.');
         return;
