@@ -3203,6 +3203,7 @@ end
 
 prepulse_us_renormalise(handles);
 
+
 function prepulse_us_renormalise(handles)
 % Min delay should be 0
 global stim;
