@@ -59,9 +59,14 @@ for i = 1:length(polarities)
     foo = find(reanalysed_thresholds(:,1) == polarities(i) & reanalysed_thresholds(:,2) ~= 0);
     if length(foo) == 1
         reanalysed_voltage_loc(i) = foo;
+        reanalysed_reordered(i,:) = reanalysed_thresholds(reanalysed_voltage_loc(i),:);
+    elseif length(foo) == 0
+        reanalysed_voltage_loc(i) = NaN;
+        reanalysed_reordered(i,:) = NaN * ones(1, size(reanalysed_thresholds, 2));
     end
 end
-reanalysed_reordered = reanalysed_thresholds(reanalysed_voltage_loc,:);
+
+%reanalysed_reordered = reanalysed_thresholds(reanalysed_voltage_loc,:);
 
 %scatterrand = (rand(1,size(channel_voltage,1))-0.5)*0.5;
 scatterrand = linspace(-0.2, 0.2, size(channel_voltage,1));
