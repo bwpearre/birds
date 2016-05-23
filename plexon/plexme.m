@@ -2289,6 +2289,7 @@ stim = stim_orig;
 voltages
 [~, pos] = max(voltages);
 stim.plexon_monitor_electrode = pos(1);
+set(handles.monitor_electrode_auto, 'BackgroundColor', [0.94 * [1 1 1]);
 
 %if one_pulse
 %    handles = configure_acquisition_devices(hObject, handles);    
@@ -3128,6 +3129,9 @@ elseif length(electrodes) == length(val)
 end
 
 stim_scale_renormalise(handles);
+
+% This probably obsoletes monitor electrode autoset, so alert the user:
+set(handles.monitor_electrode_auto, 'BackgroundColor', [0.8 0.4 0]);
 
 
 
