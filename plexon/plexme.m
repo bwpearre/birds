@@ -2236,13 +2236,18 @@ end
 
 
 %% Given a stimulation pattern, don't change anything except the plexon monitor channel, and monitor the delivere
-function [ voltages ] = check_all_stim_voltages(hObject, handles);
+function [ voltages ] = check_all_stim_voltages(hObject, handles, test_current);
+% Find voltage on each active electrode for a given current.
+% Leave the monitor electrode set to that which sees the highest voltage.
 global stop_button_pressed;
 global stim hardware detrend_param;
+%one_pulse = false;
 
 stim_orig = stim;
 
-%one_pulse = false;
+if exist('test_current', 'var')
+    stim.current_uA = test_current;
+end
 
 voltages = NaN * zeros(size(stim.active_electrodes));
 
@@ -2279,7 +2284,11 @@ for i = find(stim.active_electrodes)
     [ data, response_detected, voltages(i)] = stimulate_wrapper(stim, hardware, detrend_param, handles);
 end
 
+% Don't reset--leave it at the highest voltage found so far!
 stim = stim_orig;
+voltages
+[~, pos] = max(voltages);
+stim.plexon_monitor_electrode = pos(1);
 
 %if one_pulse
 %    handles = configure_acquisition_devices(hObject, handles);    
@@ -2484,10 +2493,6 @@ enable_controls(handles);
 
 % --- Executes on button press in stim_voltage_scan.
 function stim_voltage_scan_Callback(hObject, eventdata, handles)
-global stim hardware detrend_param;
-global datadir;
-
-
 voltages = check_all_stim_voltages(hObject, handles);
 
 
@@ -3272,10 +3277,6 @@ end
 
 
 
-
-
-% --- Executes on button press in monitor_electrode_auto.
 function monitor_electrode_auto_Callback(hObject, eventdata, handles)
-% hObject    handle to monitor_electrode_auto (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+% The "1" is the optional test_current argument to the function.
+check_all_stim_voltages(hObject, handles, 1);
