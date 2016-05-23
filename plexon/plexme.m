@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 20-May-2016 13:43:18
+% Last Modified by GUIDE v2.5 23-May-2016 12:21:26
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -3272,3 +3272,10 @@ end
 
 
 
+
+
+% --- Executes on button press in monitor_electrode_auto.
+function monitor_electrode_auto_Callback(hObject, eventdata, handles)
+% hObject    handle to monitor_electrode_auto (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
