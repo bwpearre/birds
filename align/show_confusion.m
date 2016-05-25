@@ -11,8 +11,6 @@ function [ ] = show_confusion(...
         trigger_thresholds, ...
         train_record);
 
-global Y_NEGATIVE;
-
 % Search for optimal thresholds given false-positive vs
 % false-negagive weights (the latter := 1).
 
@@ -51,7 +49,7 @@ for i = 1:length(tstep_of_interest)
     % optimal_thresholds = fminbnd(f, 0.001, 1);
     %% Actually, fminbnd is useless at jumping out of local minima, but brute-forcing the search is quick.
     best = Inf;
-    testpts = linspace(Y_NEGATIVE, 1, ntestpts);
+    testpts = linspace(0, 1, ntestpts);
     trueposrate = zeros(1, length(tstep_of_interest));
     falseposrate = zeros(1, length(tstep_of_interest));
     [ outval trueposrate falseposrate ] = f(trigger_thresholds(i));

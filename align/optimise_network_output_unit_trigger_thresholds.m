@@ -69,7 +69,7 @@ for i = 1:length(tstep_of_interest)
     % optimal_thresholds = fminbnd(f, 0.001, 1);
     %% Actually, fminbnd is useless at jumping out of local minima, but brute-forcing the search is quick.
     best = Inf;
-    testpts = linspace(Y_NEGATIVE, 1, ntestpts);
+    testpts = linspace(0, 1, ntestpts);
     trueposrate = zeros(1, length(tstep_of_interest));
     falseposrate = zeros(1, length(tstep_of_interest));
     for j = 1:ntestpts
