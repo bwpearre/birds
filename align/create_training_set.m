@@ -68,6 +68,10 @@ for song = 1:nsongsandnonsongs
     end
 end
 
+if max(nnsetY) == 0
+    error('create_training_set', 'No positive Y data');
+end
+
 disp('Converting neural net data to singles...');
 nnsetX = zscore(single(nnsetX));
 nnsetY = single(nnsetY);
