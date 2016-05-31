@@ -29,7 +29,7 @@ use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new netwo
 if 1
     BIRD='lny64';
     datadir = '/Volumes/Data/song/lny64/';
-    basefilename = 'roboaggregate 2';
+    basefilename = 'roboaggregate 1';
     times_of_interest = [ 0.15 0.31 0.4 ];
 elseif 0
     BIRD='lg373rblk';
@@ -574,15 +574,17 @@ for run = 1:nruns
             combs = nchoosek(1:ntsteps_of_interest, 2);
             colours = distinguishable_colors(ncombs);
             
+            comb = 0;
             for first = 1:ntsteps_of_interest
                 for second = first+1:ntsteps_of_interest
+                    comb = comb + 1;
                     for i = 1:length(tsu)
                         inds = find(tsn(randomorder) == tsu(i));
                         measure = (triggertimes(inds, first) - triggertimes(inds, second)) * 1e3;
                         binsize(i,first,second) = length(measure) - sum(isnan(measure));
                         means(i,first,second) = nanmean(measure);
                         stds(i,first,second) = nanstd(measure);
-                        plot(tsu(i)*ones(size(measure)), measure, '.', 'Color', colours(comb,:));
+                        %plot(tsu(i)*ones(size(measure)), measure, '.', 'Color', colours(comb,:));
                     end
                 end
             end
