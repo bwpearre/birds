@@ -1,35 +1,36 @@
 clear;
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%% Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%% Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-ntrain = 1000;                                   % How many songs from the data set will be used as training data?
-nhidden_per_output = 2;                          % How many hidden units per syllable?  2 works and trains fast.  4 works 20% better...
-fft_time_shift_seconds_target = 0.005;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
+ntrain = 1000;                                   % How many songs from the data set will be used as training data (if available)?
+nhidden_per_output = 2;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
+fft_time_shift_seconds_target = 0.001;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
-confusion_all = false;                           % Use both training and test songs to compute confusion matrix
-nonsinging_fraction = 0;                         % BROKEN Train on this proportion of nonsinging data (e.g. cage noise, calls)
+confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
+nonsinging_fraction = 0;                         % (FIXME) Train on this proportion of nonsinging data (e.g. cage noise, calls)
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
 samplerate = 44100;                              % Target samplerate (interpolate data to match this)
 fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net
 do_not_randomise = false;                        % Use songs in original order
-separate_network_for_each_syllable = false;      % If restricted to one output unit
-nruns = 3;                                       % Perform a few training runs
+separate_network_for_each_syllable = false;      % Train a separate network for each time of interest?  Or one network with multiple outs?
+nruns = 1;                                       % Perform a few training runs?
 freq_range = [1000 8000];                        % Frequencies of the song to examine
 time_window = 0.03;                              % How many seconds long is the time window?
+use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
 
 %%%%%%%%  Finally: where does the data file (roboaggregate*.mat) live? %%%%%%%%%%%%%%
 
 if 1
     BIRD='lny64';
     datadir = '/Volumes/Data/song/lny64/';
-    basefilename = 'roboaggregate 1';
-    times_of_interest = [ 0.15 0.31 0.4 ]
+    basefilename = 'roboaggregate 2';
+    times_of_interest = [ 0.15 0.31 0.4 ];
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/ra/mat');
@@ -58,10 +59,15 @@ else % Delta function
     mic_data(samples_of_interest + indices, :) = rand([length(indices), n])/100 + 1;
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+if exist('use_previously_trained_network', 'var') & ~isempty(use_previously_trained_network)
+    disp(sprintf('Loading previously trained network ''%s''...', use_previously_trained_network));
+    load(use_previously_trained_network);
+end
 
 
 p = fileparts(mfilename('fullpath'));
@@ -324,15 +330,14 @@ for run = 1:nruns
         net.trainParam.max_fail = 3;
         
         tic
-        if true
+        if exist('use_previously_trained_network', 'var') & ~isempty(use_previously_trained_network)
+            load(use_previously_trained_network);
+        else
             if use_pattern_net
                 [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetYC(:, nnset_train));
             else
                 [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
             end
-        else
-            % Re-analyse a trained network...
-            load lookatme;
         end
         
         % Oh yeah, the line above was the hard part.
@@ -416,8 +421,11 @@ for run = 1:nruns
         % For each TOI, plot its response graph
         figure(6);
         for i = 1:length(toi)
-            subplot(ntsteps_of_interest, 1, ...
-                mod(separate_syllable_counter, ntsteps_of_interest) + 1);
+            if separate_network_for_each_syllable
+                subplot(ntsteps_of_interest, 1, separate_syllable_counter);
+            else
+                subplot(ntsteps_of_interest, 1, i);
+            end
             
             testout_i_squeezed = reshape(testout(i,:,:), [], nsongsandnonsongs);
             leftbar = zeros(time_window_steps-1, nsongsandnonsongs);
@@ -553,28 +561,29 @@ for run = 1:nruns
             triggertimes(:,i) = ntt;
         end
         
-        %% Plot variability over the course of the day
+        %% If possible, plot variability over the course of the day
         if ntsteps_of_interest >= 2
             figure(233);
             clf;
             hold on;
             
-            tsn = (timestamps - timestamps(1))*24;
-            
+            tsn = (timestamps - timestamps(1))*24;           
             tsu = unique(tsn);
             
             ncombs = nchoosek(ntsteps_of_interest, 2);
             combs = nchoosek(1:ntsteps_of_interest, 2);
             colours = distinguishable_colors(ncombs);
             
-            for comb = 1:ncombs
-                for i = 1:length(tsu)
-                    inds = find(tsn(randomorder) == tsu(i));
-                    measure = (triggertimes(inds, combs(comb,2)) - triggertimes(inds, combs(comb,1))) * 1e3;
-                    binsize(i,comb) = length(measure) - sum(isnan(measure));
-                    means(i,comb) = nanmean(measure);
-                    stds(i,comb) = nanstd(measure);
-                    plot(tsu(i)*ones(size(measure)), measure, '.', 'Color', colours(comb,:));
+            for first = 1:ntsteps_of_interest
+                for second = first+1:ntsteps_of_interest
+                    for i = 1:length(tsu)
+                        inds = find(tsn(randomorder) == tsu(i));
+                        measure = (triggertimes(inds, first) - triggertimes(inds, second)) * 1e3;
+                        binsize(i,first,second) = length(measure) - sum(isnan(measure));
+                        means(i,first,second) = nanmean(measure);
+                        stds(i,first,second) = nanstd(measure);
+                        plot(tsu(i)*ones(size(measure)), measure, '.', 'Color', colours(comb,:));
+                    end
                 end
             end
             ste = stds ./ binsize.^(1/2);
@@ -583,23 +592,25 @@ for run = 1:nruns
             
             figure(234);
             clf;
-            for comb = 1:ncombs
-                subplot(1,ncombs,comb);
-                includ = find(~isnan(stds(:,comb)));
-                [tsup stdsp] = prepareCurveData(tsu, stds(:,comb));
-                xl = [min(tsup) max(tsup)];
-                f0 = fit(tsup, stdsp, 'poly1', 'weights', binsize(includ,comb));
-                hold on;
-                scatter(tsup, stdsp, binsize(includ,comb), colours(comb,:), 'filled');
-                plot(xl, f0(xl), 'Color', colours(comb,:));
-                hold off;
-                xlabel('Time (hours)');
-                ylabel('Intersyllable std dev (ms)');
-                yl = get(gca, 'YLim');
-                yl(1) = 0;
-                set(gca, 'XLim', xl, 'YLim', yl);
-                confs = confint(f0);
-                title(sprintf('%d-%d: slope %s (95%%)', combs(comb,2), combs(comb,1), sigfig(confs(1:2), 2)));
+            for first = 1:ntsteps_of_interest
+                for second = first+1:ntsteps_of_interest
+                    subplot(ntsteps_of_interest-1, ntsteps_of_interest-1, (first-1)*(ntsteps_of_interest-1)+second-1);
+                    includ = find(~isnan(stds(:,first,second)));
+                    [tsup stdsp] = prepareCurveData(tsu, stds(:,first,second));
+                    xl = [min(tsup) max(tsup)];
+                    f0 = fit(tsup, stdsp, 'poly1', 'weights', binsize(includ,first,second));
+                    hold on;
+                    scatter(tsup, stdsp, binsize(includ,first,second), [0 0 1], 'filled');
+                    plot(xl, f0(xl), 'Color', [0 0 1]);
+                    hold off;
+                    xlabel('Time (hours)');
+                    ylabel('Intersyllable std dev (ms)');
+                    yl = get(gca, 'YLim');
+                    yl(1) = 0;
+                    set(gca, 'XLim', xl, 'YLim', yl);
+                    confs = confint(f0);
+                    title(sprintf('%d-%d: slope %s (95%%)', first, second, sigfig(confs(1:2), 2)));
+                end
             end
         end
         
@@ -700,14 +711,12 @@ for run = 1:nruns
         %save learn_detector_latest
         
         %% Save input file for the LabView detector
-        % Extract data from net structure, because LabView is too fucking stupid to
+        % Extract data from net structure, because LabView's MathScript is too stupid to
         % permit the . operator.
         layer0 = net.IW{1};
         layer1 = net.LW{2,1};
         bias0 = net.b{1};
         bias1 = net.b{2};
-        %mmminoffset = net.inputs{1}.processSettings{1}.xoffset;
-        %mmmingain = net.inputs{1}.processSettings{1}.gain;
         % The following store the transformation that took nnsetY to actual network training.  So
         % everything is forward.  Allow LabView to do:
         % out = (xmax-xmin)*(rawnetout-ymin)/(ymax-ymin) + xmin
@@ -732,8 +741,9 @@ for run = 1:nruns
             BIRD, sprintf('_%g', toi), 1000*fft_time_shift_seconds_target, net.layers{1}.dimensions, ntrain);
         fprintf('Saving as ''%s''...\n', filename);
         save(filename, ...
-            'BIRD', 'toi', 'net', 'train_record', ...
-            'samplerate', 'fft_size', 'win_size', 'fft_time_shift', 'fft_time_shift_seconds', 'freq_range_ds', ...
+            'BIRD', 'times_of_interest', 'toi', 'net', 'train_record', ...
+            'samplerate', 'fft_size', 'win_size', 'fft_time_shift', 'fft_time_shift_seconds', 'fft_time_shift_seconds_target', ...
+            'freq_range_ds', ...
             'time_window_steps', 'trigger_thresholds', 'freq_range', ...
             'layer0', 'layer1', 'bias0', 'bias1', ...
             'mmmout_xmin', 'mmmout_ymin', 'mmmout_gain', 'mapstd_xmean', 'mapstd_xstd', ...
