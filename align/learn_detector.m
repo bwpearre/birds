@@ -563,9 +563,9 @@ for run = 1:nruns
         
         %% If possible, plot variability over the course of the day
         if ntsteps_of_interest >= 2
-            figure(233);
-            clf;
-            hold on;
+            %figure(233);
+            %clf;
+            %hold on;
             
             tsn = (timestamps - timestamps(1))*24;           
             tsu = unique(tsn);
@@ -589,7 +589,7 @@ for run = 1:nruns
                 end
             end
             ste = stds ./ binsize.^(1/2);
-            hold off;
+            %hold off;
             stds(find(stds==0)) = NaN;
             
             figure(234);
@@ -600,18 +600,20 @@ for run = 1:nruns
                     includ = find(~isnan(stds(:,first,second)));
                     [tsup stdsp] = prepareCurveData(tsu, stds(:,first,second));
                     xl = [min(tsup) max(tsup)];
-                    f0 = fit(tsup, stdsp, 'poly1', 'weights', binsize(includ,first,second));
-                    hold on;
-                    scatter(tsup, stdsp, binsize(includ,first,second), [0 0 1], 'filled');
-                    plot(xl, f0(xl), 'Color', [0 0 1]);
-                    hold off;
-                    xlabel('Time (hours)');
-                    ylabel('Intersyllable std dev (ms)');
-                    yl = get(gca, 'YLim');
-                    yl(1) = 0;
-                    set(gca, 'XLim', xl, 'YLim', yl);
-                    confs = confint(f0);
-                    title(sprintf('%d-%d: slope %s (95%%)', first, second, sigfig(confs(1:2), 2)));
+                    if length(tsup) > 2
+                        f0 = fit(tsup, stdsp, 'poly1', 'weights', binsize(includ,first,second));
+                        hold on;
+                        scatter(tsup, stdsp, binsize(includ,first,second), [0 0 1], 'filled');
+                        plot(xl, f0(xl), 'Color', [0 0 1]);
+                        hold off;
+                        xlabel('Time (hours)');
+                        ylabel('Intersyllable std dev (ms)');
+                        yl = get(gca, 'YLim');
+                        yl(1) = 0;
+                        set(gca, 'XLim', xl, 'YLim', yl);
+                        confs = confint(f0);
+                        title(sprintf('%d-%d: slope %s (95%%)', first, second, sigfig(confs(1:2), 2)));
+                    end
                 end
             end
         end
