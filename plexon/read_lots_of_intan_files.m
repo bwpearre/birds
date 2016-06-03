@@ -1,9 +1,11 @@
 function [ intanstruct ] = read_lots_of_intan_files(dirname)
 
+impedances.x = read_impedances(dirname, 'x');
+impedances.hvc = read_impedances(dirname, 'hvc');
 
 dd = dir(strcat(dirname, filesep, '*x*.rhd'));
 if length(dd) == 0
-    intanstruct = {};
+    intanstruct.impedances = impedances;
     return;
 end
 
@@ -32,6 +34,7 @@ end
 % Better centering if we look at the whole thing at once, so repeat!
 alldata = bsxfun(@minus, alldata, mean(alldata, 2));
 
+intanstruct.impedances = impedances;
 intanstruct.amplifier_data = alldata;
 intanstruct.t_amplifier = alltimes;
 intanstruct.t_total_s = length(alltimes) / intanstruct.frequency_parameters.amplifier_sample_rate;

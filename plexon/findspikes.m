@@ -28,7 +28,7 @@ for channelnum = 1:nchannels
     [ pks, locs ] = findpeaks(-adz(channel, :), ...
         'MinPeakHeight', threshold, ...
         'MinPeakDistance', 0.003*fs);
-    alllocs{channelnum} = locs;
+    alllocs{channel} = locs;
     
     if length(locs) > 10
         goodchannels(end+1) = channel;

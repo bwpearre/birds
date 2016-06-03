@@ -1,12 +1,14 @@
-function [] = plotspikes(sessions, goodsessions, channels, window);
+function [] = plotspikes(sessions, goodsessions, channels, window, colours);
 
 nchannels = length(channels);
-colours = distinguishable_colors(nchannels);
 nsessions = length(find(goodsessions));
 
 sessioncounter = 0;
 xlims = [];
 ylims = [];
+figure(1);
+clf;
+
 for session = find(goodsessions)
     sessioncounter = sessioncounter+1;
     fs = sessions{session}.data.frequency_parameters.amplifier_sample_rate;
@@ -14,13 +16,12 @@ for session = find(goodsessions)
     for channelnum = 1:nchannels
         channel = channels(channelnum);
         
-        figure(1);
         subplot(nchannels, nsessions, nsessions*(channelnum-1)+sessioncounter);
         %subplot(nchannels, 1, channelnum);
         cla;
         
         ad = sessions{session}.data.amplifier_data;
-        locs = sessions{session}.peaklocs{channelnum};        
+        locs = sessions{session}.peaklocs{channel};        
         spikeset = zeros(length([window(1):1/fs:window(2)]), length(locs));
         
         %disp(sprintf('rms = %s', sigfig(rms(ad(channel)))));
@@ -48,9 +49,9 @@ for session = find(goodsessions)
                 shadedErrorBar([window(1):1/fs:window(2)]*1e3, ...
                     mu, ...
                     ste95, ...
-                    {'-b'});
+                    {'color', colours(channelnum,:)});
                 hold off;
-            elseif true
+            else
                 plot([window(1):1/fs:window(2)]*1e3, ...
                     spikeset, ...
                     'color', colours(channelnum,:));
@@ -68,7 +69,7 @@ for session = find(goodsessions)
             'VerticalAlignment', 'bottom', 'FontSize', 8);
         
         if channelnum == 1
-            title(sprintf('day %s', sessions{session}.experiment_day));
+            title(sprintf('day %d', round(sessions{session}.experiment_day)));
         end
         
         if channelnum == nchannels
@@ -104,4 +105,3 @@ end
 axfoo = axes('Position', [0 0 1 1], 'Visible', 'off');
 axes(axfoo);
 mstext = text(0.5, 0.05, 'milliseconds', 'HorizontalAlignment', 'center');
-get(mstext)
