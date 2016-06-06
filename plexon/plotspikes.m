@@ -1,4 +1,4 @@
-function [] = plotspikes(sessions, goodsessions, channels, window, colours);
+function [] = plotspikes(sessions, goodsessions, channels, n_min, window, colours);
 
 nchannels = length(channels);
 nsessions = length(find(goodsessions));
@@ -14,7 +14,13 @@ for session = find(goodsessions)
     fs = sessions{session}.data.frequency_parameters.amplifier_sample_rate;
 
     for channelnum = 1:nchannels
+        
         channel = channels(channelnum);
+
+        if isempty(find(sessions{session}.recording_channels == channel, 1))
+            continue;
+        end
+        
         
         subplot(nchannels, nsessions, nsessions*(channelnum-1)+sessioncounter);
         %subplot(nchannels, 1, channelnum);
@@ -39,7 +45,7 @@ for session = find(goodsessions)
         ste = sigma / sqrt(n);
         ste95 = ste * 1.96;
         
-        if n > 10
+        if n >= n_min
             if true
                 shadedErrorBar([window(1):1/fs:window(2)]*1e3, ...
                     mu, ...
