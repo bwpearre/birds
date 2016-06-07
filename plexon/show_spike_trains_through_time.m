@@ -4,7 +4,7 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-bird = 'lw95rhp'                    % Which bird to look at?
+bird = 'lw94rhp'                    % Which bird to look at?
 
 %channels = [1 8 16];               % Speed up reading by only looking for spikes here
 %channels_show = [1 2 8 10 12 16];
@@ -56,7 +56,7 @@ if ~exist('channels_show', 'var')
     channels_show = channels;
     
     % Channel 13 is usually bad...?
-    channels_show = channels_show(find(channels_show ~= 13));
+    %channels_show = channels_show(find(channels_show ~= 13));
 end
 %plotchannels = intersect(channels_show, find(recording_channels));
 plotchannels = channels_show;

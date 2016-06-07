@@ -7,7 +7,7 @@ clear;
 
 ntrain = 1000;                                   % How many songs from the data set will be used as training data (if available)?
 nhidden_per_output = 2;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.001;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
+fft_time_shift_seconds_target = 0.002;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
@@ -20,17 +20,22 @@ use_pattern_net = false;                         % Use MATLAB's pattern net
 do_not_randomise = false;                        % Use songs in original order
 separate_network_for_each_syllable = false;      % Train a separate network for each time of interest?  Or one network with multiple outs?
 nruns = 1;                                       % Perform a few training runs?
-freq_range = [1000 8000];                        % Frequencies of the song to examine
+freq_range = [1000 7000];                        % Frequencies of the song to examine
 time_window = 0.03;                              % How many seconds long is the time window?
-use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
+%use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
 
 %%%%%%%%  Finally: where does the data file (roboaggregate*.mat) live? %%%%%%%%%%%%%%
 
-if 1
+if 0
     BIRD='lny64';
     datadir = '/Volumes/Data/song/lny64/';
     basefilename = 'roboaggregate 1';
     times_of_interest = [ 0.15 0.31 0.4 ];
+elseif 1
+    BIRD='lny29';
+    datadir = '/Volumes/Data/song/lny29/2015-12-02/chop_data/wav/LNY29n pre_MANUALCLUST/mat/roboaggregate';
+    basefilename = 'roboaggregate';
+    times_of_interest = [ 80 150 220 270 310 380 505 655 ] / 1e3;
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/ra/mat');
@@ -79,14 +84,9 @@ rng('shuffle');
 
 disp(sprintf('Bird: %s', BIRD));
 
-% Create informative names for the detection points:
-if ~exist('times_of_interest_names', 'var') | length(times_of_interest_names) < length(times_of_interest_separate)
-    for i = 1:length(times_of_interest)
-        times_of_interest_names{i} = sprintf('t^*_{%d}', round(1000*times_of_interest(i)));
-    end
-end
 
-train_filename = strcat(datadir, basefilename, '.mat')
+
+train_filename = strcat(datadir, filesep, basefilename, '.mat')
 
 [ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(train_filename, ...
@@ -95,6 +95,18 @@ train_filename = strcat(datadir, basefilename, '.mat')
     fft_size, ...
     freq_range, ...
     time_window);
+
+%% Draw the spectral image.  If no times_of_interest defined, this is what the user will use to choose some.
+figure(4);
+subplot(1,1,1);
+specfig = imagesc(times([1 end])*1000, freqs([1 end])/1000, spectrogram_avg_img);
+axis xy;
+xlabel('Time (ms)');
+ylabel('Frequency (kHz)');
+set(gca, 'YLim', [0 10]);
+if ~exist('times_of_interest', 'var')
+    error('syllable_detector:no_syllables_defined', 'No times of interest defined.  Please add one or more.');
+end
 
 %% Define training set
 % Hold some data out for final testing.  This includes both matching and non-matching IF THE SONGS
@@ -117,6 +129,12 @@ if any(times_of_interest < time_window)
         sprintf('%g ', times_of_interest), time_window);
 end
 
+% Create informative names for the detection points:
+if ~exist('times_of_interest_names', 'var') | length(times_of_interest_names) < length(times_of_interest_separate)
+    for i = 1:length(times_of_interest)
+        times_of_interest_names{i} = sprintf('t^*_{%d}', round(1000*times_of_interest(i)));
+    end
+end
 
 
 
@@ -265,28 +283,27 @@ for run = 1:nruns
         
         
         %% Draw the pretty full-res spectrogram and the targets
-        if 1
-            figure(4);
-            subplot(1,1,1);
-            %subplot(ntsteps_of_interest+1,1,1);
-            specfig = imagesc(times([1 end])*1000, freqs([1 end])/1000, spectrogram_avg_img);
-            axis xy;
-            xlabel('Time (ms)');
-            ylabel('Frequency (kHz)');
-            % Draw the syllables of interest:
-            
-            for i = 1:ntsteps_of_interest
-                line(toi(i)*[1;1]*1000, freqs([1 end])/1000, 'Color', [1 0 0]);
-                windowrect = rectangle('Position', [(toi(i) - time_window)*1000 ...
-                    freq_range(1)/1000 ...
-                    time_window(1)*1000 ...
-                    (freq_range(2)-freq_range(1))/1000], ...
-                    'EdgeColor', [1 0 0]);
-            end
-                        
-            set(gca, 'YLim', [0 10]);
-            
+        figure(4);
+        subplot(1,1,1);
+        %subplot(ntsteps_of_interest+1,1,1);
+        specfig = imagesc(times([1 end])*1000, freqs([1 end])/1000, spectrogram_avg_img);
+        axis xy;
+        xlabel('Time (ms)');
+        ylabel('Frequency (kHz)');
+        % Draw the syllables of interest:
+
+        for i = 1:ntsteps_of_interest
+            line(toi(i)*[1;1]*1000, freqs([1 end])/1000, 'Color', [1 0 0]);
+            windowrect = rectangle('Position', [(toi(i) - time_window)*1000 ...
+                freq_range(1)/1000 ...
+                time_window(1)*1000 ...
+                (freq_range(2)-freq_range(1))/1000], ...
+                'EdgeColor', [1 0 0]);
         end
+        set(gca, 'YLim', [0 10]);
+
+            
+        
         drawnow;
         
         
