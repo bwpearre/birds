@@ -7,16 +7,17 @@ clear;
 
 ntrain = 1000;                                   % How many songs from the data set will be used as training data (if available)?
 nhidden_per_output = 2;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.002;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
+fft_time_shift_seconds_target = 0.003;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
-nonsinging_fraction = 0;                         % (FIXME) Train on this proportion of nonsinging data (e.g. cage noise, calls)
+nonsinging_fraction = 4;                        % Train on this proportion of nonsinging data (e.g. cage noise, calls)
+nonmatching_wav_src = '/Volumes/Data/song/lny29/2015-07-29/chop_data/wav';
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
 samplerate = 44100;                              % Target samplerate (interpolate data to match this)
 fft_size = 256;                                  % FFT size
-use_pattern_net = false;                         % Use MATLAB's pattern net
+use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order
 separate_network_for_each_syllable = false;      % Train a separate network for each time of interest?  Or one network with multiple outs?
 nruns = 1;                                       % Perform a few training runs?
@@ -36,6 +37,7 @@ elseif 1
     datadir = '/Volumes/Data/song/lny29/2015-12-02/chop_data/wav/LNY29n pre_MANUALCLUST/mat/roboaggregate';
     basefilename = 'roboaggregate';
     times_of_interest = [ 80 150 220 270 310 380 505 655 ] / 1e3;
+    %times_of_interest = [80 150 ] / 1e3;
 elseif 0
     BIRD='lg373rblk';
     load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/ra/mat');
@@ -94,7 +96,9 @@ train_filename = strcat(datadir, filesep, basefilename, '.mat')
     samplerate, ...
     fft_size, ...
     freq_range, ...
-    time_window);
+    time_window, ...
+    nonsinging_fraction, ...
+    nonmatching_wav_src);
 
 %% Draw the spectral image.  If no times_of_interest defined, this is what the user will use to choose some.
 figure(4);
@@ -166,7 +170,7 @@ for run = 1:nruns
         rng('shuffle');
         
         if do_not_randomise
-            randomorder = 1:nsongsandnonsongs;
+            randomorder(1:nsongs) = 1:nsongsandnonsongs;
             disp('NOT permuting song order');
         else
             randomorder = randperm(nsongsandnonsongs);
@@ -264,20 +268,19 @@ for run = 1:nruns
             ntimes, ...
             freq_range_ds);
         
-        
         disp('Creating spectral power image...');
         
         % Create an image on which to superimpose the results...
         power_img = squeeze((sum(spectrograms, 2)));
         power_img(find(isinf(power_img))) = 0;
         
-        pn = 1:nmatchingsongs;
-        [vt pt] = sort(target_offsets);
-        [vs ps] = sort(sample_offsets);
-        figure(4);
-        subplot(1,1,1);
-        power_img = power_img(1:nmatchingsongs,:);
-        imagesc(power_img(pt,:));
+        %pn = 1:nmatchingsongs;
+        %[vt pt] = sort(target_offsets);
+        %[vs ps] = sort(sample_offsets);
+        %figure(4);
+        %subplot(1,1,1);
+        %power_img = power_img(1:nmatchingsongs,:);
+        %imagesc(power_img(pt,:));
         %set(gca, 'xlim', [280.2 300]);
         
         
@@ -371,7 +374,7 @@ for run = 1:nruns
         testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongsandnonsongs);
         
         % Update the each-song image
-        power_img = power_img(randomorder(1:nmatchingsongs),:);
+        power_img = power_img(randomorder,:);
         power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
         
         disp('Computing optimal output thresholds...');
@@ -579,7 +582,7 @@ for run = 1:nruns
         end
         
         %% If possible, plot variability over the course of the day
-        if ntsteps_of_interest >= 2
+        if ntsteps_of_interest >= 2 & false
             %figure(233);
             %clf;
             %hold on;
@@ -596,7 +599,7 @@ for run = 1:nruns
                 for second = first+1:ntsteps_of_interest
                     comb = comb + 1;
                     for i = 1:length(tsu)
-                        inds = find(tsn(randomorder) == tsu(i));
+                        inds = find(tsn(randomorder(1:nmatchingsongs)) == tsu(i));
                         measure = (triggertimes(inds, first) - triggertimes(inds, second)) * 1e3;
                         binsize(i,first,second) = length(measure) - sum(isnan(measure));
                         means(i,first,second) = nanmean(measure);
@@ -809,7 +812,7 @@ for run = 1:nruns
             
             % Re-permute just 128 of the positive songs with a new random order -- for oscilloscope
             % 128-sample averages
-            ntestsongs = 128; % nmatchingsongs
+            ntestsongs = nmatchingsongs;
             newrand = randperm(nmatchingsongs);
             newrand = newrand(1:ntestsongs);
             
@@ -825,7 +828,8 @@ for run = 1:nruns
             hits = reshape(hits, [], 1);
             songs = [songs hits];
             
-            testfilename = sprintf('songs_128_%s%ss%s.wav',...
+            testfilename = sprintf('songs_%d_%s%ss%s.wav', ...
+                ntestsongs, ...
                 BIRD, sprintf('_%g', toi), ...
                 realignNetString);
             
