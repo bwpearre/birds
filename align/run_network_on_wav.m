@@ -1,4 +1,8 @@
-function [ out ] = run_network_on_wav(net, filename);
+function [ hits ] = run_network_on_wav(net, filename);
+
+% Just read in a wav file, and run the network on each timestep.
+
+warning('off', 'signal:findpeaks:largeMinPeakHeight');
 
 [ MIC_DATA, fs ] = audioread(filename);
 
@@ -55,8 +59,17 @@ nnsetX = zscore(nnsetX);
 
 testout = sim(net.net, nnsetX)';
 
+% Subtract trigger thresholds.  If nothing else, this lets us plot the graph such that all the
+% above-threshold points use the same threshold (0).
 abovethreshold = bsxfun(@minus, testout, net.trigger_thresholds);
-hits = abovethreshold > 0;
+hits = zeros(size(abovethreshold));
+for i = 1:length(net.toi)
+    [pks, locs] = findpeaks(abovethreshold(:, i), 'MinPeakHeight', 0, 'MinPeakDistance', round(0.1 / net.fft_time_shift_seconds));
+    if ~isempty(locs)
+        hits(locs,i) = 1;
+    end
+end
+
 
 if false
     subplot(2,1,2);
@@ -84,9 +97,11 @@ if false
         end
     end
     
+    pause(1);
     drawnow;
 end
 
-testout = testout(net.time_window_steps:end, :);
-
-out = [zeros(nwindows, 3) testout];
+%testout = testout(net.time_window_steps:end, :);
+hits = hits(net.time_window_steps:end, :);
+% Add some zeros as stand-ins for Nathan's 3 vestigal fields:
+%out = [zeros(nwindows, 3) testout];
