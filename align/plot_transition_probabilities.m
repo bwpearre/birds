@@ -46,11 +46,12 @@ for houri = 1:length(hoursu)
         trans_by_hour(houri, ntimes_of_interest, 1) = 0;
     end
     
-    ee(houri) = entropy(trans_by_hour(houri,:,:));
+    the_image = (mapminmax(squash(squeeze(trans_by_hour(houri,:,:))+eps)) + 1) / 2;
+    ee(houri) = entropy(the_image);
     
     subplot(length(daysu)+1, length(hoursu), houri);
     imagesc(squeeze(squash(trans_by_hour(houri,:,:))+eps));
-    axis xy;
+    %axis xy;
     title(sprintf('%d:00 (n=%d) (S=%s)', hoursu(houri), length(di)+1, sigfig(ee(houri))));
     if houri == 1
         ylabel('All days');
@@ -61,6 +62,10 @@ end
 
 figure(13);
 plot(ee);
+title('Image entropy over hours');
+xlabel('hour');
+ylabel('S');
+drawnow;
 
 figure(51);
 
@@ -93,7 +98,7 @@ for dayi = 1:length(daysu)
 
         subplot(length(daysu)+1, length(hoursu), houri+(dayi * length(hoursu)));
         imagesc(squeeze(squash(trans_by_day(dayi, houri, :, :)+eps)));
-        axis xy;
+        %axis xy;
         title(sprintf('%d:00 (n=%d)', hoursu(houri), length(di)+1));
         if houri == 1
             ylabel(sprintf('Day %d', dayi));

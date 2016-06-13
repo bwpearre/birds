@@ -6,32 +6,35 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 ntrain = 1000;                                   % How many songs from the data set will be used as training data (if available)?
-nhidden_per_output = 2;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.003;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
+nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
+fft_time_shift_seconds_target = 0.0015;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
-nonsinging_fraction = 4;                        % Train on this proportion of nonsinging data (e.g. cage noise, calls)
+nonsinging_fraction = 1;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
 nonmatching_wav_src = '/Volumes/Data/song/lny29/2015-07-29/chop_data/wav';
+raw_dir = 'chop_data/wav';                       % as above: where to look for the raw wav data
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
 samplerate = 44100;                              % Target samplerate (interpolate data to match this)
 fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order
-separate_network_for_each_syllable = false;      % Train a separate network for each time of interest?  Or one network with multiple outs?
-nruns = 1;                                       % Perform a few training runs?
-freq_range = [1000 7000];                        % Frequencies of the song to examine
+separate_network_for_each_syllable = true;      % Train a separate network for each time of interest?  Or one network with multiple outs?
+nruns = 100;                                       % Perform a few training runs?
+freq_range = [1000 8000];                        % Frequencies of the song to examine
 time_window = 0.03;                              % How many seconds long is the time window?
 %use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
 
 %%%%%%%%  Finally: where does the data file (roboaggregate*.mat) live? %%%%%%%%%%%%%%
 
-if 0
+if 1
     BIRD='lny64';
     datadir = '/Volumes/Data/song/lny64/';
+    raw_dir = 'chop_data/wav';
     basefilename = 'roboaggregate 1';
-    times_of_interest = [ 0.15 0.31 0.4 ];
+    %times_of_interest = [ 0.15 0.31 0.4 ];
+    times_of_interest = [ 150 : 50 : 400 ] / 1e3;
 elseif 1
     BIRD='lny29';
     datadir = '/Volumes/Data/song/lny29/2015-12-02/chop_data/wav/LNY29n pre_MANUALCLUST/mat/roboaggregate';
@@ -253,21 +256,6 @@ for run = 1:nruns
         end
         %hist(target_offsets', 40);
         
-        disp(sprintf('Creating training set from %d songs...', ntrainsongs));
-        [nnsetX nnsetY] = create_training_set(spectrograms, ...
-            tsteps_of_interest, ...
-            target_offsets, ...
-            shotgun_sigma, ...
-            randomorder, ...
-            nmatchingsongs, ...
-            nsongsandnonsongs, ...
-            nwindows_per_song, ...
-            layer0sz, ...
-            fft_time_shift_seconds, ...
-            time_window_steps, ...
-            ntimes, ...
-            freq_range_ds);
-        
         disp('Creating spectral power image...');
         
         % Create an image on which to superimpose the results...
@@ -311,6 +299,20 @@ for run = 1:nruns
         
         
         
+        disp(sprintf('Creating training set from %d songs...', ntrainsongs));
+        [nnsetX nnsetY] = create_training_set(spectrograms, ...
+            tsteps_of_interest, ...
+            target_offsets, ...
+            shotgun_sigma, ...
+            randomorder, ...
+            nmatchingsongs, ...
+            nsongsandnonsongs, ...
+            nwindows_per_song, ...
+            layer0sz, ...
+            fft_time_shift_seconds, ...
+            time_window_steps, ...
+            ntimes, ...
+            freq_range_ds);
         
         if use_pattern_net
             nnsetYC = [nnsetY~=0 ; nnsetY==0];
@@ -442,7 +444,7 @@ for run = 1:nruns
         figure(6);
         for i = 1:length(toi)
             if separate_network_for_each_syllable
-                subplot(ntsteps_of_interest, 1, separate_syllable_counter);
+                subplot(length(times_of_interest), 1, separate_syllable_counter);
             else
                 subplot(ntsteps_of_interest, 1, i);
             end
@@ -662,7 +664,7 @@ for run = 1:nruns
         end
         
         
-        if false
+        if true
             %% Plot the figure of errors for all networks over all trials...
             figure(9);
             confusion = load('confusion_log_perf.txt');
