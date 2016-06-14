@@ -20,11 +20,12 @@ fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order?
 separate_network_for_each_syllable = true;       % Train a separate network for each time of interest?  Or one network with multiple outs?
-nruns = 1;                                       % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
+nruns = 100;                                     % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
 freq_range = [1000 8000];                        % Frequencies of the song to examine
 time_window = 0.03;                              % How many seconds long is the time window?
 %use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
-%  Finally: where does the data file (roboaggregate*.mat) live?
+%  Finally: where does the data file (roboaggregate*.mat) live?  And which syllables do we care
+%  about?
 if 1
     BIRD='lny64';
     datadir = '/Volumes/Data/song/lny64/';
@@ -562,7 +563,9 @@ for run = 1:nruns
             triggertimes(:,i) = ntt;
         end
         
-        %% If possible, plot variability over the course of the day
+        %% If possible, plot variability over the course of the day.  This
+        % requires one network trained on multiple syllables, and computes timing differences
+        % between each of the syllables in the roboaggregate file.
         if ntsteps_of_interest >= 2 & false
             %figure(233);
             %clf;
@@ -623,7 +626,7 @@ for run = 1:nruns
         
         
         
-        %% Realign test output?
+        %% Realign test output according to the neural network's detection point?
         if use_nn_realignment_test
             target_offsets_net = zeros(ntsteps_of_interest, nsongsandnonsongs);
             sample_offsets_net = zeros(ntsteps_of_interest, nsongsandnonsongs);
@@ -643,9 +646,15 @@ for run = 1:nruns
         end
         
         
-        if true
+        if nruns > 1 & separate_network_for_each_syllable
             %% Plot the figure of errors for all networks over all trials...
             figure(9);
+            % This file is created in show_confusion.m.  No effort is made to ensure that it
+            % doesn't contain values for different configurations, or even different-sized columns!
+            % So if you want to use it, best make sure you start by deleting the previous
+            % confusion_log_perf.txt.  That is not done automatically in order to allow restart of
+            % partially completed jobs, since 6 syllables, 100 runs, 1000 training songs, etc., can
+            % take around 4 days to complete.
             confusion = load('confusion_log_perf.txt');
             [sylly bini binj] = unique(confusion(:,1));
             xtickl = {};
