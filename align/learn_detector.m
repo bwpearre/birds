@@ -7,57 +7,36 @@ clear;
 
 ntrain = 1000;                                   % How many songs from the data set will be used as training data (if available)?
 nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.0015;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s
-use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code
-use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code
+fft_time_shift_seconds_target = 0.0015;          % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
+use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
+use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code.  Nah.
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
 nonsinging_fraction = 1;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
-nonmatching_wav_src = '/Volumes/Data/song/lny29/2015-07-29/chop_data/wav';
-raw_dir = 'chop_data/wav';                       % as above: where to look for the raw wav data
+nonmatching_wav_src = '/Volumes/Data/song/lny29/2015-07-29/chop_data/wav'; % Point to a directory containing some different-bird WAV files
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
 samplerate = 44100;                              % Target samplerate (interpolate data to match this)
 fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
-do_not_randomise = false;                        % Use songs in original order
-separate_network_for_each_syllable = true;      % Train a separate network for each time of interest?  Or one network with multiple outs?
-nruns = 100;                                       % Perform a few training runs?
+do_not_randomise = false;                        % Use songs in original order?
+separate_network_for_each_syllable = true;       % Train a separate network for each time of interest?  Or one network with multiple outs?
+nruns = 1;                                       % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
 freq_range = [1000 8000];                        % Frequencies of the song to examine
 time_window = 0.03;                              % How many seconds long is the time window?
 %use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
-
-%%%%%%%%  Finally: where does the data file (roboaggregate*.mat) live? %%%%%%%%%%%%%%
-
+%  Finally: where does the data file (roboaggregate*.mat) live?
 if 1
     BIRD='lny64';
     datadir = '/Volumes/Data/song/lny64/';
-    raw_dir = 'chop_data/wav';
-    basefilename = 'roboaggregate 1';
+    roboaggregate_filename = 'roboaggregate 1';
     %times_of_interest = [ 0.15 0.31 0.4 ];
-    times_of_interest = [ 150 : 50 : 400 ] / 1e3;
+    times_of_interest = [ 150 : 50 : 400 ] / 1e3; % seconds = milliseconds / 1e3
 elseif 1
     BIRD='lny29';
     datadir = '/Volumes/Data/song/lny29/2015-12-02/chop_data/wav/LNY29n pre_MANUALCLUST/mat/roboaggregate';
-    basefilename = 'roboaggregate';
+    roboaggregate_filename = 'roboaggregate';
     times_of_interest = [ 80 150 220 270 310 380 505 655 ] / 1e3;
     %times_of_interest = [80 150 ] / 1e3;
-elseif 0
-    BIRD='lg373rblk';
-    load('/Users/Shared/lg373rblk/test/lg373_MANUALCLUST/mat/ra/mat');
-    mic_data = audio.data;
-    agg_audio.fs = audio.fs;
-    times_of_interest = 0.2;
-elseif 0
-    BIRD='lw8rhp';
-    load('/Users/bwpearre/Desktop/Will/test_MANUALCLUST/mat/ra/mat');
-    mic_data = audio.data;
-    agg_audio.fs = audio.fs;
-elseif 0
-    BIRD='lw27ry';
-    load('~/r/data/lw27ry_extracted_data');
-    agg_audio.data = agg_audio.data(1:24000,:);
-    clear agg_data;
-    mic_data = agg_audio.data;
 else % Delta function
     agg_audio.fs = 44100;
     BIRD = 'delta';
@@ -70,7 +49,7 @@ else % Delta function
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%% End Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -91,7 +70,7 @@ disp(sprintf('Bird: %s', BIRD));
 
 
 
-train_filename = strcat(datadir, filesep, basefilename, '.mat')
+train_filename = strcat(datadir, filesep, roboaggregate_filename, '.mat')
 
 [ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(train_filename, ...
