@@ -6,27 +6,44 @@ function [ MIC_DATA, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandn
     freq_range, ...
     time_window, ...
     nonsinging_fraction, ...
-    nonsinging_wav_src)
+    nonsinging_wav_src, ...
+    load_exec_conversions, ...
+    trim_range)
 
 load(filename);
+
+if exist('load_exec_conversions', 'var')
+    for i = 1:length(load_exec_conversions)
+        eval(load_exec_conversions{i});
+    end
+end
 
 if ~exist('MIC_DATA', 'var') & exist('audio', 'var') & isfield(audio, 'data')
     MIC_DATA = audio.data;
     fs = audio.fs;
 end
 
+if exist('trim_range', 'var')
+    trim_range_s = round(trim_range * fs);
+    trim_i = trim_range_s(1) : trim_range_s(2);
+    MIC_DATA = MIC_DATA(trim_i, :);
+end
+
+
 [orig_nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
 
 timestamps = zeros(1, nmatchingsongs);
-for i = 1:nmatchingsongs
-    foo = strsplit(strrep(extract_filename{i}, '\', '/'), '/'); % Make sure directories are separated with /, and split
-    cow = strsplit(foo{end}, '.'); % Filename component contains timestamp
-    cor = strsplit(cow{6}, '-'); % Seems this field has a relevant number and then a -
-    cow{6} = cor{1}; % reinsert expurgated value
-    timestamps(i) = datenum([str2double(cow(2:6)) 0]); % pad seconds=0, store timestamp
+if exist('extract_filename', 'var')
+    for i = 1:nmatchingsongs
+        foo = strsplit(strrep(extract_filename{i}, '\', '/'), '/'); % Make sure directories are separated with /, and split
+        cow = strsplit(foo{end}, '.'); % Filename component contains timestamp
+        cor = strsplit(cow{6}, '-'); % Seems this field has a relevant number and then a -
+        cow{6} = cor{1}; % reinsert expurgated value
+        timestamps(i) = datenum([str2double(cow(2:6)) 0]); % pad seconds=0, store timestamp
+    end
+    
+    disp(sprintf('File %s: %s -- %s', filename, datestr(timestamps(1)), datestr(timestamps(end))));
 end
-
-disp(sprintf('File %s: %s -- %s', filename, datestr(timestamps(1)), datestr(timestamps(end))));
 
 %% Downsample the data to match target samplerate?
 if fs ~= target_samplerate
