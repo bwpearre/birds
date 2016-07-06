@@ -17,6 +17,7 @@ ntsteps_of_interest = length(tsteps_of_interest);
 training_set_MB = 8 * nsongsandnonsongs * nwindows_per_song * layer0sz / (2^20);
 
 disp(sprintf('   ...(Allocating %g MB for training set X.)', training_set_MB));
+
 nnsetX = zeros(layer0sz, nsongsandnonsongs * nwindows_per_song);
 nnsetY = zeros(ntsteps_of_interest, nsongsandnonsongs * nwindows_per_song);
 

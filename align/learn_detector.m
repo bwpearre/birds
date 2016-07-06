@@ -7,19 +7,20 @@ clear;
 
 ntrain = 1000;                                   % How many songs from the data set will be used as training data (if available)?
 nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.0015;          % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
+fft_time_shift_seconds_target = 0.002;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code.  Nah.
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
-nonsinging_fraction = 1;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
+nonsinging_fraction = 5;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
 nonmatching_wav_src = '/Volumes/Data/song/lny29/2015-07-29/chop_data/wav'; % Point to a directory containing some different-bird WAV files
+n_whitenoise = 10;                               % Add this many white noise samples (FIXME simplistic method)
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
-samplerate = 44100;                              % Target samplerate (interpolate data to match this)
+samplerate = 48000;                              % Target samplerate (interpolate data to match this)
 fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order?
-separate_network_for_each_syllable = true;       % Train a separate network for each time of interest?  Or one network with multiple outs?
+separate_network_for_each_syllable = false;       % Train a separate network for each time of interest?  Or one network with multiple outs?
 nruns = 1;                                       % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
 freq_range = [1000 8000];                        % Frequencies of the song to examine
 time_window = 0.03;                              % How many seconds long is the time window?
@@ -39,7 +40,7 @@ elseif 1
     datadir = '/Volumes/Data/song/lno57rlg/';
     roboaggregate_filename = 'Will2Ben';
     %times_of_interest = [ 0.15 0.31 0.4 ];
-    times_of_interest = [ 200 500 ] / 1e3; % seconds = milliseconds / 1e3
+    times_of_interest = [ 200 400 500 ] / 1e3; % seconds = milliseconds / 1e3
     load_exec_conversions = {'MIC_DATA = mic_data_2;', ...
         'fs = 48000;'};
     trim_range = [0.274 0.938];
@@ -94,7 +95,8 @@ train_filename = strcat(datadir, filesep, roboaggregate_filename, '.mat')
     nonsinging_fraction, ...
     nonmatching_wav_src, ...
     load_exec_conversions, ...
-    trim_range);
+    trim_range, ...
+    n_whitenoise);
 
 %% Draw the spectral image.  If no times_of_interest defined, this is what the user will use to choose some.
 figure(4);
@@ -116,7 +118,8 @@ ntestsongs = nsongsandnonsongs - ntrainsongs;
 disp(sprintf('%d training songs.  %d remain for test.', ntrainsongs, ntestsongs));
 disp(sprintf('Found %d songs.  Using %d.', nmatchingsongs, min(nmatchingsongs, ntrain)));
 
-% If we're using "fit", it'll produce useless warnings.  Silence them!
+% If we're using "fit", it'll produce useless warnings (some kludgey analysis I do later uses "fit",
+% but I want to disable them outside the loop).  Silence them!
 warning('off', 'curvefit:prepareFittingData:nonDouble');
 warning('off', 'curvefit:prepareFittingData:sizeMismatch');
 warning('off', 'curvefit:prepareFittingData:removingNaNAndInf')
