@@ -7,23 +7,23 @@ clear;
 
 ntrain = 1000;                                   % How many songs from the data set will be used as training data (if available)?
 nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.002;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
+fft_time_shift_seconds_target = 0.005;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code.  Nah.
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
-nonsinging_fraction = 5;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
-nonmatching_wav_src = '/Volumes/Data/song/lny29/2015-07-29/chop_data/wav'; % Point to a directory containing some different-bird WAV files
+nonsinging_fraction = 10;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
+nonmatching_src = '/Volumes/Data/song/lny29/2015-07-29/chop_data/wav'; % Point to a directory containing some different-bird WAV files
 n_whitenoise = 10;                               % Add this many white noise samples (FIXME simplistic method)
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
 samplerate = 48000;                              % Target samplerate (interpolate data to match this)
 fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order?
-separate_network_for_each_syllable = false;       % Train a separate network for each time of interest?  Or one network with multiple outs?
+separate_network_for_each_syllable = true;       % Train a separate network for each time of interest?  Or one network with multiple outs?
 nruns = 1;                                       % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
-freq_range = [1000 8000];                        % Frequencies of the song to examine
-time_window = 0.03;                              % How many seconds long is the time window?
+freq_range = [1000 6000];                        % Frequencies of the song to examine
+time_window = 0.14;                              % How many seconds long is the time window?
 false_positive_cost = 1;                         % Cost of false positives is relative to that of false negatives.
 
 %use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
@@ -37,10 +37,11 @@ if 0
     times_of_interest = [ 150 : 50 : 400 ] / 1e3; % seconds = milliseconds / 1e3
 elseif 1
     BIRD='lno57rlg';
-    datadir = '/Volumes/Data/song/lno57rlg/';
+    datadir = '/Volumes/Data/song/lno57rlg';
+    nonmatching_src = '/Volumes/Data/song/lno57rlg/cluster_results.mat';
     roboaggregate_filename = 'Will2Ben';
     %times_of_interest = [ 0.15 0.31 0.4 ];
-    times_of_interest = [ 200 400 500 ] / 1e3; % seconds = milliseconds / 1e3
+    times_of_interest = [ 510 ] / 1e3; % seconds = milliseconds / 1e3
     load_exec_conversions = {'MIC_DATA = mic_data_2;', ...
         'fs = 48000;'};
     trim_range = [0.274 0.938];
@@ -86,14 +87,15 @@ disp(sprintf('Bird: %s', BIRD));
 train_filename = strcat(datadir, filesep, roboaggregate_filename, '.mat')
 
 [ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
-    = load_roboaggregate_file(train_filename, ...
+    = load_roboaggregate_file(datadir, ...
+    train_filename, ...
     fft_time_shift_seconds_target, ...
     samplerate, ...
     fft_size, ...
     freq_range, ...
     time_window, ...
     nonsinging_fraction, ...
-    nonmatching_wav_src, ...
+    nonmatching_src, ...
     load_exec_conversions, ...
     trim_range, ...
     n_whitenoise);
@@ -113,7 +115,7 @@ end
 %% Define training set
 % Hold some data out for final testing.  This includes both matching and non-matching IF THE SONGS
 % ARE IN RANDOM ORDER
-ntrainsongs = min(floor(nsongsandnonsongs*8/10), ntrain);
+ntrainsongs = min(floor(nsongsandnonsongs*9.8/10), ntrain);
 ntestsongs = nsongsandnonsongs - ntrainsongs;
 disp(sprintf('%d training songs.  %d remain for test.', ntrainsongs, ntestsongs));
 disp(sprintf('Found %d songs.  Using %d.', nmatchingsongs, min(nmatchingsongs, ntrain)));
