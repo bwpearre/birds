@@ -5,13 +5,13 @@ clear;
 %%%%%%%%%%%%%%%% Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-nhidden_per_output = 10;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.003;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
+nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
+fft_time_shift_seconds_target = 0.01;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code.  Nah.
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
-nonsinging_fraction = 10;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
+nonsinging_fraction = 10;                        % Train on this proportion of nonsinging data (e.g. cage noise, calls)
 n_whitenoise = 10;                               % Add this many white noise samples (FIXME simplistic method)
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
 samplerate = 48000;                              % Target samplerate (interpolate data to match this)

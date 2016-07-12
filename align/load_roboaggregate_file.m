@@ -75,8 +75,7 @@ end
 
 [nsamples_per_song, ~] = size(MIC_DATA);
 
-% Add some white noise
-
+% Add some white noise.  This isn't really the right way to do this, but it may help:
 MIC_DATA = [MIC_DATA wgn(nsamples_per_song, n_whitenoise, v, 'linear')];
 
 [nsamples_per_song, nsongsandnonsongs] = size(MIC_DATA);
