@@ -1,38 +1,27 @@
 function [ MIC_DATA, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(datadir, ...
-    filename, ...
+    matching_song_file, ...
+    nonmatching_song_file, ...
     fft_time_shift_seconds_target, ...
     target_samplerate, ...
     fft_size, ...
     freq_range, ...
     time_window, ...
     nonsinging_fraction, ...
-    nonsinging_wav_src, ...
-    load_exec_conversions, ...
-    trim_range, ...
     n_whitenoise)
 
-load(filename);
+load(strcat(datadir, filesep, matching_song_file));
 
-if exist('load_exec_conversions', 'var')
-    for i = 1:length(load_exec_conversions)
-        eval(load_exec_conversions{i});
-    end
-end
-
+% Handle one legacy format, just to be nice...
 if ~exist('MIC_DATA', 'var') & exist('audio', 'var') & isfield(audio, 'data')
     MIC_DATA = audio.data;
     fs = audio.fs;
 end
 
-if exist('trim_range', 'var')
-    trim_range_s = round(trim_range * fs);
-    trim_i = trim_range_s(1) : trim_range_s(2);
-    MIC_DATA = MIC_DATA(trim_i, :);
-end
-
-
 [orig_nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
+
+v = mean(var(MIC_DATA));
+
 
 timestamps = zeros(1, nmatchingsongs);
 if exist('extract_filename', 'var')
@@ -44,8 +33,34 @@ if exist('extract_filename', 'var')
         timestamps(i) = datenum([str2double(cow(2:6)) 0]); % pad seconds=0, store timestamp
     end
     
-    disp(sprintf('File %s: %s -- %s', filename, datestr(timestamps(1)), datestr(timestamps(end))));
+    disp(sprintf('File %s: %s -- %s', matching_song_file, datestr(timestamps(1)), datestr(timestamps(end))));
 end
+
+
+
+
+nonmatches = load(strcat(datadir, filesep, nonmatching_song_file));
+if nonmatches.fs ~= fs
+    error('Please convert %s (%s Hz) and %s (%s Hz) so that their sample rates match.', ...
+        matching_song_file, sigfig(fs), nonmatching_song_file, sigfig(nonmatches.fs));
+end
+if size(nonmatches.MIC_DATA, 1) ~= orig_nsamples_per_song
+    error('Please convert %s (%d samples) and %s (%d samples) so that their samples-per-song match.', ...
+        matching_song_file, orig_nsamples_per_song, nonmatching_song_file, size(nonmatches.MIC_DATA, 1));
+end
+nnonmatches = size(nonmatches.MIC_DATA, 2);
+
+
+if nnonmatches < nonsinging_fraction * nmatchingsongs
+    warning('I had to lower nonsinging_fraction to %s.', sigfig(nnonmatches/nmatchingsongs - 0.01));
+end
+if nnonmatches > nonsinging_fraction * nmatchingsongs
+    nonmatches.MIC_DATA = nonmatches.MIC_DATA(:, nonsinging_fraction * nmatchingsongs);
+end
+
+
+MIC_DATA = [MIC_DATA nonmatches.MIC_DATA];
+
 
 %% Downsample the data to match target samplerate?
 if fs ~= target_samplerate
@@ -58,28 +73,11 @@ end
 
 %MIC_DATA = MIC_DATA / max(max(max(MIC_DATA)), -min(min(MIC_DATA)));
 
-[nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
+[nsamples_per_song, ~] = size(MIC_DATA);
 
-will_liberti = true;
+% Add some white noise
 
-if will_liberti
-    [MIC_DATA_NO, nonmatching] = load_nonmatching_data_for_will(nonsinging_fraction * nmatchingsongs, ...
-        datadir, ...
-        nsamples_per_song, ...
-        target_samplerate);
-    if nonmatching ~= nonsinging_fraction * nmatchingsongs
-        warning('Lowering nonsinging_fraction to %s.', sigfig(nonmatching/nmatchingsongs - 0.01));
-    end
-else
-    %% Add non-matching data for learning what to ignore
-    MIC_DATA_NO = load_nonmatching_data(nonsinging_fraction * nmatchingsongs, ...
-        nonsinging_wav_src, ...
-        nsamples_per_song, ...
-        target_samplerate);
-end
-v = mean(var(MIC_DATA_NO));
-MIC_DATA_NO = [MIC_DATA_NO wgn(nsamples_per_song, n_whitenoise, v, 'linear')];
-MIC_DATA = [MIC_DATA MIC_DATA_NO];
+MIC_DATA = [MIC_DATA wgn(nsamples_per_song, n_whitenoise, v, 'linear')];
 
 [nsamples_per_song, nsongsandnonsongs] = size(MIC_DATA);
 

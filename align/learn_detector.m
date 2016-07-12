@@ -5,15 +5,13 @@ clear;
 %%%%%%%%%%%%%%%% Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-ntrain = 1000;                                   % How many songs from the data set will be used as training data (if available)?
-nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.005;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
+nhidden_per_output = 10;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
+fft_time_shift_seconds_target = 0.003;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code.  Nah.
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
 nonsinging_fraction = 10;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
-nonmatching_src = '/Volumes/Data/song/lny29/2015-07-29/chop_data/wav'; % Point to a directory containing some different-bird WAV files
 n_whitenoise = 10;                               % Add this many white noise samples (FIXME simplistic method)
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
 samplerate = 48000;                              % Target samplerate (interpolate data to match this)
@@ -38,13 +36,9 @@ if 0
 elseif 1
     BIRD='lno57rlg';
     datadir = '/Volumes/Data/song/lno57rlg';
-    nonmatching_src = '/Volumes/Data/song/lno57rlg/cluster_results.mat';
-    roboaggregate_filename = 'Will2Ben';
-    %times_of_interest = [ 0.15 0.31 0.4 ];
+    matching_song_file = 'lno57rlg_song';
+    nonmatching_song_file = 'lno57rlg_nonsong';
     times_of_interest = [ 510 ] / 1e3; % seconds = milliseconds / 1e3
-    load_exec_conversions = {'MIC_DATA = mic_data_2;', ...
-        'fs = 48000;'};
-    trim_range = [0.274 0.938];
 elseif 1
     BIRD='lny29';
     datadir = '/Volumes/Data/song/lny29/2015-12-02/chop_data/wav/LNY29n pre_MANUALCLUST/mat/roboaggregate';
@@ -83,21 +77,16 @@ rng('shuffle');
 disp(sprintf('Bird: %s', BIRD));
 
 
-
-train_filename = strcat(datadir, filesep, roboaggregate_filename, '.mat')
-
 [ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(datadir, ...
-    train_filename, ...
+    matching_song_file, ...
+    nonmatching_song_file, ...
     fft_time_shift_seconds_target, ...
     samplerate, ...
     fft_size, ...
     freq_range, ...
     time_window, ...
     nonsinging_fraction, ...
-    nonmatching_src, ...
-    load_exec_conversions, ...
-    trim_range, ...
     n_whitenoise);
 
 %% Draw the spectral image.  If no times_of_interest defined, this is what the user will use to choose some.
@@ -115,10 +104,10 @@ end
 %% Define training set
 % Hold some data out for final testing.  This includes both matching and non-matching IF THE SONGS
 % ARE IN RANDOM ORDER
-ntrainsongs = min(floor(nsongsandnonsongs*9.8/10), ntrain);
+ntrainsongs = floor(nsongsandnonsongs*9.5/10);
 ntestsongs = nsongsandnonsongs - ntrainsongs;
 disp(sprintf('%d training songs.  %d remain for test.', ntrainsongs, ntestsongs));
-disp(sprintf('Found %d songs.  Using %d.', nmatchingsongs, min(nmatchingsongs, ntrain)));
+disp(sprintf('Found %d songs.', nmatchingsongs));
 
 % If we're using "fit", it'll produce useless warnings (some kludgey analysis I do later uses "fit",
 % but I want to disable them outside the loop).  Silence them!
@@ -768,7 +757,7 @@ for run = 1:nruns
         fft_time_shift = fft_size - noverlap;
         scaling = 'linear';
         filename = sprintf('detector_%s%ss_frame%gms_%dhid_%dtrain.mat', ...
-            BIRD, sprintf('_%g', toi), 1000*fft_time_shift_seconds_target, net.layers{1}.dimensions, ntrain);
+            BIRD, sprintf('_%g', toi), 1000*fft_time_shift_seconds_target, net.layers{1}.dimensions, ntrainsongs);
         fprintf('Saving as ''%s''...\n', filename);
         save(filename, ...
             'BIRD', 'times_of_interest', 'toi', 'net', 'train_record', ...
@@ -778,7 +767,7 @@ for run = 1:nruns
             'layer0', 'layer1', 'bias0', 'bias1', ...
             'mmmout_xmin', 'mmmout_ymin', 'mmmout_gain', 'mapstd_xmean', 'mapstd_xstd', ...
             'shotgun_sigma', ...
-            'ntrain',  'scaling', '-v7');
+            'ntrainsongs',  'scaling', '-v7');
         %% Save sample data: audio on channel0, canonical hits for first syllable on channel1
         if use_nn_realignment_test
             realignNetString = 'realignNet';
