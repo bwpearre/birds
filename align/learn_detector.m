@@ -6,7 +6,7 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.01;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
+fft_time_shift_seconds_target = 0.003;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code.  Nah.
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
@@ -25,24 +25,30 @@ time_window = 0.14;                              % How many seconds long is the 
 false_positive_cost = 1;                         % Cost of false positives is relative to that of false negatives.
 
 %use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
-%  Finally: where does the data file (roboaggregate*.mat) live?  And which syllables do we care
+%  Finally: where do the aligned song and nonsong data files live?  And which times do we care
 %  about?
 if 0
     BIRD='lny64';
     datadir = '/Volumes/Data/song/lny64/';
-    roboaggregate_filename = 'roboaggregate 1';
+    matching_song_file = 'roboaggregate 1';
     %times_of_interest = [ 0.15 0.31 0.4 ];
     times_of_interest = [ 150 : 50 : 400 ] / 1e3; % seconds = milliseconds / 1e3
-elseif 1
+elseif 0
     BIRD='lno57rlg';
     datadir = '/Volumes/Data/song/lno57rlg';
     matching_song_file = 'lno57rlg_song';
     nonmatching_song_file = 'lno57rlg_nonsong';
     times_of_interest = [ 510 ] / 1e3; % seconds = milliseconds / 1e3
 elseif 1
+    BIRD='llb5';
+    datadir = '/Volumes/Data/song/llb5';
+    matching_song_file = 'song';
+    nonmatching_song_file = 'nonsong';
+    times_of_interest = [ 990 ] / 1e3; % seconds = milliseconds / 1e3
+elseif 1
     BIRD='lny29';
     datadir = '/Volumes/Data/song/lny29/2015-12-02/chop_data/wav/LNY29n pre_MANUALCLUST/mat/roboaggregate';
-    roboaggregate_filename = 'roboaggregate';
+    matching_song_file = 'roboaggregate';
     times_of_interest = [ 80 150 220 270 310 380 505 655 ] / 1e3;
     %times_of_interest = [80 150 ] / 1e3;
 else % Delta function

@@ -4,14 +4,23 @@ clear;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-BIRD='lno57rlg';
-datadir = '/Volumes/Data/song/lno57rlg';
-song_file = 'AudioDataFiles';
-cluster_results_file = 'cluster_results';
-aligned_song_file = 'Will2Ben';
-trim_range = [0.274 0.938];
-nonsinging_fraction = 10;          % Only this much nonsong data will be converted
-
+if false
+    BIRD='lno57rlg';
+    datadir = '/Volumes/Data/song/lno57rlg';
+    matching_song_file = 'AudioDataFiles';
+    cluster_results_file = 'cluster_results';
+    aligned_song_file = 'Will2Ben';
+    trim_range = [0.274 0.938];
+    nonsinging_fraction = 10;          % At most this much nonsong data will be converted
+else
+    BIRD='llb5';
+    datadir = '/Volumes/Data/song/llb5';
+    matching_song_file = 'AudioDataFiles';
+    cluster_results_file = 'cluster_results';
+    aligned_song_file = 'mic_data';
+    %trim_range = [0.274 0.938];
+    nonsinging_fraction = 10;          % At most this much nonsong data will be converted
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -19,13 +28,13 @@ nonsinging_fraction = 10;          % Only this much nonsong data will be convert
 
 
 % First load all data, because that's where Will keeps the sample rate
-load(strcat(datadir, filesep, song_file, '.mat'));
+load(strcat(datadir, filesep, matching_song_file, '.mat'));
 fs = AudioData{1}.rate;
 
 
 % Now the aligned songs
 load(strcat(datadir, filesep, aligned_song_file, '.mat'));
-MIC_DATA = mic_data_2;
+MIC_DATA = mic_data;
 
 if exist('trim_range', 'var')
     trim_range_s = round(trim_range * fs);
@@ -33,7 +42,7 @@ if exist('trim_range', 'var')
     MIC_DATA = MIC_DATA(trim_i, :);
 end
 
-save(strcat(datadir, filesep, BIRD, '_song'), 'MIC_DATA', 'fs');
+save(strcat(datadir, filesep, 'song'), 'MIC_DATA', 'fs');
 
 
 
@@ -99,4 +108,4 @@ for i = 1:nnonmatches
     ind = ind + nsamples_per_song;
 end
 
-save(strcat(datadir, filesep, BIRD, '_nonsong'), 'MIC_DATA', 'fs');
+save(strcat(datadir, filesep, 'nonsong'), 'MIC_DATA', 'fs');
