@@ -12,3 +12,4 @@ The required data files are:
   * MIC_DATA is an MxP array of doubles, with M samples per song (same M as above) and P segments of non-song (silence, cage noise, white noise, etc).  Alignment here is irrelevant.
   * fs is the sampling frequency in Hz, and must be the same as above.
 
+I've standardised on requiring the name of the bird, and the directory in which the data files are to be found.
