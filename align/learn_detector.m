@@ -5,16 +5,24 @@ clear;
 %%%%%%%%%%%%%%%% Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% First: where are the data?
 
+% Top-level data directory, which houses bird directories:
 data_base_dir = '/Volumes/Data/song';
+
+% Bird name:
 %bird = 'lny64';
 %bird = 'lno57rlg';
 bird = 'llb4';
 %bird = 'lny29';
-params_file = 'params';
-data_file = 'data';
 
-% These are defaults.  Any of them can be overridden in the parameters file.
+% The two required files:
+params_file = 'params';                          % data_base_dir/bird/params.m
+data_file = 'data';                              % data_base_dir/bird/data.mat
+
+
+
+%% These are defaults.  Any of them can be overridden in the parameters file.
 nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
 fft_time_shift_seconds_target = 0.003;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
@@ -44,8 +52,8 @@ if ~exist('params_file', 'var') | ~exist(strcat(datadir, filesep, params_file, '
         strcat(datadir, filesep, params_file));
 end
 
-% Load any non-default parameters.  This is done by running the params file as a .m file, which adds variables
-% to the current workspace:
+% Load the user configuration.  This is done by running the params file as a .m file, which adds
+% variables to the current workspace:
 oldpath = addpath(datadir);
 eval(params_file);
 path(oldpath);
