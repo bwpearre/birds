@@ -5,6 +5,16 @@ clear;
 %%%%%%%%%%%%%%%% Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+data_base_dir = '/Volumes/Data/song';
+%bird = 'lny64';
+%bird = 'lno57rlg';
+bird = 'llb4';
+%bird = 'lny29';
+params_file = 'params';
+data_file = 'data';
+
+% These are defaults.  Any of them can be overridden in the parameters file.
 nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
 fft_time_shift_seconds_target = 0.003;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
@@ -27,33 +37,28 @@ false_positive_cost = 1;                         % Cost of false positives is re
 %use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
 %  Finally: where do the aligned song and nonsong data files live?  And which times do we care
 %  about?
-if 0
-    BIRD='lny64';
-    datadir = '/Volumes/Data/song/lny64/';
-    matching_song_file = 'roboaggregate 1';
-    %times_of_interest = [ 0.15 0.31 0.4 ];
-    times_of_interest = [ 150 : 50 : 400 ] / 1e3; % seconds = milliseconds / 1e3
-elseif 0
-    BIRD='lno57rlg';
-    datadir = '/Volumes/Data/song/lno57rlg';
-    matching_song_file = 'lno57rlg_song';
-    nonmatching_song_file = 'lno57rlg_nonsong';
-    times_of_interest = [ 510 ] / 1e3; % seconds = milliseconds / 1e3
-elseif 1
-    BIRD='llb5';
-    datadir = '/Volumes/Data/song/llb5';
-    matching_song_file = 'song';
-    nonmatching_song_file = 'nonsong';
-    times_of_interest = [ 990 ] / 1e3; % seconds = milliseconds / 1e3
-elseif 1
-    BIRD='lny29';
-    datadir = '/Volumes/Data/song/lny29/2015-12-02/chop_data/wav/LNY29n pre_MANUALCLUST/mat/roboaggregate';
-    matching_song_file = 'roboaggregate';
-    times_of_interest = [ 80 150 220 270 310 380 505 655 ] / 1e3;
-    %times_of_interest = [80 150 ] / 1e3;
-else % Delta function
+datadir = strcat(data_base_dir, filesep, bird);
+
+if ~exist('params_file', 'var') | ~exist(strcat(datadir, filesep, params_file, '.m'), 'file')
+    error('Please create the parameters file (currently looking for ''%s''), which will eventually contain at least times_of_interest and, optionally, replacement values for other parameters.', ...
+        strcat(datadir, filesep, params_file));
+end
+
+% Load any non-default parameters.  This is done by running the params file as a .m file, which adds variables
+% to the current workspace:
+oldpath = addpath(datadir);
+eval(params_file);
+path(oldpath);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%% End Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+if 0 % Delta function is a special test case for measuring detector latency.
     agg_audio.fs = 44100;
-    BIRD = 'delta';
+    bird = 'delta';
     indices = round(-0.010 * agg_audio.fs);
     times_of_interest = 0.3;
     samples_of_interest = round(times_of_interest * agg_audio.fs) + 1;
@@ -62,9 +67,6 @@ else % Delta function
     mic_data(samples_of_interest + indices, :) = rand([length(indices), n])/100 + 1;
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%% End Configuration %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 if exist('use_previously_trained_network', 'var') & ~isempty(use_previously_trained_network)
@@ -80,13 +82,12 @@ addpath(sprintf('%s/../lib', p));
 rng('shuffle');
 
 
-disp(sprintf('Bird: %s', BIRD));
+disp(sprintf('bird: %s', bird));
 
 
 [ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(datadir, ...
-    matching_song_file, ...
-    nonmatching_song_file, ...
+    data_file, ...
     fft_time_shift_seconds_target, ...
     samplerate, ...
     fft_size, ...
@@ -103,8 +104,8 @@ axis xy;
 xlabel('Time (ms)');
 ylabel('Frequency (kHz)');
 set(gca, 'YLim', [0 10]);
-if ~exist('times_of_interest', 'var')
-    error('syllable_detector:no_syllables_defined', 'No times of interest defined.  Please add one or more.');
+if ~exist('times_of_interest', 'var') | isempty(times_of_interest)
+    error('No times of interest defined.  Please look at the spectrogram in Figure 4 and define one or more in ''%s''.', strcat(datadir, filesep, params_file, '.m'));
 end
 
 %% Define training set
@@ -123,10 +124,10 @@ warning('off', 'curvefit:prepareFittingData:removingNaNAndInf')
 
 
 % Just one rudimentary error-check:
-if any(times_of_interest < time_window)
+if any(times_of_interest < time_window) | any(times_of_interest > times(end))
     error('learn_detector:invalid_time', ...
-        'All times_of_interest [ %s] must be >= time_window (%g)', ...
-        sprintf('%g ', times_of_interest), time_window);
+        'All times_of_interest [ %s] must be >= time_window (%g) and < %s', ...
+        sprintf('%g ', times_of_interest), time_window, times(end));
 end
 
 % Create informative names for the detection points:
@@ -196,7 +197,7 @@ for run = 1:nruns
         
         
         %% Create the training set
-        if strcmp(BIRD, 'delta')
+        if strcmp(bird, 'delta')
             shotgun_sigma = 0.00001;
         else
             shotgun_sigma = 0.002; % TUNE
@@ -763,10 +764,10 @@ for run = 1:nruns
         fft_time_shift = fft_size - noverlap;
         scaling = 'linear';
         filename = sprintf('detector_%s%ss_frame%gms_%dhid_%dtrain.mat', ...
-            BIRD, sprintf('_%g', toi), 1000*fft_time_shift_seconds_target, net.layers{1}.dimensions, ntrainsongs);
+            bird, sprintf('_%g', toi), 1000*fft_time_shift_seconds_target, net.layers{1}.dimensions, ntrainsongs);
         fprintf('Saving as ''%s''...\n', filename);
         save(filename, ...
-            'BIRD', 'times_of_interest', 'toi', 'net', 'train_record', ...
+            'bird', 'times_of_interest', 'toi', 'net', 'train_record', ...
             'samplerate', 'fft_size', 'win_size', 'fft_time_shift', 'fft_time_shift_seconds', 'fft_time_shift_seconds_target', ...
             'freq_range_ds', ...
             'time_window_steps', 'trigger_thresholds', 'freq_range', ...
@@ -806,7 +807,7 @@ for run = 1:nruns
             hits = reshape(hits, [], 1);
             songs = [songs hits];
             testfilename = sprintf('songs_%s%ss_%d%%%s.wav',...
-                BIRD, sprintf('_%g', toi), round(100/(1+nonsinging_fraction)), ...
+                bird, sprintf('_%g', toi), round(100/(1+nonsinging_fraction)), ...
                 realignNetString);
         else
             % Just the real songs
@@ -831,7 +832,7 @@ for run = 1:nruns
             
             testfilename = sprintf('songs_%d_%s%ss%s.wav', ...
                 ntestsongs, ...
-                BIRD, sprintf('_%g', toi), ...
+                bird, sprintf('_%g', toi), ...
                 realignNetString);
             
         end

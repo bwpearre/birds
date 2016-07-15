@@ -1,7 +1,6 @@
 function [ MIC_DATA, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(datadir, ...
-    matching_song_file, ...
-    nonmatching_song_file, ...
+    data_file, ...
     fft_time_shift_seconds_target, ...
     target_samplerate, ...
     fft_size, ...
@@ -10,17 +9,15 @@ function [ MIC_DATA, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandn
     nonsinging_fraction, ...
     n_whitenoise)
 
-load(strcat(datadir, filesep, matching_song_file));
+load(strcat(datadir, filesep, data_file));
 
-% Handle one legacy format, just to be nice...
-if ~exist('MIC_DATA', 'var') & exist('audio', 'var') & isfield(audio, 'data')
-    MIC_DATA = audio.data;
-    fs = audio.fs;
-end
+fs = Data.fs;
 
-[orig_nsamples_per_song, nmatchingsongs] = size(MIC_DATA);
+[orig_nsamples_per_song, nmatchingsongs] = size(Data.mic_data_song);
 
-v = mean(var(MIC_DATA));
+v = mean(var(Data.mic_data_song));
+
+MIC_DATA = Data.mic_data_song;
 
 
 timestamps = zeros(1, nmatchingsongs);
@@ -39,27 +36,18 @@ end
 
 
 
-nonmatches = load(strcat(datadir, filesep, nonmatching_song_file));
-if nonmatches.fs ~= fs
-    error('Please convert %s (%s Hz) and %s (%s Hz) so that their sample rates match.', ...
-        matching_song_file, sigfig(fs), nonmatching_song_file, sigfig(nonmatches.fs));
-end
-if size(nonmatches.MIC_DATA, 1) ~= orig_nsamples_per_song
-    error('Please convert %s (%d samples) and %s (%d samples) so that their samples-per-song match.', ...
-        matching_song_file, orig_nsamples_per_song, nonmatching_song_file, size(nonmatches.MIC_DATA, 1));
-end
-nnonmatches = size(nonmatches.MIC_DATA, 2);
+nnonmatches = size(Data.mic_data_noise, 2);
 
 
 if nnonmatches < nonsinging_fraction * nmatchingsongs
     warning('I had to lower nonsinging_fraction to %s.', sigfig(nnonmatches/nmatchingsongs - 0.01));
 end
 if nnonmatches > nonsinging_fraction * nmatchingsongs
-    nonmatches.MIC_DATA = nonmatches.MIC_DATA(:, nonsinging_fraction * nmatchingsongs);
+    Data.mic_data_noise = Data.mic_data_noise(:, nonsinging_fraction * nmatchingsongs);
 end
 
 
-MIC_DATA = [MIC_DATA nonmatches.MIC_DATA];
+MIC_DATA = [MIC_DATA Data.mic_data_noise];
 
 
 %% Downsample the data to match target samplerate?
