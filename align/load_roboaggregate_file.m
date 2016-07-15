@@ -1,4 +1,4 @@
-function [ MIC_DATA, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
+function [ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(datadir, ...
     data_file, ...
     fft_time_shift_seconds_target, ...
@@ -11,13 +11,11 @@ function [ MIC_DATA, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandn
 
 load(strcat(datadir, filesep, data_file));
 
-fs = Data.fs;
+[orig_nsamples_per_song, nmatchingsongs] = size(song);
 
-[orig_nsamples_per_song, nmatchingsongs] = size(Data.mic_data_song);
+v = mean(var(song));
 
-v = mean(var(Data.mic_data_song));
-
-MIC_DATA = Data.mic_data_song;
+mic_data = song;
 
 
 timestamps = zeros(1, nmatchingsongs);
@@ -36,18 +34,18 @@ end
 
 
 
-nnonmatches = size(Data.mic_data_noise, 2);
+nnonmatches = size(nonsong, 2);
 
 
 if nnonmatches < nonsinging_fraction * nmatchingsongs
     warning('I had to lower nonsinging_fraction to %s.', sigfig(nnonmatches/nmatchingsongs - 0.01));
 end
 if nnonmatches > nonsinging_fraction * nmatchingsongs
-    Data.mic_data_noise = Data.mic_data_noise(:, nonsinging_fraction * nmatchingsongs);
+    nonsong = nonsong(:, nonsinging_fraction * nmatchingsongs);
 end
 
 
-MIC_DATA = [MIC_DATA Data.mic_data_noise];
+mic_data = [mic_data nonsong];
 
 
 %% Downsample the data to match target samplerate?
@@ -55,22 +53,22 @@ if fs ~= target_samplerate
         disp(sprintf('Resampling data from %g Hz to %g Hz...', fs, target_samplerate));
         [a b] = rat(target_samplerate/fs);
         
-        MIC_DATA = double(MIC_DATA);
-        MIC_DATA = resample(MIC_DATA, a, b);
+        mic_data = double(mic_data);
+        mic_data = resample(mic_data, a, b);
 end
 
-%MIC_DATA = MIC_DATA / max(max(max(MIC_DATA)), -min(min(MIC_DATA)));
+%mic_data = mic_data / max(max(max(mic_data)), -min(min(mic_data)));
 
-[nsamples_per_song, ~] = size(MIC_DATA);
+[nsamples_per_song, ~] = size(mic_data);
 
 % Add some white noise.  This isn't really the right way to do this, but it may help:
-MIC_DATA = [MIC_DATA wgn(nsamples_per_song, n_whitenoise, v, 'linear')];
+mic_data = [mic_data wgn(nsamples_per_song, n_whitenoise, v, 'linear')];
 
-[nsamples_per_song, nsongsandnonsongs] = size(MIC_DATA);
+[nsamples_per_song, nsongsandnonsongs] = size(mic_data);
 
 %disp('Bandpass-filtering the data...');
 %[B A] = butter(4, [0.03 0.9]);
-%MIC_DATA = single(filtfilt(B, A, double(MIC_DATA)));
+%mic_data = single(filtfilt(B, A, double(mic_data)));
 
 
 % Compute the spectrogram using original parameters (probably far from
@@ -79,11 +77,11 @@ MIC_DATA = [MIC_DATA wgn(nsamples_per_song, n_whitenoise, v, 'linear')];
 
 noverlap = fft_size - (floor(target_samplerate * fft_time_shift_seconds_target));
 % SPECGRAM(A,NFFT=512,Fs=[],WINDOW=[],noverlap=500)
-%speck = specgram(MIC_DATA(:,1), 512, [], [], 500) + eps;
+%speck = specgram(mic_data(:,1), 512, [], [], 500) + eps;
 
 window = hamming(fft_size);
 
-[speck freqs times] = spectrogram(MIC_DATA(:,1), window, noverlap, [], target_samplerate);
+[speck freqs times] = spectrogram(mic_data(:,1), window, noverlap, [], target_samplerate);
 % Adjust "times" to reflect the time at which the information is actually available--i.e. the end,
 % rather than the middle, of the window:
 times = times - times(1) + fft_size/target_samplerate;
@@ -102,7 +100,7 @@ spectrograms = zeros([nsongsandnonsongs nfreqs ntimes]);
 spectrograms(1, :, :) = speck;
 disp('Computing spectrograms...');
 parfor i = 2:nsongsandnonsongs
-        spectrograms(i, :, :) = spectrogram(MIC_DATA(:,i), window, noverlap, [], target_samplerate) + eps;
+        spectrograms(i, :, :) = spectrogram(mic_data(:,i), window, noverlap, [], target_samplerate) + eps;
 end
 
 spectrograms = single(spectrograms);
