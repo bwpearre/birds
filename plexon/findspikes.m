@@ -20,17 +20,21 @@ adz = bsxfun(@rdivide, stuff.amplifier_data, std(stuff.amplifier_data, 0, 2));
 
 
 goodchannels = [];
+alllocs = {};
 
 nchannels = length(channels);
 for channelnum = 1:nchannels
     channel = channels(channelnum);
+    locs = [];
     
-    [ pks, locs ] = findpeaks(-adz(channel, :), ...
-        'MinPeakHeight', threshold, ...
-        'MinPeakDistance', 0.003*fs);
-    alllocs{channelnum} = locs;
+    if ~isempty(adz)
+        [ pks, locs ] = findpeaks(-adz(channel, :), ...
+            'MinPeakHeight', threshold, ...
+            'MinPeakDistance', 0.003*fs);
+        alllocs{channel} = locs;
+    end
     
-    if length(locs) > 10
+    if length(locs) >= 1
         goodchannels(end+1) = channel;
     end
 end
