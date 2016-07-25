@@ -11,9 +11,9 @@ clear;
 data_base_dir = '/Volumes/Data/song';
 
 % Bird name:
-%bird = 'lny64';
+bird = 'lny64';
 %bird = 'lno57rlg';
-bird = 'llb4';
+%bird = 'llb4';
 %bird = 'lny29';
 
 % The two required files:
@@ -37,7 +37,7 @@ fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order?
 separate_network_for_each_syllable = true;       % Train a separate network for each time of interest?  Or one network with multiple outs?
-nruns = 1;                                       % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
+nruns = 100;                                       % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
 freq_range = [1000 6000];                        % Frequencies of the song to examine
 time_window = 0.14;                              % How many seconds long is the time window?
 false_positive_cost = 1;                         % Cost of false positives is relative to that of false negatives.
@@ -155,7 +155,7 @@ else
     times_of_interest_simultaneous = times_of_interest;
 end
 
-
+training_times = [];
 
 for run = 1:nruns
     disp(sprintf('Starting run #%d...', run));
@@ -343,6 +343,8 @@ for run = 1:nruns
             net = feedforwardnet([nhidden_per_output * ntsteps_of_interest]);
         end
         net.inputs{1}.processFcns={'mapstd'};
+        %net.trainFcn = 'trainlm';
+        net.trainFcn = 'trainscg';
         
         %net.trainParam.goal=1e-3;
         
@@ -365,7 +367,8 @@ for run = 1:nruns
         end
         
         % Oh yeah, the line above was the hard part.
-        disp(sprintf('   ...training took %g minutes.', toc/60));
+        training_times = [training_times toc/60];
+        disp(sprintf('   ...training took %g minutes (mean %s)', toc/60, sigfig(mean(training_times))));
         % Test on all the data:
         
         % Why not test just on the non-training data?  Compute them all, and then only count ntestsongs for statistics (later)
