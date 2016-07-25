@@ -8,8 +8,11 @@ clear;
 %% First: where are the data?
 
 % Top-level data directory, which houses bird directories:
-data_base_dir = '/Volumes/Data/song';
-
+if ispc
+    data_base_dir = 'z:\song';
+else
+    data_base_dir = '/Volumes/Data/song';
+end
 % Bird name:
 bird = 'lny64';
 %bird = 'lno57rlg';
@@ -355,6 +358,11 @@ for run = 1:nruns
         % get better, so keep this small.
         net.trainParam.max_fail = 3;
         
+        disp('...aaaaaand back to doubles, for useGPU...');
+        nnsetX = double(nnsetX);
+        nnsetY = double(nnsetY);
+        nnset_train = nnset_train(1:150000);
+        
         tic
         if exist('use_previously_trained_network', 'var') & ~isempty(use_previously_trained_network)
             load(use_previously_trained_network);
@@ -362,7 +370,7 @@ for run = 1:nruns
             if use_pattern_net
                 [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetYC(:, nnset_train));
             else
-                [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train));
+                [net, train_record] = train(net, nnsetX(:, nnset_train), nnsetY(:, nnset_train), 'useGPU', 'yes');
             end
         end
         
