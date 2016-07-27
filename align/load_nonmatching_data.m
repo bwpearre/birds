@@ -22,7 +22,14 @@ end
 
 [~, nsamples] = size(MIC_DATA);
 
+tstep = 0;
+out = zeros(mic_data_samples, nnonmatches);
 for i = 1:nnonmatches
-    tstep = ceil(random('unif', 0, nsamples - mic_data_samples - 1));
-    out(:, i) = MIC_DATA(1, tstep:tstep + mic_data_samples - 1);
+    out(:, i) = MIC_DATA(1, tstep+1 : tstep+mic_data_samples);
+    tstep = tstep + mic_data_samples;
+    if tstep + mic_data_samples > nsamples
+        warning('Could only get %d nonmatching ''songs''.', i);
+        out = out(:, 1:i);
+        break;
+    end
 end

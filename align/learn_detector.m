@@ -18,28 +18,28 @@ bird = 'lny64';
 
 % The two required files:
 params_file = 'params';                          % data_base_dir/bird/params.m
-data_file = 'data';                              % data_base_dir/bird/data.mat
+data_file = 'song';                              % data_base_dir/bird/song.mat
 
 
 
 %% These are defaults.  Any of them can be overridden in the parameters file.
 nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
-fft_time_shift_seconds_target = 0.003;           % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
+fft_time_shift_seconds_target = 0.0015;          % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code.  Nah.
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
-nonsinging_fraction = 10;                        % Train on this proportion of nonsinging data (e.g. cage noise, calls)
+nonsinging_fraction = 4;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
 n_whitenoise = 10;                               % Add this many white noise samples (FIXME simplistic method)
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
-samplerate = 48000;                              % Target samplerate (interpolate data to match this)
+samplerate = 44100;                              % Target samplerate (interpolate data to match this)
 fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order?
 separate_network_for_each_syllable = true;       % Train a separate network for each time of interest?  Or one network with multiple outs?
-nruns = 100;                                       % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
-freq_range = [1000 6000];                        % Frequencies of the song to examine
-time_window = 0.14;                              % How many seconds long is the time window?
+nruns = 100;                                     % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
+freq_range = [1000 8000];                        % Frequencies of the song to examine
+time_window = 0.030;                             % How many seconds long is the time window?
 false_positive_cost = 1;                         % Cost of false positives is relative to that of false negatives.
 
 %use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
