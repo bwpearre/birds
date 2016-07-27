@@ -25,7 +25,7 @@ data_file = 'song';                              % data_base_dir/bird/song.mat
 
 
 
-%% These are defaults.  Any of them can be overridden in the parameters file.
+%% These are defaults.  If you want to change them, do so in data_base_dir/bird/params.m
 nhidden_per_output = 4;                          % How many hidden units per syllable?  2 works and trains fast.  4 works ~20% better...
 fft_time_shift_seconds_target = 0.0015;          % FFT frame rate (seconds).  Paper mostly used 0.0015 s: great for timing, but slow to train
 use_jeff_realignment_train = false;              % Micro-realign at each detection point using Jeff's time-domain code?  Don't do this.
@@ -50,16 +50,16 @@ false_positive_cost = 1;                         % Cost of false positives is re
 %  about?
 datadir = strcat(data_base_dir, filesep, bird);
 
-if ~exist('params_file', 'var') | ~exist(strcat(datadir, filesep, params_file, '.m'), 'file')
-    error('Please create the parameters file (currently looking for ''%s''), which will eventually contain at least times_of_interest and, optionally, replacement values for other parameters.', ...
-        strcat(datadir, filesep, params_file));
-end
-
 % Load the user configuration.  This is done by running the params file as a .m file, which adds
 % variables to the current workspace:
-oldpath = addpath(datadir);
-eval(params_file);
-path(oldpath);
+if exist('params_file', 'var') & exist(strcat(datadir, filesep, params_file, '.m'), 'file')
+    oldpath = addpath(datadir);
+    disp('********** Loading configuration file for this bird: *********************');
+    type(params_file);
+    eval(params_file);
+    disp('**************************************************************************');
+    path(oldpath);
+end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -116,7 +116,7 @@ xlabel('Time (ms)');
 ylabel('Frequency (kHz)');
 set(gca, 'YLim', [0 10]);
 if ~exist('times_of_interest', 'var') | isempty(times_of_interest)
-    error('No times of interest defined.  Please look at the spectrogram in Figure 4 and define one or more in ''%s''.', strcat(datadir, filesep, params_file, '.m'));
+    error('No times of interest defined.  Please look at the spectrogram in Figure 4 and define one or more in ''%s'', with "times_of_interest = [x y];" for detection at x and y seconds into the spectrogram.', strcat(datadir, filesep, params_file, '.m'));
 end
 
 %% Define training set
