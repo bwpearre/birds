@@ -129,7 +129,6 @@ end
 ntrainsongs = min(floor(nsongsandnonsongs*8/10), (1+nonsinging_fraction)*ntrain_approx_max_matching_songs);
 ntestsongs = nsongsandnonsongs - ntrainsongs;
 disp(sprintf('%d training songs-and-nonsongs.  %d remain for test.', ntrainsongs, ntestsongs));
-disp(sprintf('Found %d songs.', nmatchingsongs));
 
 % If we're using "fit", it'll produce useless warnings (some kludgey analysis I do later uses "fit",
 % but I want to disable them outside the loop).  Silence them!
