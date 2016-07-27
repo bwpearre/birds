@@ -108,7 +108,8 @@ disp(sprintf('bird: %s', bird));
     nonsinging_fraction, ...
     n_whitenoise);
 
-disp(sprintf('Got %d songs, %d songs-and-nonsongs', nmatchingsongs, nsongsandnonsongs));
+disp(sprintf('Got %d songs, %d songs-and-nonsongs including %d of synthetic white noise.', ...
+    nmatchingsongs, nsongsandnonsongs, n_whitenoise));
 
 %% Draw the spectral image.  If no times_of_interest defined, this is what the user will use to choose some.
 figure(4);
