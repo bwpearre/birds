@@ -35,8 +35,8 @@ confusion_all = false;                           % Use both training and test so
 nonsinging_fraction = 10;                        % Train on this proportion of nonsinging data (e.g. cage noise, calls)
 n_whitenoise = 10;                               % Add this many white noise samples (FIXME simplistic method)
 ntrain_approx_max_matching_songs = 1000;         % Total dataset size is songs+nonsongs.  Only this+this*nonsinging_fraction will be used to train, leaving the rest for test
-testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
-samplerate = 44100;                              % Target samplerate (interpolate data to match this)
+testfile_include_nonsinging = false;             % Include nonsinging data in audio test file (no point if just used to measure timing)
+samplerate = 44100;                              % Target samplerate should match sampling frequency of live detector
 fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order?
@@ -55,7 +55,8 @@ datadir = strcat(data_base_dir, filesep, bird);
 % variables to the current workspace:
 if exist('params_file', 'var') & exist(strcat(datadir, filesep, params_file, '.m'), 'file')
     oldpath = addpath(datadir);
-    disp('********** Loading configuration file for this bird: *********************');
+    disp(sprintf('********** Loading configuration file %s: *********************', ...
+        strcat(datadir, filesep, params_file, '.m'));
     type(params_file);
     eval(params_file);
     disp('**************************************************************************');
