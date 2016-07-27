@@ -32,8 +32,9 @@ use_jeff_realignment_train = false;              % Micro-realign at each detecti
 use_jeff_realignment_test = false;               % Micro-realign test data only at each detection point using Jeff's time-domain code.  Nah.
 use_nn_realignment_test = false;                 % Try using the trained network to realign test songs (reduce jitter?)
 confusion_all = false;                           % Use both training and test songs when computing the confusion matrix?
-nonsinging_fraction = 4;                         % Train on this proportion of nonsinging data (e.g. cage noise, calls)
+nonsinging_fraction = 10;                        % Train on this proportion of nonsinging data (e.g. cage noise, calls)
 n_whitenoise = 10;                               % Add this many white noise samples (FIXME simplistic method)
+ntrain_approx_max_matching_songs = 1000;         % Total dataset size is songs+nonsongs.  Only this+this*nonsinging_fraction will be used to train, leaving the rest for test
 testfile_include_nonsinging = false;             % Include nonsinging data in audio test file
 samplerate = 44100;                              % Target samplerate (interpolate data to match this)
 fft_size = 256;                                  % FFT size
@@ -124,9 +125,9 @@ end
 %% Define training set
 % Hold some data out for final testing.  This includes both matching and non-matching IF THE SONGS
 % ARE IN RANDOM ORDER
-ntrainsongs = floor(nsongsandnonsongs*9.5/10);
+ntrainsongs = min(floor(nsongsandnonsongs*8/10), (1+nonsinging_fraction)*ntrain_approx_max_matching_songs);
 ntestsongs = nsongsandnonsongs - ntrainsongs;
-disp(sprintf('%d training songs.  %d remain for test.', ntrainsongs, ntestsongs));
+disp(sprintf('%d training songs-and-nonsongs.  %d remain for test.', ntrainsongs, ntestsongs));
 disp(sprintf('Found %d songs.', nmatchingsongs));
 
 % If we're using "fit", it'll produce useless warnings (some kludgey analysis I do later uses "fit",
@@ -351,6 +352,11 @@ for run = 1:nruns
         %net.trainFcn = 'trainlm';
         net.trainFcn = 'trainscg';
         
+        
+        net.divideParam.trainRatio = 80/100;
+        net.divideParam.valRatio = 20/100;
+        net.divideParam.testRatio = 0/100;
+        net.plotFcns = {'plotperform'};
         %net.trainParam.goal=1e-3;
         
         fprintf('Training network with %s...\n', net.trainFcn);

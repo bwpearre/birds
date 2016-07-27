@@ -38,7 +38,7 @@ shotgun = shotgun / max(shotgun);
 shotgun = shotgun(find(shotgun>0.1));
 shothalf = length(shotgun);
 if shothalf
-    shotgun = [ shotgun(end:-1:2) shotgun ]
+    shotgun = [ shotgun(end:-1:2) shotgun ];
 end
 
 % Populate the training data.  Infinite RAM makes this so much easier!
