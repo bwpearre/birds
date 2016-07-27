@@ -251,7 +251,8 @@ for i = 1:16
         'Tag', sprintf('%d', i), ...
         'Position', [588 764-22*(i-1) 40 20], ...
         'Callback',{@prepulse_us_Callback}, ...
-        'Enable', 'off');
+        'Enable', 'off', ...
+        'Visible', 'off');
 end
 
 offcolour = [0.9 0.9 1];
@@ -865,7 +866,8 @@ end
 % state of this button
 stim.active_electrodes(whichone) = 0;
 eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', whichone, newstate));
-eval(sprintf('set(handles.stimscale%d, ''Enable'', ''%s'');', whichone, newstate));
+eval(sprintf('set(handles.stimscale%d, ''Enable'', ''%s'', ''Visible'', ''%s'');', ...
+    whichone, newstate, newstate));
 % "stimulate this electrode" should default to 0...
 eval(sprintf('set(handles.stim%d, ''Value'', 0);', whichone));
 stim_scale_set(handles, 0, whichone);
@@ -1954,7 +1956,6 @@ for i = 1:16
     eval(sprintf('set(handles.electrode%d, ''Value'', %d);', i, valid_electrodes(i)));
     eval(sprintf('set(handles.stim%d, ''Enable'', ''%s'');', i, foo));
     eval(sprintf('set(handles.stim%d, ''Value'', %d);', i, stim.active_electrodes(i)));
-    eval(sprintf('set(handles.stimscale%d, ''Enable'', ''%s'');', i, foo));
 end
 stim_scale_update_gui(handles);
 prepulse_us_update_gui(handles);
@@ -2281,7 +2282,7 @@ for i = find(stim.active_electrodes)
         break;
     end
     
-    [ data, response_detected, voltages(i)] = stimulate_wrapper(stim, hardware, detrend_param, handles);
+    [ ~, ~, voltages(i)] = stimulate_wrapper(stim, hardware, detrend_param, handles);
 end
 
 % Don't reset--leave it at the highest voltage found so far!
@@ -2289,7 +2290,7 @@ stim = stim_orig;
 voltages
 [~, pos] = max(voltages);
 stim.plexon_monitor_electrode = pos(1);
-set(handles.monitor_electrode_auto, 'BackgroundColor', [0.94 * [1 1 1]);
+set(handles.monitor_electrode_auto, 'BackgroundColor', 0.94 * [1 1 1]);
 
 %if one_pulse
 %    handles = configure_acquisition_devices(hObject, handles);    
@@ -3159,15 +3160,17 @@ for i = 1:16
            set(handles.(tag), 'String', sigfig(stim.current_scale(i)), ...
                'Enable', 'on', ...
                'ForegroundColor', [0 0 0], ...
-               'BackgroundColor', [1 1 1] * (stim.current_scale(i)+1)/2);
+               'BackgroundColor', [1 1 1] * (stim.current_scale(i)+1)/2, ...
+               'Visible', 'on');
        else
            set(handles.(tag), 'String', sigfig(stim.current_scale(i)), ...
                'Enable', 'on', ...
                'ForegroundColor', [1 1 1], ...
-               'BackgroundColor', [1 1 1] * (stim.current_scale(i)+1)/2);
+               'BackgroundColor', [1 1 1] * (stim.current_scale(i)+1)/2, ...
+               'Visible', 'on');
        end
    else
-       set(handles.(tag), 'String', '', 'Enable', 'off');
+       set(handles.(tag), 'String', '', 'Enable', 'off', 'Visible', 'off');
    end
 end
 
@@ -3197,6 +3200,19 @@ if ~exist('electrodes', 'var')
 elseif length(electrodes) == length(val)
     stim.prepulse_us(electrodes) = val;
 end
+
+prepulse_us_renormalise(handles);
+
+
+function prepulse_us_renormalise(handles)
+% Min delay should be 0
+global stim;
+
+active = find(stim.active_electrodes);
+mindelay = min(stim.prepulse_us(active));
+if mindelay
+    stim.prepulse_us(active) = stim.prepulse_us(active) - mindelay;
+end
 prepulse_us_update_gui(handles);
 
 
@@ -3209,12 +3225,15 @@ for i = 1:16
        set(handles.prepulse_us{i}, 'String', sprintf('%d', stim.prepulse_us(i)), ...
            'Enable', 'on', ...
            'ForegroundColor', [0 0 0], ...
-           'BackgroundColor', [1 1 1] * 1/(stim.prepulse_us(i)/20+1));
+           'BackgroundColor', [1 1 1] * 1/(stim.prepulse_us(i)/20+1), ...
+               'Visible', 'on');
        if stim.prepulse_us(i) > 20
-           set(handles.prepulse_us{i}, 'ForegroundColor', [1 1 1]);
+           set(handles.prepulse_us{i}, 'ForegroundColor', [1 1 1], ...
+               'Visible', 'on');
        end
    else
-       set(handles.prepulse_us{i}, 'String', '', 'Enable', 'off');
+       set(handles.prepulse_us{i}, 'String', '', 'Enable', 'off', ...
+               'Visible', 'off');
    end
 end
 
