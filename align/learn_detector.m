@@ -358,11 +358,6 @@ for run = 1:nruns
         % get better, so keep this small.
         net.trainParam.max_fail = 3;
         
-        %disp('...aaaaaand back to doubles, for useGPU...');
-        %nnsetX = double(nnsetX);
-        %nnsetY = double(nnsetY);
-        %nnset_train = nnset_train(1:150000);
-        
         tic
         if exist('use_previously_trained_network', 'var') & ~isempty(use_previously_trained_network)
             load(use_previously_trained_network);
@@ -694,7 +689,7 @@ for run = 1:nruns
             for i = 1:length(sylly)
                 xtickl{i} = sprintf('t^*_%d', i);
                 sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
-                sylly_means(i,:) = mean(confusion(find(confusion(:,1)==sylly(i)),2:3));
+                sylly_means(i,:) = mean(confusion(find(confusion(:,1)==sylly(i)),2:3), 1);
             end
             sylly_means
             colours = distinguishable_colors(length(sylly));
@@ -712,7 +707,7 @@ for run = 1:nruns
             if min(sylly) ~= max(sylly)
                 set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
             end
-            set(gca, 'ylim', [97 100]);
+            %set(gca, 'ylim', [97 100]);
             set(gca, 'xtick', sylly, 'xticklabel', xtickl);
             
             subplot(1,2,2);
@@ -724,7 +719,7 @@ for run = 1:nruns
                 set(gca, 'xlim', [min(sylly)-0.025 max(sylly)+0.025]);
             end
             set(gca, 'xtick', sylly, 'xticklabel', xtickl);
-            set(gca, 'ylim', [0 0.07]);
+            %set(gca, 'ylim', [0 0.07]);
             sylly_counts
         end
         
