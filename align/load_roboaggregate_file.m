@@ -41,7 +41,7 @@ if nnonmatches < nonsinging_fraction * nmatchingsongs
     warning('I had to lower nonsinging_fraction to %s.', sigfig(nnonmatches/nmatchingsongs - 0.01));
 end
 if nnonmatches > nonsinging_fraction * nmatchingsongs
-    nonsong = nonsong(:, nonsinging_fraction * nmatchingsongs);
+    nonsong = nonsong(:, 1:nonsinging_fraction * nmatchingsongs);
 end
 
 
