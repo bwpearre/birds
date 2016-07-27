@@ -36,17 +36,16 @@ end
 
 nnonmatches = size(nonsong, 2);
 
-
-if nnonmatches < nonsinging_fraction * nmatchingsongs
-    warning('I had to lower nonsinging_fraction to %s.', sigfig(nnonmatches/nmatchingsongs - 0.01));
+if nonsinging_fraction > 0
+    if nnonmatches < nonsinging_fraction * nmatchingsongs
+        warning('I had to lower nonsinging_fraction to %s.', sigfig(nnonmatches/nmatchingsongs - 0.01));
+    end
+    if nnonmatches > nonsinging_fraction * nmatchingsongs
+        nonsong = nonsong(:, 1:nonsinging_fraction * nmatchingsongs);
+    end
+        
+    mic_data = [mic_data nonsong];
 end
-if nnonmatches > nonsinging_fraction * nmatchingsongs
-    nonsong = nonsong(:, 1:nonsinging_fraction * nmatchingsongs);
-end
-
-
-mic_data = [mic_data nonsong];
-
 
 %% Downsample the data to match target samplerate?
 if fs ~= target_samplerate
