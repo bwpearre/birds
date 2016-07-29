@@ -55,8 +55,8 @@ datadir = strcat(data_base_dir, filesep, bird);
 % variables to the current workspace:
 if exist('params_file', 'var') & exist(strcat(datadir, filesep, params_file, '.m'), 'file')
     oldpath = addpath(datadir);
-    disp(sprintf('********** Loading configuration file %s: *********************', ...
-        strcat(datadir, filesep, params_file, '.m'));
+    disp(sprintf('********** Configuration file %s: *************', ...
+        strcat(datadir, filesep, params_file, '.m')));
     type(params_file);
     eval(params_file);
     disp('**************************************************************************');
@@ -98,7 +98,7 @@ rng('shuffle');
 disp(sprintf('bird: %s', bird));
 
 
-[ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
+[ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img_songs_log, spectrogram_power_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(datadir, ...
     data_file, ...
     fft_time_shift_seconds_target, ...
@@ -115,7 +115,7 @@ disp(sprintf('Got %d songs, %d songs-and-nonsongs including %d of synthetic whit
 %% Draw the spectral image.  If no times_of_interest defined, this is what the user will use to choose some.
 figure(4);
 subplot(1,1,1);
-specfig = imagesc(times([1 end])*1000, freqs([1 end])/1000, spectrogram_avg_img);
+specfig = imagesc(times([1 end])*1000, freqs([1 end])/1000, spectrogram_avg_img_songs_log);
 axis xy;
 xlabel('Time (ms)');
 ylabel('Frequency (kHz)');
@@ -163,6 +163,8 @@ else
 end
 
 training_times = [];
+loop_times = [];
+tic;
 
 for run = 1:nruns
     disp(sprintf('Starting run #%d...', run));
@@ -265,12 +267,6 @@ for run = 1:nruns
         end
         %hist(target_offsets', 40);
         
-        disp('Creating spectral power image...');
-        
-        % Create an image on which to superimpose the results...
-        power_img = squeeze((sum(spectrograms, 2)));
-        power_img(find(isinf(power_img))) = 0;
-        
         %pn = 1:nmatchingsongs;
         %[vt pt] = sort(target_offsets);
         %[vs ps] = sort(sample_offsets);
@@ -286,12 +282,12 @@ for run = 1:nruns
         figure(4);
         subplot(1,1,1);
         %subplot(ntsteps_of_interest+1,1,1);
-        specfig = imagesc(times([1 end])*1000, freqs([1 end])/1000, spectrogram_avg_img);
+        specfig = imagesc(times([1 end])*1000, freqs([1 end])/1000, spectrogram_avg_img_songs_log);
         axis xy;
         xlabel('Time (ms)');
         ylabel('Frequency (kHz)');
+        
         % Draw the syllables of interest:
-
         for i = 1:ntsteps_of_interest
             line(toi(i)*[1;1]*1000, freqs([1 end])/1000, 'Color', [1 0 0]);
             windowrect = rectangle('Position', [(toi(i) - time_window)*1000 ...
@@ -302,10 +298,8 @@ for run = 1:nruns
         end
         set(gca, 'YLim', [0 10]);
 
-            
         
         drawnow;
-        
         
         
         disp(sprintf('Creating training set from %d songs...', ntrainsongs));
@@ -367,6 +361,8 @@ for run = 1:nruns
         % get better, so keep this small.
         net.trainParam.max_fail = 3;
         
+        loop_times(end+1) = toc/60;
+        
         tic
         if exist('use_previously_trained_network', 'var') & ~isempty(use_previously_trained_network)
             load(use_previously_trained_network);
@@ -380,7 +376,12 @@ for run = 1:nruns
         
         % Oh yeah, the line above was the hard part.
         training_times = [training_times toc/60];
-        disp(sprintf('   ...training took %g minutes (mean %s)', toc/60, sigfig(mean(training_times))));
+        if length(loop_times) > 1
+            disp(sprintf('   ...training took %g minutes (mean %s m).  Rest-of-loop %g (mean %s m).', ...
+                toc/60, sigfig(mean(training_times)), ...
+                loop_times(end), sigfig(mean(loop_times(2:end)))));
+        end
+        tic
         % Test on all the data:
         
         % Why not test just on the non-training data?  Compute them all, and then only count ntestsongs for statistics (later)
@@ -393,7 +394,7 @@ for run = 1:nruns
         testout = reshape(testout, ntsteps_of_interest, nwindows_per_song, nsongsandnonsongs);
         
         % Update the each-song image
-        power_img = power_img(randomorder,:);
+        power_img = spectrogram_power_img(randomorder,:);
         power_img = repmat(power_img / max(max(power_img)), [1 1 3]);
         
         disp('Computing optimal output thresholds...');
