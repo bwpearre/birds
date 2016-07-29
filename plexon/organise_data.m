@@ -106,7 +106,14 @@ else
     tddata = [];
 end
 
-voltage_range_last_stim = [min(edata(:,1)) max(edata(:,1))];
+voltage_range_last_stim = [min(edata(:,1)) max(edata(:,1))]
+% Eliminate transients by tossing voltage peaks less than 50 microseconds
+% (at 100 kHz) wide.
+voltage_range_last_stim_smoothed = [-findpeaks(-edata(:,1), 'MinPeakWidth', 5, 'SortStr', 'descend', 'NPeaks', 1) ...
+    findpeaks(edata(:,1), 'MinPeakWidth', 5, 'SortStr', 'descend', 'NPeaks', 1)]
+if length(voltage_range_last_stim_smoothed) ~= 2
+    error('Fix this!');
+end
 
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';

@@ -94,7 +94,7 @@ global voltage_limit;
 global detrend_param;
 
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
-if false % For my X--HVC experiment
+if true % For my X--HVC experiment
     detrend_param.model = 'fourier8';
     detrend_param.range = [0.002 0.025];
     detrend_param.response_roi = [0.0025 0.008];
@@ -427,7 +427,7 @@ end
 
 
 %% Open NI acquisition board
-dev='Dev2'; % location of input device
+dev='Dev1'; % location of input device
 ni_plexon_monitor_channels = [0 1];
 hardware.ni.recording_channel_indices = length(ni_plexon_monitor_channels)+1 : length(ni_plexon_monitor_channels) + length(find(ni_response_channels));
 ni_channels = [ ni_plexon_monitor_channels find(ni_response_channels)]; % kludge; the latter pretends to be 0-indexed
@@ -2179,7 +2179,7 @@ while ~done
                     done = true;
                 end
             end
-            
+            f
             % (3)
             if stim.current_uA < min_uAmps
                 %disp(sprintf('Current is %s < %s, but saw response so continuing lower anyway!', ...
