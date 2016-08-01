@@ -346,6 +346,7 @@ disp(sprintf('Reconfiguring finished.  Elapsed time %s s.', sigfig(toc)));
 
 function [] = init_plexon(hObject, handles)
 global hardware;
+global plexon_newly_initialised;
 % Open the stimulator
 
 PS_CloseAllStim;
@@ -403,6 +404,7 @@ if err
     throw(ME);
 end
 
+plexon_newly_initialised = true;
 
 guidata(hObject, handles);
 
@@ -1418,6 +1420,7 @@ if isempty(data)
     disp('timer callback: stimulate() did not capture any data.');
     return;
 end
+
 
   
   
