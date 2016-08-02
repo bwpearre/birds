@@ -99,15 +99,19 @@ rng('shuffle');
 disp(sprintf('bird: %s', bird));
 
 
+% If confusion_log_perf.txt exists, there is the risk that something important (parameters, code...)
+% has changed since that file was last added to.  Ask the user.
 if nruns > 1 & separate_network_for_each_syllable & exist('confusion_log_perf.txt', 'file')
-    response = questdlg('A multi-run logfile exists.  Keep it and add to it?', ...
+    response = questdlg('A multi-run logfile exists.  Keep adding to it?', ...
         'Keep logfile?', ...
         'yes', ...
-        'no, rename to ''confusion_log_perf.backup''', ...
+        'no', ...
         'yes');
     
-    if ~strcmp(response, 'yes')
+    if strcmp(response, 'no')
         movefile('confusion_log_perf.txt', 'confusion_log_perf.backup', 'f');
+        first_run = 1;
+        disp('Logfile has been renamed ''confusion_log_perf.backup''');
     else
         % This file is created in show_confusion.m.
         confusion = load('confusion_log_perf.txt');
@@ -115,6 +119,11 @@ if nruns > 1 & separate_network_for_each_syllable & exist('confusion_log_perf.tx
         sylly_counts = [];
         for i = 1:length(sylly)
             sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
+        end
+        if max(sylly_counts) == min(sylly_counts)
+            first_run = max(sylly_counts) + 1;
+        else
+            first_run = max(sylly_counts) - 1;
         end
     end
 end
@@ -194,7 +203,7 @@ catch_up = false;
 
 tic;
 
-for run = 1:nruns
+for run = first_run:nruns
     disp(sprintf('Starting run #%d...', run));
     
     
