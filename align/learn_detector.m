@@ -99,6 +99,30 @@ rng('shuffle');
 disp(sprintf('bird: %s', bird));
 
 
+if nruns > 1 & separate_network_for_each_syllable & exist('confusion_log_perf.txt', 'file')
+    response = questdlg('A multi-run logfile exists.  Keep it and add to it?', ...
+        'Keep logfile?', ...
+        'yes', ...
+        'no, rename to ''confusion_log_perf.backup''', ...
+        'yes');
+    
+    if ~strcmp(response, 'yes')
+        movefile('confusion_log_perf.txt', 'confusion_log_perf.backup', 'f');
+    else
+        % This file is created in show_confusion.m.
+        confusion = load('confusion_log_perf.txt');
+        [sylly bini binj] = unique(confusion(:,1));
+        sylly_counts = [];
+        for i = 1:length(sylly)
+            sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
+        end
+    end
+end
+
+
+
+
+
 [ mic_data, spectrograms, nsamples_per_song, nmatchingsongs, nsongsandnonsongs, timestamps, nfreqs, freqs, ntimes, times, fft_time_shift_seconds, spectrogram_avg_img_songs_log, spectrogram_power_img, freq_range_ds, time_window_steps, layer0sz, nwindows_per_song, noverlap] ...
     = load_roboaggregate_file(datadir, ...
     data_file, ...
@@ -168,24 +192,6 @@ loop_times = [];
 catch_up = false;
 
 
-if nruns > 1 & separate_network_for_each_syllable & exist('confusion_log_perf.txt', 'file')
-    %% Plot the figure of errors for all networks over all trials...
-    figure(9);
-    % This file is created in show_confusion.m.  No effort is made to ensure that it
-    % doesn't contain values for different configurations, or even different-sized columns!
-    % So if you want to use it, best make sure you start by deleting the previous
-    % confusion_log_perf.txt.  That is not done automatically in order to allow restart of
-    % partially completed jobs, since 6 syllables, 100 runs, 1000 training songs, etc., can
-    % take around 4 days to complete.
-    confusion = load('confusion_log_perf.txt');
-    [sylly bini binj] = unique(confusion(:,1));
-    sylly_counts = [];
-    for i = 1:length(sylly)
-        sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
-    end
-end
-
-
 tic;
 
 for run = 1:nruns
@@ -198,7 +204,7 @@ for run = 1:nruns
     if separate_network_for_each_syllable ...
             & exist('sylly_counts', 'var') ...
             & length(sylly_counts) == length(times_of_interest) ...
-            & max(sylly_counts) - min(sylly_counts) > 1
+            & max(sylly_counts) ~= min(sylly_counts)
         disp('Unbalanced per-syllable experiment counts detected.  Fixing...');
         catch_up_syllables = max(sylly_counts) - sylly_counts;
         times_of_interest_separate = [];
@@ -736,12 +742,12 @@ for run = 1:nruns
         if nruns > 1 & separate_network_for_each_syllable
             %% Plot the figure of errors for all networks over all trials...
             figure(9);
-            % This file is created in show_confusion.m.  No effort is made to ensure that it
-            % doesn't contain values for different configurations, or even different-sized columns!
-            % So if you want to use it, best make sure you start by deleting the previous
-            % confusion_log_perf.txt.  That is not done automatically in order to allow restart of
-            % partially completed jobs, since 6 syllables, 100 runs, 1000 training songs, etc., can
-            % take around 4 days to complete.
+            % This file is created in show_confusion.m.  No effort is made to ensure that it doesn't
+            % contain values for different configurations, or even different-sized columns! So if
+            % you want to use it, best make sure you start by deleting the previous
+            % confusion_log_perf.txt.  Keep it in order to allow restart of partially completed
+            % jobs, since 10 syllables, 100 runs, 3000 training songs, convolutional networks, etc.,
+            % can take a long time to complete.
             confusion = load('confusion_log_perf.txt');
             [sylly bini binj] = unique(confusion(:,1));
             xtickl = {};
