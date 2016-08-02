@@ -3,6 +3,7 @@ function [ data, response_detected, voltage, errors] = stimulate(stim, hardware,
 global currently_reconfiguring;
 global scriptdir;
 global monitor_struct;
+global plexon_newly_initialised;
 
 persistent last_stim;
 persistent filenames;
@@ -33,10 +34,11 @@ if isempty(last_stim)
 else
     %% Bypass same-as-last-time settings for faster reprogramming
     % The device was not reconfigured in the meantime:
-    same_session = stim.n_repetitions == last_stim.n_repetitions ...
+    same_session = ~plexon_newly_initialised ...
+        & stim.n_repetitions == last_stim.n_repetitions ...
         & stim.repetition_Hz == last_stim.repetition_Hz ...
         & stim.interpulse_s == last_stim.interpulse_s;
-
+    
     % This electrode doesn't need updating: 
     same_per_electrode = same_session ...
         & stim.active_electrodes == last_stim.active_electrodes ...
@@ -219,7 +221,7 @@ else
     target_current = [0 0; 0 0];
 end
     
-
+plexon_newly_initialised = false;
 
 if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
     try

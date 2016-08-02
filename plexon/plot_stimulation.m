@@ -250,6 +250,12 @@ end
 
 hold(axes3yy(2), 'on');
 h3 = plot(axes3yy(2), data.stim.target_current(1,:)*1e3, data.stim.target_current(2,:), 'Color', [0 1 0]);
+
+%%%%%%%%
+line(data.ni.times_aligned(v([1 end])) * 1e3, data.voltage_range([1 1]));
+line(data.ni.times_aligned(v([1 end])) * 1e3, data.voltage_range([2 2]));
+%%%%%%%
+
 hold(axes3yy(2), 'off');
 
 legend_handles = [h1(1) h2(1) h3];
@@ -261,6 +267,7 @@ set(get(axes3yy(1),'Ylabel'),'String','V')
 set(get(axes3yy(2),'Ylabel'),'String','\mu A')
 title(handles.axes3, sprintf('Stimulation (%sV, %snC)', sigfig(data.voltage, 3), ...
     sigfig(data.stim.current_uA * data.stim.halftime_s * 1e3, 3)));
+
 
 xtick = get(handles.axes1, 'XTick');
 set(handles.axes1, 'XTick', xtick(1):aftertrigger*1e3);

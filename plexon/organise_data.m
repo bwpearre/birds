@@ -3,6 +3,10 @@
 function [ data, response_detected, voltage, errors] = organise_data(stim, hardware, ...
     detrend_param, obj, event, handlefigure)
 
+%%%%% Increment the version whenever adding anything to the savefile format!
+data.version = 27;
+
+
 global saving_stimulations;
 global bird;
 global datadir;
@@ -106,14 +110,17 @@ else
     tddata = [];
 end
 
-voltage_range_last_stim = [min(edata(:,1)) max(edata(:,1))]
-% Eliminate transients by tossing voltage peaks less than 50 microseconds
-% (at 100 kHz) wide.
-voltage_range_last_stim_smoothed = [-findpeaks(-edata(:,1), 'MinPeakWidth', 5, 'SortStr', 'descend', 'NPeaks', 1) ...
-    findpeaks(edata(:,1), 'MinPeakWidth', 5, 'SortStr', 'descend', 'NPeaks', 1)]
-if length(voltage_range_last_stim_smoothed) ~= 2
-    error('Fix this!');
-end
+%voltage_range_last_stim = [min(edata(:,1)) max(edata(:,1))]
+% Eliminate those ugly voltage transients (which may or may not be real):
+[B A] = ellip(2, .5, 40, 30000/((100e3))/2, 'low');
+voltage_smoothed = filtfilt(B, A, squeeze(edata(:,1)));
+voltage_range_last_stim = [min(min(voltage_smoothed)) max(max(voltage_smoothed))];
+%figure(132);
+%plot(event.TimeStamps, edata(:,1), 'r', event.TimeStamps, voltage_smoothed, 'b');
+
+%if length(voltage_range_last_stim_smoothed) ~= 2
+%    error('Fix this!');
+%end
 
 file_basename = 'stim';
 file_format = 'yyyymmdd_HHMMSS.FFF';
@@ -173,8 +180,6 @@ if n_repetitions_actual_tdt == 0
 end
 
 
-%%%%% Increment the version whenever adding anything to the savefile format!
-data.version = 26;
 
 
 data.bird = bird;
@@ -185,6 +190,7 @@ data.stim.duration = 2 * stim.halftime_s + stim.interpulse_s;
 data.goodtimes = [ 0.0002 + data.stim.duration ...
     -0.0003 + 1/stim.repetition_Hz ];
 data.voltage = max(abs(voltage_range_last_stim));
+data.voltage_range = voltage_range_last_stim;
 
 data.ni.index_recording = hardware.ni.recording_channel_indices;
 data.ni.stim = data_aligned(:, :, 1:2);

@@ -207,3 +207,8 @@ if data.version < 26
     data.detrend_param.response_prob = 0.5; % With spike_detect (below) this is obviated.
     data.detrend_param.spike_detect = @look_for_spikes_peaks;
 end
+
+if data.version < 27
+    data.voltage_range = [-data.voltage data.voltage];
+end
+
