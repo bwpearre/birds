@@ -45,6 +45,7 @@ nruns = 100;                                     % Perform a few training runs a
 freq_range = [1000 8000];                        % Frequencies of the song to examine
 time_window = 0.030;                             % How many seconds long is the time window?
 false_positive_cost = 1;                         % Cost of false positives is relative to that of false negatives.
+create_song_test_file = -1;                      % Big, and take some time to save.  1: always, 0: never, -1: only if nruns == 1
 
 %use_previously_trained_network = '5syll_1ms.mat' % Rather than train a new network, use this one? NO ERROR CHECKING!!!!!
 %  Finally: where do the aligned song and nonsong data files live?  And which times do we care
@@ -164,12 +165,59 @@ end
 
 training_times = [];
 loop_times = [];
+catch_up = false;
+
+
+if nruns > 1 & separate_network_for_each_syllable & exist('confusion_log_perf.txt', 'file')
+    %% Plot the figure of errors for all networks over all trials...
+    figure(9);
+    % This file is created in show_confusion.m.  No effort is made to ensure that it
+    % doesn't contain values for different configurations, or even different-sized columns!
+    % So if you want to use it, best make sure you start by deleting the previous
+    % confusion_log_perf.txt.  That is not done automatically in order to allow restart of
+    % partially completed jobs, since 6 syllables, 100 runs, 1000 training songs, etc., can
+    % take around 4 days to complete.
+    confusion = load('confusion_log_perf.txt');
+    [sylly bini binj] = unique(confusion(:,1));
+    sylly_counts = [];
+    for i = 1:length(sylly)
+        sylly_counts(i) = length(find(confusion(:,1)==sylly(i)));
+    end
+end
+
+
 tic;
 
 for run = 1:nruns
     disp(sprintf('Starting run #%d...', run));
     
+    
+    % This mess is to compensate for the fact that trainscg keeps crashing the programme,
+    % unbalancing the syllable counts.  When this imbalance is detected, do the underappreciated
+    % syllable, and then continue on our merry way.
+    if separate_network_for_each_syllable ...
+            & exist('sylly_counts', 'var') ...
+            & length(sylly_counts) == length(times_of_interest) ...
+            & max(sylly_counts) - min(sylly_counts) > 1
+        disp('Unbalanced per-syllable experiment counts detected.  Fixing...');
+        catch_up_syllables = max(sylly_counts) - sylly_counts;
+        times_of_interest_separate = [];
+        for i = length(times_of_interest):-1:1
+            for j = 1:catch_up_syllables(i)
+                times_of_interest_separate = [times_of_interest_separate times_of_interest(i)];
+            end
+        end
+        %[~, catch_up_on_which_syllable] = min(sylly_counts);
+        %times_of_interest_separate = times_of_interest(catch_up_on_which_syllable);
+        %separate_syllable_counter = catch_up_on_which_syllable - 1;
+        catch_up = true;
+    elseif catch_up
+        catch_up = false;
+        times_of_interest_separate = times_of_interest;
+    end
+        
     separate_syllable_counter = 0;
+    
     for thetime = times_of_interest_separate
         % thetime will be each of the times_of_interest, or else NaN, which will run once through the
         % loop.
@@ -354,12 +402,13 @@ for run = 1:nruns
         net.plotFcns = {'plotperform'};
         %net.trainParam.goal=1e-3;
         
-        fprintf('Training network with %s...\n', net.trainFcn);
+        fprintf('(%s) Training network with %s...\n', datestr(datetime('now'), 'HH:MM'), net.trainFcn);
         
         
         % Once the validation set performance stops improving, it seldom seems to
-        % get better, so keep this small.
-        net.trainParam.max_fail = 3;
+        % get better, so keep this small.  OOPS--that was true for trainlm, but trainscg has much
+        % faster (and more) iterations.
+        %net.trainParam.max_fail = 3;
         
         loop_times(end+1) = toc/60;
         
@@ -460,7 +509,7 @@ for run = 1:nruns
         figure(6);
         for i = 1:length(toi)
             if separate_network_for_each_syllable
-                subplot(length(times_of_interest), 1, separate_syllable_counter);
+                subplot(length(times_of_interest_separate), 1, separate_syllable_counter);
             else
                 subplot(ntsteps_of_interest, 1, i);
             end
@@ -532,7 +581,9 @@ for run = 1:nruns
             xlabel('Time (ms)');
             ylabel('Song');
             %title(sprintf('Detection events for %d ms', round(1000*toi(i))));
-            title(sprintf('Detection events: %s', times_of_interest_names{separate_syllable_counter}));
+            if ~catch_up
+                title(sprintf('Detection events: %s', times_of_interest_names{separate_syllable_counter}));
+            end
             
             if ~SORT_BY_ALIGNMENT
                 %% Show coloration by labeling the blocks of training and test songs
@@ -810,58 +861,60 @@ for run = 1:nruns
         % runs of the detector on the same songs:
         %rng(137);
         
-        if testfile_include_nonsinging
-            % Re-permute all songs with a new random order
-            newrand = randperm(size(mic_data,2));
-            orig_songs_with_hits =  [ones(1, nmatchingsongs) zeros(1, nsongsandnonsongs - nmatchingsongs)]';
-            new_songs_with_hits = orig_songs_with_hits(newrand);
-            songs = reshape(mic_data(:, newrand), [], 1); % Include all singing and non-singing
-            %songs = reshape(mic_data(:, 1:nsongsandnonsongs), [], 1); % Just singing
-            songs_scale = max([max(songs) -min(songs)]);
-            songs = songs / songs_scale;
-            hits = zeros(size(mic_data));
-            samples_of_interest = round(toi * samplerate);
-            for i = 1:nsongsandnonsongs
-                if new_songs_with_hits(i)
-                    % The baseline signal is recorded only for the first sample
-                    % of interest:
-                    hits(samples_of_interest(1) + sample_offsets_2(1, newrand(i)), i) = 1;
+        if create_song_test_file == 1 | (create_song_test_file == -1 & nruns == 1)
+            if testfile_include_nonsinging
+                % Re-permute all songs with a new random order
+                newrand = randperm(size(mic_data,2));
+                orig_songs_with_hits =  [ones(1, nmatchingsongs) zeros(1, nsongsandnonsongs - nmatchingsongs)]';
+                new_songs_with_hits = orig_songs_with_hits(newrand);
+                songs = reshape(mic_data(:, newrand), [], 1); % Include all singing and non-singing
+                %songs = reshape(mic_data(:, 1:nsongsandnonsongs), [], 1); % Just singing
+                songs_scale = max([max(songs) -min(songs)]);
+                songs = songs / songs_scale;
+                hits = zeros(size(mic_data));
+                samples_of_interest = round(toi * samplerate);
+                for i = 1:nsongsandnonsongs
+                    if new_songs_with_hits(i)
+                        % The baseline signal is recorded only for the first sample
+                        % of interest:
+                        hits(samples_of_interest(1) + sample_offsets_2(1, newrand(i)), i) = 1;
+                    end
                 end
+                hits = reshape(hits, [], 1);
+                songs = [songs hits];
+                testfilename = sprintf('songs_%s%ss_%d%%%s.wav',...
+                    bird, sprintf('_%g', toi), round(100/(1+nonsinging_fraction)), ...
+                    realignNetString);
+            else
+                % Just the real songs
+                
+                % Re-permute just 128 of the positive songs with a new random order -- for oscilloscope
+                % 128-sample averages
+                ntestsongs = nmatchingsongs;
+                newrand = randperm(nmatchingsongs);
+                newrand = newrand(1:ntestsongs);
+                
+                %songs = reshape(mic_data(:, 1:nmatchingsongs), [], 1); % Include all singing and non-singing
+                songs = reshape(mic_data(:, newrand), [], 1); % Just singing
+                songs_scale = max([max(songs) -min(songs)]);
+                songs = songs / songs_scale;
+                hits = zeros(nsamples_per_song, ntestsongs);
+                samples_of_interest = round(toi * samplerate);
+                for i = 1:ntestsongs
+                    hits(samples_of_interest(1) + round(sample_offsets_test(1, i)), i) = 1;
+                end
+                hits = reshape(hits, [], 1);
+                songs = [songs hits];
+                
+                testfilename = sprintf('songs_%d_%s%ss%s.wav', ...
+                    ntestsongs, ...
+                    bird, sprintf('_%g', toi), ...
+                    realignNetString);
+                
             end
-            hits = reshape(hits, [], 1);
-            songs = [songs hits];
-            testfilename = sprintf('songs_%s%ss_%d%%%s.wav',...
-                bird, sprintf('_%g', toi), round(100/(1+nonsinging_fraction)), ...
-                realignNetString);
-        else
-            % Just the real songs
             
-            % Re-permute just 128 of the positive songs with a new random order -- for oscilloscope
-            % 128-sample averages
-            ntestsongs = nmatchingsongs;
-            newrand = randperm(nmatchingsongs);
-            newrand = newrand(1:ntestsongs);
-            
-            %songs = reshape(mic_data(:, 1:nmatchingsongs), [], 1); % Include all singing and non-singing
-            songs = reshape(mic_data(:, newrand), [], 1); % Just singing
-            songs_scale = max([max(songs) -min(songs)]);
-            songs = songs / songs_scale;
-            hits = zeros(nsamples_per_song, ntestsongs);
-            samples_of_interest = round(toi * samplerate);
-            for i = 1:ntestsongs
-                hits(samples_of_interest(1) + round(sample_offsets_test(1, i)), i) = 1;
-            end
-            hits = reshape(hits, [], 1);
-            songs = [songs hits];
-            
-            testfilename = sprintf('songs_%d_%s%ss%s.wav', ...
-                ntestsongs, ...
-                bird, sprintf('_%g', toi), ...
-                realignNetString);
-            
+            audiowrite(testfilename, songs, round(samplerate));
         end
-        
-        audiowrite(testfilename, songs, round(samplerate));
     end
 end
 
