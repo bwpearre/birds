@@ -40,8 +40,8 @@ samplerate = 44100;                              % Target samplerate should matc
 fft_size = 256;                                  % FFT size
 use_pattern_net = false;                         % Use MATLAB's pattern net (fine, but no control over false-pos vs false-neg cost)
 do_not_randomise = false;                        % Use songs in original order?
-separate_network_for_each_syllable = true;       % Train a separate network for each time of interest?  Or one network with multiple outs?
-nruns = 100;                                     % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
+separate_network_for_each_syllable = false;       % Train a separate network for each time of interest?  Or one network with multiple outs?
+nruns = 1;                                     % Perform a few training runs and create beeswarm plot (paper figure 3 used 100)?
 freq_range = [1000 8000];                        % Frequencies of the song to examine
 time_window = 0.030;                             % How many seconds long is the time window?
 false_positive_cost = 1;                         % Cost of false positives is relative to that of false negatives.
@@ -123,9 +123,11 @@ if nruns > 1 & separate_network_for_each_syllable & exist('confusion_log_perf.tx
         if max(sylly_counts) == min(sylly_counts)
             first_run = max(sylly_counts) + 1;
         else
-            first_run = max(sylly_counts) - 1;
+            first_run = max(sylly_counts);
         end
     end
+else
+    first_run = 1;
 end
 
 
@@ -214,7 +216,7 @@ for run = first_run:nruns
             & exist('sylly_counts', 'var') ...
             & length(sylly_counts) == length(times_of_interest) ...
             & max(sylly_counts) ~= min(sylly_counts)
-        disp('Unbalanced per-syllable experiment counts detected.  Fixing...');
+        disp(sprintf('Continuing on unfinished Run #%d...', run));
         catch_up_syllables = max(sylly_counts) - sylly_counts;
         times_of_interest_separate = [];
         for i = length(times_of_interest):-1:1
@@ -758,6 +760,7 @@ for run = first_run:nruns
             % jobs, since 10 syllables, 100 runs, 3000 training songs, convolutional networks, etc.,
             % can take a long time to complete.
             confusion = load('confusion_log_perf.txt');
+            %confusion = load('data/confusion_log_perf_4hid.txt');
             [sylly bini binj] = unique(confusion(:,1));
             xtickl = {};
             sylly_means = [];
@@ -802,7 +805,7 @@ for run = first_run:nruns
         
         % Draw the hidden units' weights.  Let the user make these square or not
         % because lazy...
-        if net.numLayers > 1
+        if net.numLayers > 1 & false
             figure(5);
             for i = 1:size(net.IW{1}, 1)
                 subplot(size(net.IW{1}, 1), 1, i)
