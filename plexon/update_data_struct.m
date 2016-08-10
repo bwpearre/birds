@@ -195,6 +195,8 @@ end
 if data.version < 25
     % Here I changed response detection to look_for_spikes_peaks.m, which uses a different
     % threshold: RMS noise = sigma; spike >= 5sigma.
+    data.stim.prepulse_us = zeros(1,16);
+    data.stim.current_scale = zeros(1,16);
     data.detrend_param.response_sigma = 5;
     data.detrend_param.response_prob = NaN;
 end
