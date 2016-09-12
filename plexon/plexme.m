@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 23-May-2016 12:21:26
+% Last Modified by GUIDE v2.5 12-Sep-2016 11:32:15
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -93,28 +93,6 @@ global inter_trial_s;
 global voltage_limit;
 global detrend_param;
 
-%% Defaults cater to my experiment. Should add controls for multiple defaults...
-if true % For my X--HVC experiment
-    detrend_param.model = 'fourier8';
-    detrend_param.range = [0.002 0.025];
-    detrend_param.response_roi = [0.0025 0.008];
-    detrend_param.response_baseline = [0.012 0.025];
-    detrend_param.response_detection_threshold = 0.5;
-    detrend_param.spike_detect = @look_for_spikes_peaks;
-    detrend_param.response_sigma = 5;
-    detrend_param.response_prob = 0.5;
-    voltage_limit = 3;
-else
-    detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
-    detrend_param.range = [0.0007 0.02];
-    detrend_param.response_roi = [0.0007 0.002];
-    detrend_param.response_baseline = [0.005 0.02];
-    detrend_param.response_detection_threshold = 0.5;
-    detrend_param.spike_detect = @look_for_spikes_peaks;
-    detrend_param.response_sigma = 5;
-    detrend_param.response_prob = 0.5;
-    voltage_limit = 7;
-end
 
 % Offsite testing? (Cannot use the DAQ boards or other hardware)
 offsiteTest = false;
@@ -267,7 +245,7 @@ set(handles.apply_params, 'BackgroundColor', [1 0 0], 'Visible', 'off');
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
         handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
         handles.n_repetitions_box, handles.voltage_limit, ...
-        handles.n_repetitions_hz_box, handles.full_threshold_scan};
+        handles.n_repetitions_hz_box, handles.full_threshold_scan, handles.presets};
 for i = 1:16
     eval(sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i));
     eval(sprintf('handles.disable_on_run{end+1} = handles.stim%d;', i));
@@ -1004,6 +982,8 @@ if ~sufficient_active_electrodes
     return;
 end
 
+disable_controls(hObject, handles);
+
 in_stim_loop = true;
 plexon_start_timer_callback([], [], hObject, handles);
 
@@ -1702,7 +1682,7 @@ for iVar = 1:numel(globalVars)
   eval(sprintf('global %s', globalVars{iVar}));  % [EDITED]
 end
 disp('Made all vars global.  Not throwing an error.  Edit plexme.m if you want that.');
-% a(0)
+ a(0)
 
 
 
@@ -1898,11 +1878,12 @@ savename = strcat(scriptdir, '/saved.mat');
 
 
 
+
 function update_gui_values(hObject, handles);
-global hardware scriptdir;
+global hardware;
 global data_basedir;
 
-save_vars = get_save_vars(); % Just for the list!
+save_vars = get_save_vars(); % Just for the list of variables.  Does not affect values.
 
 for i = save_vars
     eval(sprintf('global %s;', char(i)));
@@ -3306,3 +3287,41 @@ end
 function monitor_electrode_auto_Callback(hObject, eventdata, handles)
 % The "1" is the optional test_current argument to the function.
 check_all_stim_voltages(hObject, handles, 1);
+
+
+function presets_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+set(hObject, 'String', {'CNS', 'Peripheral'});
+
+function presets_Callback(hObject, eventdata, handles)
+global detrend_param voltage_limit;
+contents = cellstr(get(hObject,'String'));
+val = contents{get(hObject,'Value')};
+%% Defaults cater to my experiment. Should add controls for multiple defaults...
+if strcmp(val, 'CNS') % For my X--HVC experiment
+    detrend_param.model = 'fourier8';
+    detrend_param.range = [0.002 0.025];
+    detrend_param.response_roi = [0.0025 0.008];
+    detrend_param.response_baseline = [0.012 0.025];
+    detrend_param.response_detection_threshold = 0.5;
+    detrend_param.spike_detect = @look_for_spikes_peaks;
+    detrend_param.response_sigma = 5;
+    detrend_param.response_prob = 0.5;
+    voltage_limit = 3;
+elseif strcmp(val, 'Peripheral')
+    detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
+    detrend_param.range = [0.0007 0.02];
+    detrend_param.response_roi = [0.0007 0.002];
+    detrend_param.response_baseline = [0.005 0.02];
+    detrend_param.response_detection_threshold = 0.5;
+    detrend_param.spike_detect = @look_for_spikes_peaks;
+    detrend_param.response_sigma = 5;
+    detrend_param.response_prob = 0.5;
+    voltage_limit = 7;
+else
+    error('Invalid choice "%s"', val);
+end
+update_gui_values(hObject, handles);

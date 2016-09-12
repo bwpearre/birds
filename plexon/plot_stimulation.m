@@ -251,9 +251,9 @@ end
 hold(axes3yy(2), 'on');
 h3 = plot(axes3yy(2), data.stim.target_current(1,:)*1e3, data.stim.target_current(2,:), 'Color', [0 1 0]);
 
-%%%%%%%%
-line(data.ni.times_aligned(v([1 end])) * 1e3, data.voltage_range([1 1]));
-line(data.ni.times_aligned(v([1 end])) * 1e3, data.voltage_range([2 2]));
+%%%%%%%% Plot lines showing the detected range of voltages
+%line(data.ni.times_aligned(v([1 end])) * 1e3, data.voltage_range([1 1]));
+%line(data.ni.times_aligned(v([1 end])) * 1e3, data.voltage_range([2 2]));
 %%%%%%%
 
 hold(axes3yy(2), 'off');
