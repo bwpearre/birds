@@ -22,7 +22,7 @@ function varargout = plexme(varargin)
 
 % Edit the above text to modify the response to help plexme
 
-% Last Modified by GUIDE v2.5 12-Sep-2016 11:32:15
+% Last Modified by GUIDE v2.5 15-Sep-2016 16:24:58
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -92,7 +92,7 @@ global start_uAmps min_uAmps max_uAmps increase_step;
 global inter_trial_s;
 global voltage_limit;
 global detrend_param;
-
+global disable_safety_checks;
 
 % Offsite testing? (Cannot use the DAQ boards or other hardware)
 offsiteTest = false;
@@ -126,6 +126,7 @@ valid_electrodes = ones(1, 16);
 %valid_electrodes(12:15) = ones(1,4);
 stim.active_electrodes = zeros(1, 16);
 
+disable_safety_checks = false;
 
 if ispc
     homedir = getenv('USERPROFILE');
@@ -198,7 +199,7 @@ saving_stimulations = true;
 handles.TerminalConfig = {'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEndedNonReferenced', 'SingleEndedNonReferenced', 'SingleEndedNonReferenced'};
 %handles.TerminalConfig = {'SingleEnded', 'SingleEnded', 'SingleEnded'};
-intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_41\';
+intandir = 'C:\Users\gardnerlab\Desktop\RHD2000interface_compiled_v1_5\';
 ni_response_channels = [ 0 0 0 0 0 0 0 ];
 
 %handles.TerminalConfig = 'SingleEnded';
@@ -214,8 +215,7 @@ ni_recording_channel_ranges = 2 * [ 1 1 1 1 1 1 1 1 ];
 % (4) Pins on TDT ZIFclip if I'm backwards...
 handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ...
                      19 18 17 16 15 14 13 12 20  21  22  23   8   9  10  11 ; ...
-                     15 13 11  9  7  5  3  1 16  14  12  10   8   6   4   2 ; ...
-                      1  3  5  7  9 11 13 15  2   4   6   8  10  12  14  16];
+                     15 13 11  9  7  5  3  1 16  14  12  10   8   6   4   2];
 
 %for i = 1:16
 %    eval(sprintf('set(handles.negfirst%d, ''String'', ''%s'');', ...
@@ -284,6 +284,7 @@ end
 warning('off', 'signal:findpeaks:largeMinPeakHeight');
 warning('off', 'stats:gmdistribution:FailedToConverge');
 
+presets_Callback(handles.presets, [], handles);
 
 update_gui_values(hObject, handles);
 
@@ -1403,7 +1404,7 @@ end
 
 
   
-  
+
 
 
 
@@ -2543,7 +2544,7 @@ global stop_button_pressed;
 % Set stim to the minimum (30 nA),  stimulate a bunch of times, and get a
 % range of xcorrelation values, per valid recording channel. How many
 
-stim.current_uA = 200;
+stim.current_uA = 500;
 stim.tdt_valid = ones(1, 16);
 stim.tdt_show = stim.tdt_valid;
 detrend_param.response_detection_threshold = zeros(size(stim.tdt_valid));
@@ -2639,6 +2640,7 @@ save(fullfile(datadir, datafile_name), 'cow', '-v7.3');
 %% its own file, I have to jump through some hoop to handle errors in a
 %% unified way.  I choose this way.
 function [ data, response_detected, voltage] = stimulate_wrapper(stim, hardware, detrend_param, handles)
+global disable_safety_checks;
 
 [ data, response_detected, voltage, errors] = stimulate(stim, hardware, detrend_param, handles);
 
@@ -2647,7 +2649,16 @@ if ~isempty(errors) & errors.val ~= 0
         disp(errors.name{i});
     end
     
-    stop_everything(handles);
+    if disable_safety_checks
+        for i = 1:5
+            set(handles.disable_safety_checks, 'BackgroundColor', 0.94*[1 1 1]);
+            pause(0.03);
+            set(handles.disable_safety_checks, 'BackgroundColor', [1 0.3 0]);
+            pause(0.03);
+        end
+    else
+        stop_everything(handles);
+    end
 end
 
 
@@ -3325,3 +3336,14 @@ else
     error('Invalid choice "%s"', val);
 end
 update_gui_values(hObject, handles);
+
+
+function disable_safety_checks_Callback(hObject, eventdata, handles)
+global disable_safety_checks;
+disable_safety_checks = get(hObject, 'Value');
+if disable_safety_checks
+    set(hObject, 'BackgroundColor', [1 0 0]);
+else
+    set(hObject, 'BackgroundColor', 0.94*[1 1 1]);
+end
+

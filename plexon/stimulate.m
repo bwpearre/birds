@@ -144,7 +144,7 @@ end
 for channel = find(stim.active_electrodes | newly_maybe_inactive_electrodes)
     if ~same_waveform(channel)
         % Load patterns into Plexon system
-        disp(sprintf('Loading pattern on %d', channel));
+        %disp(sprintf('Loading pattern on %d', channel));
         err = PS_LoadArbPattern(hardware.plexon.id, channel, filenames{channel});
         if err
             ME = MException('plexon:pattern', 'Could not set pattern parameters on channel %d, because %d (%s)', ...
@@ -190,7 +190,7 @@ for channel = find(stim.active_electrodes | newly_maybe_inactive_electrodes)
     
 
     if ~same_waveform(channel)
-        disp(sprintf('Loading %d', channel));
+        %disp(sprintf('Loading %d', channel));
         [v, err] = PS_IsWaveformBalanced(hardware.plexon.id, channel);
         if err
             ME = MException('plexon:stimulate', 'Bad parameter for stimbox %d channel %d', hardware.plexon.id, channel);

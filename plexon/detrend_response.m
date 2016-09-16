@@ -78,7 +78,7 @@ lenfit = length(roitimes);
 trend = zeros(nstims_m, nsamples, nchannels);
 detrended = zeros(nstims_m, nsamples, nchannels);
 
-for stim = 1:nstims_m
+parfor stim = 1:nstims_m
     for channel = 1:nchannels
         f = fit(reshape(roitimes, [length(roii) 1]), ...
             reshape(response(stim, roii, channel), [length(roii) 1]), ...
