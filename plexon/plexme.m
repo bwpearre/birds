@@ -55,10 +55,10 @@ global scriptdir;
 scriptdir = fileparts(mfilename('fullpath'));
 
 libdirs = {'/tdt/lib64', ...
-    'C:\opt\Plexon PlexStim SDKs\MATLAB SDK for PlexStim 2.0 - 64 bit\MATLAB SDK for PlexStim 2.0 - 64 bit'};
+    'C:\opt\PlexonSDKs\MATLAB SDK for PlexStim 2.0 - 64 bit'};
 for i = 1:length(libdirs)
     if ~exist(libdirs{i}, 'dir')
-        error('The library directory "%s" does not exist.', libdirs(i));
+        error('The library directory "%s" does not exist.', libdirs{i});
     else
         addpath(libdirs{i});
     end
