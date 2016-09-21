@@ -55,7 +55,7 @@ global scriptdir;
 scriptdir = fileparts(mfilename('fullpath'));
 
 libdirs = {'/tdt/lib64', ...
-    'C:\opt\Plexon PlexStim SDKs\MATLAB SDK for PlexStim 2.0 - 64 bit\MATLAB SDK for PlexStim 2.0 - 64 bit'};
+    'C:\opt\Plexon PlexStim SDKs\MATLAB SDK for PlexStim 2.0 - 64 bit'};
 for i = 1:length(libdirs)
     if ~exist(libdirs{i}, 'dir')
         error('The library directory "%s" does not exist.', libdirs(i));
@@ -549,16 +549,22 @@ if ~hardware.tdt.device.ConnectRZ5('GB', 1)
     disp('Could not connect to RZ5');
     return;
 end
+if ~hardware.tdt.device.ConnectRA16('GB', 1)
+    error('Could not connect to Medusa preamp');
+    return;
+end
 
 if ~hardware.tdt.device.ClearCOF
-    error('tdt:start', 'Can''t clear TDT');
+    error('Can''t clear TDT');
 end
 
 if ~hardware.tdt.device.LoadCOFsf(tdtprogram, 2)
-    error('tdt:start', 'Can''t load TDT program ''%s''', tdtprogram);
+    error('Can''t load TDT program ''%s''', tdtprogram);
 end
 hardware.tdt.samplerate = hardware.tdt.device.GetSFreq;
 hardware.tdt.nsamples = ceil(hardware.tdt.samplerate * recording_time) + 1;
+
+
 
 if ~hardware.tdt.device.Run
     error('tdt:start', 'Can''t start TDT program.');
