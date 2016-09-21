@@ -53,7 +53,17 @@ function plexme_OpeningFcn(hObject, ~, handles, varargin)
 
 global scriptdir;
 scriptdir = fileparts(mfilename('fullpath'));
-path(sprintf('%s/../lib', scriptdir), path);
+
+libdirs = {'/tdt/lib64', ...
+    'C:\opt\Plexon PlexStim SDKs\MATLAB SDK for PlexStim 2.0 - 64 bit\MATLAB SDK for PlexStim 2.0 - 64 bit'};
+for i = 1:length(libdirs)
+    if ~exist(libdirs{i}, 'dir')
+        error('The library directory "%s" does not exist.', libdirs(i));
+    else
+        addpath(libdirs{i});
+    end
+end
+addpath(sprintf('%s/../lib', scriptdir));
 
 
 % Choose default command line output for plexme
@@ -90,8 +100,6 @@ global ni_response_channels;
 global currently_reconfiguring;
 global start_uAmps min_uAmps max_uAmps increase_step;
 global inter_trial_s;
-global voltage_limit;
-global detrend_param;
 global disable_safety_checks;
 
 % Offsite testing? (Cannot use the DAQ boards or other hardware)
