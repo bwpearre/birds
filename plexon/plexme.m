@@ -549,10 +549,6 @@ if ~hardware.tdt.device.ConnectRZ5('GB', 1)
     disp('Could not connect to RZ5');
     return;
 end
-if ~hardware.tdt.device.ConnectRA16('GB', 1)
-    error('Could not connect to Medusa preamp');
-    return;
-end
 
 if ~hardware.tdt.device.ClearCOF
     error('Can''t clear TDT');
