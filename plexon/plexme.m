@@ -502,7 +502,7 @@ if isfield(hardware, 'ni') & isfield(hardware.ni, 'listeners')
     delete(hardware.ni.listeners{1});
 end
 
-% When stim_trigger is 'plexon', stimulate() uses startBackground, so need
+% When stim_trigger is 'plexon', stimulate() uses startBackground, so we need
 % the callback. Otherwise, we use startForeground().
 switch hardware.stim_trigger 
     case { 'plexon', 'external' }
@@ -559,10 +559,6 @@ if ~hardware.tdt.device.ConnectRZ5('GB', 1)
     disp('Could not connect to RZ5');
     return;
 end
-%if ~hardware.tdt.device.ConnectRA16('GB', 1)
-%    error('Could not connect to Medusa preamp');
-%    return;
-%end
 
 if ~hardware.tdt.device.ClearCOF
     error('Can''t clear TDT');
@@ -2218,7 +2214,7 @@ while ~done
             end
             
 
-        case NaN
+        otherwise
             % That quirk in which the first stim sometimes doesn't register
             % on the NI will result in NaN. Do nothing; await the next
             % stim.

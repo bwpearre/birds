@@ -66,6 +66,7 @@ for i = 1:length(polarities)
     end
 end
 
+
 %reanalysed_reordered = reanalysed_thresholds(reanalysed_voltage_loc,:);
 
 %scatterrand = (rand(1,size(channel_voltage,1))-0.5)*0.5;
@@ -125,11 +126,11 @@ ylabel('Volts');
 %xlabel('CSC');
 title('Maximum absolute voltage of any electrode vs. CSC');
 
-
 axfoo = axes('Position', [0 0 1 1], 'Visible', 'off');
 axes(axfoo);
 mstext = text(0.5, 0.03, 'Current Steering Configuration', 'HorizontalAlignment', 'center');
 
+disp('hi');
 
 %set(gcf,'PaperPositionMode','auto'); 
 %saveas(gcf, 'current_steering_voltages.eps', 'epsc');

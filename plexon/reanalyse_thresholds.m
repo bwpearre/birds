@@ -6,11 +6,13 @@ files = files(sorted_index);
 
 detrend_param.model = 'fourier8';
 detrend_param.range = [0.002 0.025];
-detrend_param.response_roi = [0.0025 0.008];
+detrend_param.response_roi = [0.003 0.008];
 detrend_param.response_baseline = [0.012 0.025];
-detrend_param.response_sigma = 5;
+detrend_param.response_sigma = 3;
 detrend_param.response_prob = NaN;
 detrend_param.response_detection_threshold = Inf;
+
+ELECTRODE = 11; % Not sure what this is.  HVC electrode on which we may see responses?
 
 warning('off', 'curvefit:fit:invalidStartPoint');
 warning('off', 'signal:findpeaks:largeMinPeakHeight');
@@ -32,6 +34,8 @@ for f = 1:length(files)
         d = data.ni;
     end
     
+    % This relies on negativefirst for binning, and can't use current_scale.
+    data.stim.negativefirst = (data.stim.current_scale / -2) + 0.5;
     pattern = 2.^[0:15] * data.stim.negativefirst' + 1;
     pp = unique([pp pattern]);
     act = find(data.stim.active_electrodes);
@@ -45,7 +49,8 @@ for f = 1:length(files)
         voltage{pattern} = [];
         monitor{pattern} = [];
     end
-    [~, p] = detrend_param.spike_detect(d, data, detrend_param, d.response_detrended);
+    %[~, p] = detrend_param.spike_detect(d, data, detrend_param, d.response_detrended);
+    [~, p] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
     current{pattern} = [current{pattern} data.stim.current_uA];
     voltage{pattern} = [voltage{pattern} data.voltage];
     monitor{pattern} = [monitor{pattern} data.stim.plexon_monitor_electrode];
@@ -61,7 +66,7 @@ if true
 else
     show = '?A';
 end
-ELECTRODE=3;
+
 sortable = [];
 xlimhigh = -Inf;
 clear xData yData;
