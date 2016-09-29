@@ -158,7 +158,9 @@ end
 %               sequences programmed into plexon.  That may make amplifier
 %               blanking difficult to synchronise for more than a single pulse.
 % SOFTWARE-INITIATED, ALL PULSES IN TRAIN INITIATED INTERNALLY BY STIMULATOR:
-%    "plexon:   pulses come from Plexon--and cannot trigger amp blanking.
+%    "plexon:   pulses come from Plexon--and cannot trigger amp blanking,
+%               nor can acquisition begin before the Plexon stimulates.
+%               Use this for external trigger.
 
 hardware.stim_trigger = 'ni';
 
@@ -178,11 +180,15 @@ switch hardware.stim_trigger
         a(0);
     case 'ni'
         disp('Using NI to trigger first pulse.  Clock drift will kill amplifier blanking.');
-    case 'plexon'
+    case { 'plexon' }
         disp('Using Plexon to generate pulse trains.  Amplifier blanking WON''T WORK.');
+    case 'external'
+        disp('Using an external trigger to initiate single pulses.');
+        stim.n_repetitions = 1;
+        set(handles.n_repetitions_box, 'Enable', 'off', 'String', sprintf('%d', stim.n_repetitions));
+        set(handles.n_repetitions_hz_box, 'Enable', 'off');
     otherwise
-        disp('Invalid multipulse hardware.stim_trigger keyword');
-        a(0)
+        error('Invalid multipulse hardware.stim_trigger keyword');
 end
 
 
@@ -221,7 +227,6 @@ ni_recording_channel_ranges = 2 * [ 1 1 1 1 1 1 1 1 ];
 % (1) Pins on the Plexon
 % (2) Pins on the Intan.
 % (3) Pins on TDT ZIFclip if my guess about their value of "the connector" is right
-% (4) Pins on TDT ZIFclip if I'm backwards...
 handles.PIN_NAMES = [ 1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16 ; ...
                      19 18 17 16 15 14 13 12 20  21  22  23   8   9  10  11 ; ...
                      15 13 11  9  7  5  3  1 16  14  12  10   8   6   4   2];
@@ -249,12 +254,16 @@ set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
 set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
 set(handles.apply_params, 'BackgroundColor', [1 0 0], 'Visible', 'off');
 
-%set(handles.n_repetitions_box, 'Enable', 'off');
-
 handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
-        handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
-        handles.n_repetitions_box, handles.voltage_limit, ...
-        handles.n_repetitions_hz_box, handles.full_threshold_scan, handles.presets};
+    handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
+    handles.voltage_limit, ...
+    handles.full_threshold_scan, handles.presets};
+
+if ~strcmp(hardware.stim_trigger, 'external')
+    handles.disable_on_run{end+1} = handles.n_repetitions_box;
+    handles.disable_on_run{end+1} = handles.n_repetitions_hz_box;
+end
+
 for i = 1:16
     eval(sprintf('handles.disable_on_run{end+1} = handles.electrode%d;', i));
     eval(sprintf('handles.disable_on_run{end+1} = handles.stim%d;', i));
@@ -496,7 +505,7 @@ end
 % When stim_trigger is 'plexon', stimulate() uses startBackground, so need
 % the callback. Otherwise, we use startForeground().
 switch hardware.stim_trigger 
-    case 'plexon'
+    case { 'plexon', 'external' }
         hardware.ni.listeners{1} = addlistener(hardware.ni.session, 'DataAvailable',...
             @(obj,event) NIsession_callback(obj, event, handles));
         hardware.ni.session.NotifyWhenDataAvailableExceeds = nscans;
@@ -550,10 +559,10 @@ if ~hardware.tdt.device.ConnectRZ5('GB', 1)
     disp('Could not connect to RZ5');
     return;
 end
-if ~hardware.tdt.device.ConnectRA16('GB', 1)
-    error('Could not connect to Medusa preamp');
-    return;
-end
+%if ~hardware.tdt.device.ConnectRA16('GB', 1)
+%    error('Could not connect to Medusa preamp');
+%    return;
+%end
 
 if ~hardware.tdt.device.ClearCOF
     error('Can''t clear TDT');
@@ -2143,7 +2152,7 @@ while ~done
     errorcounter = 0;
 
     while isempty(data)
-        [ data, response, voltage ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
+        [ data, response, voltage, errors ] = stimulate_wrapper(stim, hardware, detrend_param, handles);
         errorcounter = errorcounter + 1;
         if errorcounter > 5
             a(0)
@@ -2179,7 +2188,7 @@ while ~done
                     done = true;
                 end
             end
-            f
+            
             % (3)
             if stim.current_uA < min_uAmps
                 %disp(sprintf('Current is %s < %s, but saw response so continuing lower anyway!', ...
@@ -2197,13 +2206,6 @@ while ~done
             found_lower_limit = true;
             
             if stim.current_uA >= max_uAmps
-                done = true;
-            end
-            
-            if errors.val
-                for i = 1:length(errors.name)
-                    disp(errors.name{i});
-                end
                 done = true;
             end
             
@@ -2302,6 +2304,7 @@ update_monitor_electrodes(hObject, handles);
 
 
 
+
 function full_threshold_scan_Callback(hObject, eventdata, handles)
 global stim hardware detrend_param;
 global stop_button_pressed;
@@ -2349,10 +2352,10 @@ if exist('repeat_experiment', 'var')
 
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
-elseif false
-    NPOLARITIES = 6;
+elseif true
+    NPOLARITIES = 16;
     
-    frequencies = [ 20 20 20 ]
+    frequencies = [ 27 27 27 27 27 27]
     durations = [200e-6]
     polarities = randperm(2^sum(stim.active_electrodes)) - 1;
     polarities = polarities(1:min([length(polarities) NPOLARITIES]));
@@ -2422,9 +2425,9 @@ for frequency = 1:length(frequencies)
             for electrode = find(stim.active_electrodes)
                 electrode_bit = electrode_bit + 1;
                 if bitget(polarities(polarity), electrode_bit)
-                    stim_scaling_set(handles, -1, electrode);
-                else
                     stim_scaling_set(handles, 1, electrode);
+                else
+                    stim_scaling_set(handles, -1, electrode);
                 end
             end
             
@@ -2488,7 +2491,10 @@ enable_controls(handles);
 
 
 
+function stim_scaling_set(handles, scaling, electrode)
+global stim;
 
+stim.current_scale(electrode) = scaling;
 
 
 
@@ -2563,7 +2569,7 @@ stim.current_uA = 500;
 stim.tdt_valid = ones(1, 16);
 stim.tdt_show = stim.tdt_valid;
 detrend_param.response_detection_threshold = zeros(size(stim.tdt_valid));
-detrend_param.response_sigma = 5;
+detrend_param.response_sigma = 3;
 detrend_param.response_prob = 0.5;
 
 nactive = sum(stim.tdt_valid);
@@ -2654,7 +2660,7 @@ save(fullfile(datadir, datafile_name), 'cow', '-v7.3');
 %% Since Matlab can't call subfunctions across files, and stimulate() is in
 %% its own file, I have to jump through some hoop to handle errors in a
 %% unified way.  I choose this way.
-function [ data, response_detected, voltage] = stimulate_wrapper(stim, hardware, detrend_param, handles)
+function [ data, response_detected, voltage, errors] = stimulate_wrapper(stim, hardware, detrend_param, handles)
 global disable_safety_checks;
 
 [ data, response_detected, voltage, errors] = stimulate(stim, hardware, detrend_param, handles);
@@ -2671,7 +2677,7 @@ if ~isempty(errors) & errors.val ~= 0
             set(handles.disable_safety_checks, 'BackgroundColor', [1 0.3 0]);
             pause(0.03);
         end
-    else
+    elseif nargout < 4 % If "errors" isn't asked for by the caller
         stop_everything(handles);
     end
 end

@@ -119,13 +119,9 @@ if isempty(last_stim)
     
     disp('Setting trigger mode');
     switch hardware.stim_trigger
-        case 'master8'
+        case { 'master8', 'arduino', 'ni' }
             err = PS_SetTriggerMode(hardware.plexon.id, 1);
-        case 'arduino'
-            err = PS_SetTriggerMode(hardware.plexon.id, 1);
-        case 'ni'
-            err = PS_SetTriggerMode(hardware.plexon.id, 1);
-        case 'plexon'
+        case { 'plexon', 'external' }
             err = PS_SetTriggerMode(hardware.plexon.id, 0);
     end
     if err
@@ -159,13 +155,9 @@ for channel = find(stim.active_electrodes | newly_maybe_inactive_electrodes)
             | ~stim.active_electrodes(channel) == last_stim.active_electrodes(channel)
         disp(sprintf('Setting repetitions on %d to %d', channel, stim.n_repetitions));
         switch hardware.stim_trigger
-            case 'master8'
+            case { 'master8', 'arduino', 'external' }
                 err = PS_SetRepetitions(hardware.plexon.id, channel, 1);
-            case 'arduino'
-                err = PS_SetRepetitions(hardware.plexon.id, channel, 1);
-            case 'ni'
-                err = PS_SetRepetitions(hardware.plexon.id, channel, stim.n_repetitions);
-            case 'plexon'
+            case { 'ni', 'plexon' }
                 err = PS_SetRepetitions(hardware.plexon.id, channel, stim.n_repetitions);
             otherwise
                 disp(sprintf('You must set a valid value for hardware.stim_trigger. ''%s'' is invalid.', hardware.stim_trigger));
@@ -232,13 +224,9 @@ if isfield(hardware, 'tdt') && ~isempty(hardware.tdt)
 end
 
 switch hardware.stim_trigger
-    case 'master8'
+    case { 'master8', 'arduino', 'ni' }
         [ event.Data, event.TimeStamps ] = hardware.ni.session.startForeground;
-    case 'arduino'
-        [ event.Data, event.TimeStamps ] = hardware.ni.session.startForeground;
-    case 'ni'
-        [ event.Data, event.TimeStamps ] = hardware.ni.session.startForeground;
-    case 'plexon'
+    case { 'plexon', 'external' }
         hardware.ni.session.startBackground;
         err = PS_StartStimAllChannels(hardware.plexon.id);
         if err
@@ -267,11 +255,11 @@ stim.target_current = target_current;
 
 last_stim = stim;
 
-disp(sprintf('stimulate: elapsed time is %s s', sigfig(toc)));
+%disp(sprintf('stimulate: elapsed time is %s s', sigfig(toc)));
 
 tic
 plot_stimulation(data, handles);
-disp(sprintf('plot_stimulation: elapsed time is %s s', sigfig(toc)));
+%disp(sprintf('plot_stimulation: elapsed time is %s s', sigfig(toc)));
 
 
 

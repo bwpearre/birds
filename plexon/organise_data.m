@@ -42,6 +42,7 @@ edata(:,1) = event.Data(:,1) * scalefactor_V;
 edata(:,2) = event.Data(:,2) * scalefactor_i;
 edata(:,hardware.ni.recording_channel_indices) = event.Data(:,hardware.ni.recording_channel_indices) / hardware.intan.gain;
 
+
 if ~isempty(hardware.tdt)
     
 
@@ -73,7 +74,7 @@ if ~isempty(hardware.tdt)
         tdata = tdata(1:goodlength, index_recording);
         tddata = tddata(1:goodlength, :);
         
-        
+
         
         tdt_TimeStamps = tdt_TimeStamps(1:goodlength);
         if false
@@ -98,7 +99,9 @@ if ~isempty(hardware.tdt)
         %subplot(3,1,3);
         %plot(tddata);
     catch ME
-        warning('Ignoring TDT-is-stupid error #546, WHICH IS ONLY OKAY IF YOU JUST PRESSED STOP!');
+        if ~stop_button_pressed
+            warning('Ignoring TDT-is-stupid error #546, WHICH IS ONLY OKAY IF YOU JUST PRESSED STOP!');
+        end
         data = [];
         response_detected = NaN;
         voltage = NaN;
@@ -106,9 +109,14 @@ if ~isempty(hardware.tdt)
         return;
     end
 else
+    warning('Something''s broken 2789356');
     tdata = [];
     tddata = [];
+    response_detected = NaN;
+    voltage = NaN;
 end
+
+
 
 %voltage_range_last_stim = [min(edata(:,1)) max(edata(:,1))]
 % Eliminate those ugly voltage transients (which may or may not be real):
@@ -309,9 +317,10 @@ end
 
 set(handles.baseline1, 'String', sprintf('%.2g', data.goodtimes(2)*1000));
 
+response_detected = any(data.tdt.spikes);
+
 
 if saving_stimulations
-    
     data.filename = [ file_basename '_' datestr(data.time, file_format) '.mat' ];
     fullfilename = fullfile(datadir, data.filename);
     if ~exist(datadir, 'dir')
@@ -321,6 +330,5 @@ if saving_stimulations
     save(fullfilename, 'data', '-v7.3');
 end
 
-response_detected = any(data.tdt.spikes);
 
 
