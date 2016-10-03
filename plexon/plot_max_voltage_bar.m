@@ -34,6 +34,7 @@ channel_voltage_95 = channel_voltage_stds * 1.96 ./ sqrt(channel_voltage_counts'
 % Sort the data in order of number of missing values (e.g. due to
 % overvoltage)
 [~, sortorder] = sort(channel_voltage_counts, 'descend');
+%sortorder = 1:length(sortorder);
 % Sort the complete ones in voltage ascending order, for prettiness
 something = mean(channel_voltage(:,sortorder));
 [~, pos] = sort(something(1:n_valid));
@@ -45,7 +46,7 @@ sortorder(1:n_valid) = sortorder(pos);
 % (Why?)
 %  sortorder(n_valid+1:end) = sortorder(end:-1:n_valid+1);
 
-figure(2);
+figure(3);
 clf;
 
 % Bar with errorbars
@@ -54,6 +55,7 @@ hBar = bar(channel_voltage_means(sortorder));
 % Pull in the maximum-likelihood sigmoid fit results:
 if exist('reanalysed_thresholds.mat', 'file')
     load('reanalysed_thresholds.mat');
+    reanalysed_thresholds = reanalysed_thresholds_2;
 end
 for i = 1:length(polarities)
     foo = find(reanalysed_thresholds(:,1) == polarities(i) & reanalysed_thresholds(:,2) ~= 0);
@@ -61,6 +63,7 @@ for i = 1:length(polarities)
         reanalysed_voltage_loc(i) = foo;
         reanalysed_reordered(i,:) = reanalysed_thresholds(reanalysed_voltage_loc(i),:);
     elseif length(foo) == 0
+        disp(sprintf('Couldn''t find a reanalysed voltage for %d', polarities(i)));
         reanalysed_voltage_loc(i) = NaN;
         reanalysed_reordered(i,:) = NaN * ones(1, size(reanalysed_thresholds, 2));
     end

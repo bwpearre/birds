@@ -2353,17 +2353,8 @@ elseif true
     
     frequencies = [ 27 27 27 27 27 27]
     durations = [200e-6]
-    polarities = randperm(2^sum(stim.active_electrodes)) - 1;
-    polarities = polarities(1:min([length(polarities) NPOLARITIES]));
-    % Always test non-current-steering configurations!
-    polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
-else
-    NPOLARITIES = 6;
-    
-    frequencies = [ 27 27 27 27 27 ]
-    durations = [150 200 300]*1e-6;
-    polarities = randperm(2^sum(stim.active_electrodes)) - 1;
-    polarities = polarities(1:min([length(polarities) NPOLARITIES]));
+    polarities = randperm(2^sum(stim.active_electrodes) - 2); % Will add 000 and 111 manually
+    polarities = polarities(1:min([length(polarities) NPOLARITIES-2]));
     % Always test non-current-steering configurations!
     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
 end
@@ -2421,6 +2412,7 @@ for frequency = 1:length(frequencies)
             for electrode = find(stim.active_electrodes)
                 electrode_bit = electrode_bit + 1;
                 if bitget(polarities(polarity), electrode_bit)
+                    % This seems backwards... I think it is...
                     stim_scaling_set(handles, 1, electrode);
                 else
                     stim_scaling_set(handles, -1, electrode);

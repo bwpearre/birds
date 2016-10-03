@@ -12,7 +12,7 @@ detrend_param.response_sigma = 2;
 detrend_param.response_prob = NaN;
 detrend_param.response_detection_threshold = Inf;
 
-ELECTRODE = 11; % Not sure what this is.  HVC electrode on which we may see responses?
+ELECTRODE = 11; % On which electrode are we looking for a response?
 
 warning('off', 'curvefit:fit:invalidStartPoint');
 warning('off', 'signal:findpeaks:largeMinPeakHeight');
@@ -21,9 +21,11 @@ warning('off', 'stats:gmdistribution:FailedToConverge');
 current = {};
 voltage = {};
 monitor = {};
+active_electrodes = {};
 prob = {};
-pattern_string = {};
+polarity_string = {};
 pp = [];
+look_for_spikes = @look_for_spikes_xcorr
 
 for f = 1:length(files)
     load(files(f).name);
@@ -34,28 +36,34 @@ for f = 1:length(files)
         d = data.ni;
     end
     
-    % This relies on negativefirst for binning, and can't use current_scale.
-    pattern = 2.^[0:15] * data.stim.negativefirst' + 1;
-    pp = unique([pp pattern]);
     act = find(data.stim.active_electrodes);
-    pattern_for_bar{pattern} = bin2dec(sprintf('%d', data.stim.negativefirst(act(end:-1:1))));
-    % Reverse order of pattern_string for consistency with plot_max_voltage_bar.m
-    pattern_string{pattern} = sprintf('%d', data.stim.negativefirst(act(end:-1:1)));
+    
+    % This relies on negativefirst for binning, and can't use current_scale.
+    % The +1 at the end is for indexing:
+    polarity = 2.^[0:sum(data.stim.active_electrodes)-1] * ~data.stim.negativefirst(act)' + 1;
+    pp = unique([pp polarity]);
+    polarity_for_bar{polarity} = polarity - 1;
+    % Reverse order of polarity_string for consistency with plot_max_voltage_bar.m
+    polarity_string{polarity} = dec2bin(polarity_for_bar{polarity}, sum(data.stim.active_electrodes)); %sprintf('%d', data.stim.negativefirst(act(end:-1:1)));
 
-    if pattern > length(current)
-        current{pattern} = [];
-        prob{pattern} = [];
-        voltage{pattern} = [];
-        monitor{pattern} = [];
+    if polarity > length(current)
+        current{polarity} = [];
+        prob{polarity} = [];
+        voltage{polarity} = [];
+        monitor{polarity} = [];
+        active_electrodes{polarity} = [];
     end
     %[~, p] = detrend_param.spike_detect(d, data, detrend_param, d.response_detrended);
-    [~, p] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
-    current{pattern} = [current{pattern} data.stim.current_uA];
-    voltage{pattern} = [voltage{pattern} data.voltage];
-    monitor{pattern} = [monitor{pattern} data.stim.plexon_monitor_electrode];
+    detrend_param.response_detection_threshold = zeros(1, 16);
+    detrend_param.response_detection_threshold(11) = -8.8;
+    [~, p] = look_for_spikes(d, data, detrend_param, d.response_detrended);
+    current{polarity} = [current{polarity} data.stim.current_uA];
+    voltage{polarity} = [voltage{polarity} data.voltage];
+    monitor{polarity} = [monitor{polarity} data.stim.plexon_monitor_electrode];
+    active_electrodes{polarity} = [active_electrodes{polarity}; data.stim.active_electrodes];
     foo = zeros(16,1);
     foo(d.index_recording) = p;
-    prob{pattern} = [prob{pattern} foo];
+    prob{polarity} = [prob{polarity} foo];
 end
 
 mytansig = @(a, mu, x) 0.5 + 0.5*tanh(a*(x-mu));
@@ -66,12 +74,13 @@ else
     show = '?A';
 end
 
-GoodP = [];
 
+% Find all monitor-channel sweeps for each CSC polarity p in pp, and add them to xData and yData
+GoodP = [];
 sortable = [];
 xlimhigh = -Inf;
 clear xData yData;
-for p = 1:length(pp) % p is the index into the CSC names
+for p = 1:length(pp) % p is the index into the CSC names; pp is the list of polaritys
     clear indices j V;
 
     if strcmp(show, 'V')
@@ -79,25 +88,34 @@ for p = 1:length(pp) % p is the index into the CSC names
         j = find(diff([Inf i]) ~= 1);
         k = diff([j length(i)+1]);
         if length(j) == 0
-            disp(sprintf('No sweeps found in config %s', pattern_string{pp(p)}));
+            disp(sprintf('No sweeps found in config %s', polarity_string{pp(p)}));
             continue;
         elseif length(j) == 1
-            disp(sprintf('Only one sweep found in   %s', pattern_string{pp(p)}));
+            disp(sprintf('Only one sweep found in   %s', polarity_string{pp(p)}));
             continue;
         else
-            disp(sprintf('Found %d sweeps in config  %s', length(j), pattern_string{pp(p)}));
+            disp(sprintf('Found %d sweeps in config  %s', length(j), polarity_string{pp(p)}));
         end
         for s = 1:length(j)
             % s is the sweep number
             indices{s} = i(j(s)):i(j(s))+k(s);
+            
+            % Going to reverse-fudge other voltage data.  Store extra data as well
+            %indices_presweep{s} = 1:i(j(s))-1;
+            
+            
             if length(unique(current{pp(p)}(indices{s}))) ~= 1
-                disp('Different values for current in a sweep!');
+                warning('Different values for current in a sweep.');
             end
             % Maximum monitor voltage over the monitor electrodes:
+            
             V{s} = max(voltage{pp(p)}(indices{s})) * ones(1, k(s)+1);
+           
             cur_s{p}(s) = current{pp(p)}(indices{s}(1));
             vol_s{p}(s,:) = voltage{pp(p)}(indices{s});
+            
         end
+        
         
         % The goal here is to get a bunch of indices into stimulation runs
         % with corresponding maximum voltages, so we can get the
@@ -131,7 +149,7 @@ for p = 1:length(pp) % p is the index into the CSC names
     % Fit model to data.
     fits{p} = fit( xData{p}, yData{p}, ft, opts );
     foo = confint(fits{p});
-    reanalysed_thresholds(p,:) = [ pattern_for_bar{pp(p)} fits{p}.mu fits{p}.a foo(:,2)'];
+    reanalysed_thresholds(p,:) = [ polarity_for_bar{pp(p)} fits{p}.mu fits{p}.a foo(:,2)'];
     sortable(p) = fits{p}.mu;
 end
 
@@ -163,7 +181,7 @@ for p = GoodP
     xlimhigh = max(xlimhigh, max(xData{order(p)}));
     xlabel(show);
     ylabel('Pr(r)');
-    title(sprintf('%s: %s %s', pattern_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
+    title(sprintf('%s: %s %s', polarity_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
     set(gca, 'YLim', [0 1]);
     scatter(fits{order(p)}.mu, 0.5, 20, [1 0 0], '+');
     
@@ -172,6 +190,8 @@ for p = GoodP
     drawnow;
 end
 
+
+% Plot the fits
 plotind = 1;
 for p = GoodP
     if isempty(fits{order(p)})
@@ -194,6 +214,7 @@ end
 % check for extrapolating max voltages for the non-sweep data.
 figure(11);
 plotind = 1;
+
 for p = GoodP
     if isempty(xData{order(p)})
         continue;
@@ -201,8 +222,75 @@ for p = GoodP
     subplot(sp1, sp1, plotind);
     plotind = plotind + 1;
     plot(vol_s{order(p)}');
-    title(sprintf('%s: %s %s', pattern_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
-    
-    [~, max_vol_s_i{p}] = max(mean(vol_s{p}));
-    
+    title(sprintf('%s: %s %s', polarity_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
 end
+
+
+% Go through all data and add all stimulations for fitting with the synthesised (estimated) voltage
+% data:
+figure(2);
+clf;
+plotind = 1;
+Vest = {};
+Pest = {};
+for p = GoodP
+    
+    % Position in vol_s that contains the maximum voltage over an average of the sweeps
+    voltage_s = mean(vol_s{p})/max(mean(vol_s{p}));
+    voltage_scale{p} = zeros(1, 16);
+    voltage_scale{p}(find(active_electrodes{polarity}(1,:))) = voltage_s;
+    % FIXME Convert that to the index index that includes all electrodes?
+
+    for i = 1:length(current{pp(p)})
+        Vest{p}(i) = voltage{pp(p)}(i) / voltage_scale{p}(monitor{pp(p)}(i));
+        Pest{p}(i) = prob{pp(p)}(ELECTRODE, i);
+    end
+    
+    %for i = 1:100
+    %    Vest{p}(end+1) = 0;
+    %    Pest{p}(end+1) = 0;
+    %end
+    
+    [xData2{p}, yData2{p}] = prepareCurveData(Vest{p}, Pest{p});
+    
+    % Set up fittype and options.
+    ft = fittype( mytansig, 'independent', 'x', 'dependent', 'y' );
+    opts = fitoptions( 'Method', 'NonlinearLeastSquares' );
+    opts.Display = 'Off';
+    opts.StartPoint = [1 1];
+    opts.Lower = [0 -Inf];
+    opts.Upper = [Inf Inf];
+
+    % Fit model to data.
+    fits{p} = fit(xData2{p}, yData2{p}, ft, opts );
+    conf_ints = confint(fits{p});
+    reanalysed_thresholds_2(p,:) = [ polarity_for_bar{pp(p)} fits{p}.mu fits{p}.a conf_ints(:,2)'];
+   
+    
+    % Scatterplot the new data
+    subplot(sp1, sp1, plotind);
+    plotind = plotind + 1;
+    
+    cla;
+    hold on;
+    scatter(xData2{order(p)}+random('unif', -0.01, 0.01, size(yData2{order(p)})), ...
+        yData2{order(p)}+random('unif', -0.01, 0.01, size(yData2{order(p)})), ...
+        20, 1:length(xData2{order(p)}), 'filled');
+    %xlimhigh = max(xlimhigh, max(xData{order(p)}));
+    xlabel(show);
+    ylabel('Pr(r)');
+    title(sprintf('%s: %s %s', polarity_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
+    set(gca, 'XLim', domain, 'YLim', [0 1]);
+    scatter(fits{order(p)}.mu, 0.5, 20, [1 0 0], '+');
+    
+
+    hold on;
+    domain = get(gca, 'xlim');
+    fitx = linspace(domain(1), domain(2), 50);
+    plot(fitx, mytansig(fits{order(p)}.a, fits{order(p)}.mu, fitx), 'r');
+    hold off;
+
+end
+
+save('reanalysed_thresholds.mat', 'reanalysed_thresholds', 'reanalysed_thresholds_2');
+plot_max_voltage_bar;
