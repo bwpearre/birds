@@ -1,6 +1,6 @@
 clear;
 
-load response_thresholds;
+load('response_thresholds');
 
 [nfrequencies ndurations npolarities] = size(response_thresholds);
 
@@ -99,7 +99,7 @@ for ii=1:length(channel_voltage_means)
     % Plot error bars for the maximum-likelihood estimates
     if reanalysed_reordered(sortorder(ii),4) > 0 && reanalysed_reordered(sortorder(ii),4) < 3.5
         line([1 1]*ii+errorbars_offset, reanalysed_reordered(sortorder(ii),4:5), ...
-            'Color', [0 0.5 0], 'LineWidth', 2);
+            'Color', [0 0.7 0], 'LineWidth', 5);
             %'Color', [0 0.5 0], 'LineWidth', reanalysed_reordered(sortorder(ii),3));
     end
     

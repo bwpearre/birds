@@ -162,10 +162,10 @@ end
 
 detrend_param_orig = data.detrend_param;
 
-warning('Changing detrend params...');
-detrend_param.spike_detect = @look_for_spikes_xcorr
-detrend_param.response_detection_threshold = zeros(1, 16);
-detrend_param.response_detection_threshold(11) = -8.8;
+%warning('Changing detrend params...');
+%detrend_param.spike_detect = @look_for_spikes_xcorr
+%detrend_param.response_detection_threshold = zeros(1, 16);
+%detrend_param.response_detection_threshold(11) = -8.8;
 
 
 if ~isequal(detrend_param, data.detrend_param)

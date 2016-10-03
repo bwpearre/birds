@@ -213,7 +213,11 @@ end
 if data.version >= 26
     % This will be broken if stim_scale strays from {-1,1}, but is needed
     % for plot_max_voltage_bar.m and reanalyse_threshlds.m
+    
+    % lw95rhp-2015-12-04 is version 23, and wants it this way.  Somewhere there's a sign
+    % flip--probably at version 27?
     data.stim.negativefirst = (data.stim.current_scale / -2) + 0.5;
+    data.stim.negativefirst = ~data.stim.negativefirst;
 end
 
 if data.version < 27

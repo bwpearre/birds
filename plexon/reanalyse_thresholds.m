@@ -1,3 +1,4 @@
+%function [reanalysed_thresholds, reanalysed_thresholds_2] = reanalyse_thresholds;
 clear;
 
 files = dir('stim*.mat');
@@ -12,7 +13,8 @@ detrend_param.response_sigma = 2;
 detrend_param.response_prob = NaN;
 detrend_param.response_detection_threshold = Inf;
 
-ELECTRODE = 11; % On which electrode are we looking for a response?
+response_electrode = 11; % On which electrode are we looking for a response?
+%response_electrode = 3;
 
 warning('off', 'curvefit:fit:invalidStartPoint');
 warning('off', 'signal:findpeaks:largeMinPeakHeight');
@@ -25,7 +27,7 @@ active_electrodes = {};
 prob = {};
 polarity_string = {};
 pp = [];
-look_for_spikes = @look_for_spikes_xcorr
+%look_for_spikes = @look_for_spikes_xcorr
 
 for f = 1:length(files)
     load(files(f).name);
@@ -40,7 +42,7 @@ for f = 1:length(files)
     
     % This relies on negativefirst for binning, and can't use current_scale.
     % The +1 at the end is for indexing:
-    polarity = 2.^[0:sum(data.stim.active_electrodes)-1] * ~data.stim.negativefirst(act)' + 1;
+    polarity = 2.^[0:sum(data.stim.active_electrodes)-1] * data.stim.negativefirst(act)' + 1;
     pp = unique([pp polarity]);
     polarity_for_bar{polarity} = polarity - 1;
     % Reverse order of polarity_string for consistency with plot_max_voltage_bar.m
@@ -54,9 +56,9 @@ for f = 1:length(files)
         active_electrodes{polarity} = [];
     end
     %[~, p] = detrend_param.spike_detect(d, data, detrend_param, d.response_detrended);
-    detrend_param.response_detection_threshold = zeros(1, 16);
-    detrend_param.response_detection_threshold(11) = -8.8;
-    [~, p] = look_for_spikes(d, data, detrend_param, d.response_detrended);
+    %detrend_param.response_detection_threshold = zeros(1, 16);
+    %detrend_param.response_detection_threshold(11) = -8.8;
+    [~, p] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
     current{polarity} = [current{polarity} data.stim.current_uA];
     voltage{polarity} = [voltage{polarity} data.voltage];
     monitor{polarity} = [monitor{polarity} data.stim.plexon_monitor_electrode];
@@ -124,12 +126,12 @@ for p = 1:length(pp) % p is the index into the CSC names; pp is the list of pola
         yData{p} = []; % Probability of response over all stimulations in the sweep
         for s = 1:length(j)
             xData{p} = [xData{p} V{s}];
-            yData{p} = [yData{p} prob{pp(p)}(ELECTRODE,indices{s})];
+            yData{p} = [yData{p} prob{pp(p)}(response_electrode,indices{s})];
         end
         
         [xData{p}, yData{p}] = prepareCurveData(xData{p}, yData{p});
     else
-        [xData{p}, yData{p}] = prepareCurveData(current{pp(p)}, prob{pp(p)}(ELECTRODE,:));
+        [xData{p}, yData{p}] = prepareCurveData(current{pp(p)}, prob{pp(p)}(response_electrode,:));
     end
     
     if length(xData{p}) < 5
@@ -156,8 +158,8 @@ end
 
 save('reanalysed_thresholds.mat', 'reanalysed_thresholds');
 
-[~, order] = sort(sortable);
-order = 1:length(pp)
+%[~, order] = sort(sortable);
+order = 1:length(pp);
 
 %order = order(2:17)
 sp1 = ceil(sqrt(length(GoodP)));
@@ -229,27 +231,31 @@ end
 % Go through all data and add all stimulations for fitting with the synthesised (estimated) voltage
 % data:
 figure(2);
-clf;
 plotind = 1;
 Vest = {};
 Pest = {};
 for p = GoodP
     
-    % Position in vol_s that contains the maximum voltage over an average of the sweeps
+    % Position in vol_s that contains the maximum voltage over an average of the sweeps:
     voltage_s = mean(vol_s{p})/max(mean(vol_s{p}));
-    voltage_scale{p} = zeros(1, 16);
+    [~,pos] = max(voltage_s); % Find average maximum-voltage electrode
+    for i = 1:size(vol_s{p}, 1) % Normalise all rows by the average maximum-voltage electrode
+        voltage_s(i,:) = vol_s{p}(i,:) / vol_s{p}(i,pos);
+    end
+    voltage_s = mean(voltage_s, 1); % Average of per-run scaling factors
+    voltage_scale{p} = zeros(1, 16); % Align by active_electrodes
     voltage_scale{p}(find(active_electrodes{polarity}(1,:))) = voltage_s;
     % FIXME Convert that to the index index that includes all electrodes?
 
     for i = 1:length(current{pp(p)})
         Vest{p}(i) = voltage{pp(p)}(i) / voltage_scale{p}(monitor{pp(p)}(i));
-        Pest{p}(i) = prob{pp(p)}(ELECTRODE, i);
+        Pest{p}(i) = prob{pp(p)}(response_electrode, i);
     end
     
-    %for i = 1:100
-    %    Vest{p}(end+1) = 0;
-    %    Pest{p}(end+1) = 0;
-    %end
+    for i = 1:10
+        Vest{p}(end+1) = 0;
+        Pest{p}(end+1) = 0;
+    end
     
     [xData2{p}, yData2{p}] = prepareCurveData(Vest{p}, Pest{p});
     
@@ -293,4 +299,3 @@ for p = GoodP
 end
 
 save('reanalysed_thresholds.mat', 'reanalysed_thresholds', 'reanalysed_thresholds_2');
-plot_max_voltage_bar;

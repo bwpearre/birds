@@ -2349,7 +2349,7 @@ if exist('repeat_experiment', 'var')
     update_gui_values(hObject, handles);
     handles = configure_acquisition_devices(hObject, handles);
 elseif true
-    NPOLARITIES = 16;
+    NPOLARITIES = 16; % Perfect squares are easiest to subplot...
     
     frequencies = [ 27 27 27 27 27 27]
     durations = [200e-6]
