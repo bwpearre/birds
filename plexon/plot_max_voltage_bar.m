@@ -91,7 +91,7 @@ errorbars_offset = 0.1;
 for ii=1:length(channel_voltage_means)
     % Plot centres for the maximum-likelihood estimates
     scatter(ii+errorbars_offset, reanalysed_reordered(sortorder(ii),2), ...
-        40*reanalysed_reordered(sortorder(ii),3), [0 0.5 0], '+');
+        40*reanalysed_reordered(sortorder(ii),3)+eps, [0 0.5 0], '+');
     
     % Plot error bars for the maximum-likelihood estimates
     if reanalysed_reordered(sortorder(ii),4) > 0 && reanalysed_reordered(sortorder(ii),4) < 3.5
@@ -129,8 +129,6 @@ title('Maximum absolute voltage of any electrode vs. CSC');
 axfoo = axes('Position', [0 0 1 1], 'Visible', 'off');
 axes(axfoo);
 mstext = text(0.5, 0.03, 'Current Steering Configuration', 'HorizontalAlignment', 'center');
-
-disp('hi');
 
 %set(gcf,'PaperPositionMode','auto'); 
 %saveas(gcf, 'current_steering_voltages.eps', 'epsc');

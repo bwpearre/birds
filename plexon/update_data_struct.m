@@ -210,6 +210,12 @@ if data.version < 26
     data.detrend_param.spike_detect = @look_for_spikes_peaks;
 end
 
+if data.version >= 26
+    % This will be broken if stim_scale strays from {-1,1}, but is needed
+    % for plot_max_voltage_bar.m and reanalyse_threshlds.m
+    data.stim.negativefirst = (data.stim.current_scale / -2) + 0.5;
+end
+
 if data.version < 27
     data.voltage_range = [-data.voltage data.voltage];
 end
