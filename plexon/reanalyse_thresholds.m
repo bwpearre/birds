@@ -9,7 +9,7 @@ detrend_param.model = 'fourier8';
 detrend_param.range = [0.002 0.025];
 detrend_param.response_roi = [0.003 0.008];
 detrend_param.response_baseline = [0.012 0.025];
-detrend_param.response_sigma = 2;
+detrend_param.response_sigma = 3;
 detrend_param.response_prob = NaN;
 detrend_param.response_detection_threshold = Inf;
 
@@ -50,23 +50,32 @@ for f = 1:length(files)
 
     if polarity > length(current)
         current{polarity} = [];
-        prob{polarity} = [];
         voltage{polarity} = [];
         monitor{polarity} = [];
         active_electrodes{polarity} = [];
+        prob{polarity} = [];
     end
+    % Force different detrend? Redundant with passing detrend_param to update_data_struct above?
     %[~, p] = detrend_param.spike_detect(d, data, detrend_param, d.response_detrended);
     %detrend_param.response_detection_threshold = zeros(1, 16);
     %detrend_param.response_detection_threshold(11) = -8.8;
-    [~, p] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
+    [~, response, probability] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
     current{polarity} = [current{polarity} data.stim.current_uA];
     voltage{polarity} = [voltage{polarity} data.voltage];
     monitor{polarity} = [monitor{polarity} data.stim.plexon_monitor_electrode];
     active_electrodes{polarity} = [active_electrodes{polarity}; data.stim.active_electrodes];
     foo = zeros(16,1);
-    foo(d.index_recording) = p;
+    foo(d.index_recording) = probability;
     prob{polarity} = [prob{polarity} foo];
 end
+
+c = 0;
+m = 1;
+for i = 1:length(pp)
+    c = c + length(current{pp(i)});
+    m = min(min(prob{pp(i)}(response_electrode, :)), m);
+end
+disp(sprintf('Loaded %d files.', c));
 
 mytansig = @(a, mu, x) 0.5 + 0.5*tanh(a*(x-mu));
 
@@ -252,7 +261,8 @@ for p = GoodP
         Pest{p}(i) = prob{pp(p)}(response_electrode, i);
     end
     
-    for i = 1:10
+    % Every time there is no detection, add that v
+    for i = 1:0
         Vest{p}(end+1) = 0;
         Pest{p}(end+1) = 0;
     end
