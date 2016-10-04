@@ -1,20 +1,16 @@
-%function [reanalysed_thresholds, reanalysed_thresholds_2] = reanalyse_thresholds;
 clear;
 
 files = dir('stim*.mat');
 [~, sorted_index] = sortrows({files.date}');
 files = files(sorted_index);
 
-detrend_param.model = 'fourier8';
+detrend_param.model = 'exp1';
 detrend_param.range = [0.002 0.025];
 detrend_param.response_roi = [0.003 0.008];
 detrend_param.response_baseline = [0.012 0.025];
 detrend_param.response_sigma = 3;
 detrend_param.response_prob = NaN;
 detrend_param.response_detection_threshold = Inf;
-
-response_electrode = 11; % On which electrode are we looking for a response?
-%response_electrode = 3;
 
 warning('off', 'curvefit:fit:invalidStartPoint');
 warning('off', 'signal:findpeaks:largeMinPeakHeight');
@@ -53,29 +49,34 @@ for f = 1:length(files)
         voltage{polarity} = [];
         monitor{polarity} = [];
         active_electrodes{polarity} = [];
+        probs{polarity} = [];
         prob{polarity} = [];
+        response_recordings{polarity} = {};
+        response_channels{polarity} = {};
+        times{polarity} = {};
     end
     % Force different detrend? Redundant with passing detrend_param to update_data_struct above?
     %[~, p] = detrend_param.spike_detect(d, data, detrend_param, d.response_detrended);
     %detrend_param.response_detection_threshold = zeros(1, 16);
     %detrend_param.response_detection_threshold(11) = -8.8;
-    [~, response, probability] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
+    [~, response_probabilities] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
     current{polarity} = [current{polarity} data.stim.current_uA];
     voltage{polarity} = [voltage{polarity} data.voltage];
     monitor{polarity} = [monitor{polarity} data.stim.plexon_monitor_electrode];
     active_electrodes{polarity} = [active_electrodes{polarity}; data.stim.active_electrodes];
-    foo = zeros(16,1);
-    foo(d.index_recording) = probability;
-    prob{polarity} = [prob{polarity} foo];
+    foo = zeros(16, 1);
+    foo(data.tdt.index_recording) = response_probabilities;
+    probs{polarity} = [probs{polarity} foo];
+    prob{polarity} = [prob{polarity} max(response_probabilities)];
+    times{polarity}{end+1} = d.times_aligned;
+    
+    % If we're seeing a good response, then add the response to a collection for plotting:
+    if max(response_probabilities) >= 0.9
+        response_recordings{polarity}{end+1} = data.tdt.response_detrended;
+        response_channels{polarity}{end+1} = data.tdt.index_recording;
+    end
 end
 
-c = 0;
-m = 1;
-for i = 1:length(pp)
-    c = c + length(current{pp(i)});
-    m = min(min(prob{pp(i)}(response_electrode, :)), m);
-end
-disp(sprintf('Loaded %d files.', c));
 
 mytansig = @(a, mu, x) 0.5 + 0.5*tanh(a*(x-mu));
 
@@ -86,8 +87,10 @@ else
 end
 
 
-% Find all monitor-channel sweeps for each CSC polarity p in pp, and add them to xData and yData
-GoodP = [];
+% Find all monitor-channel sweeps for each CSC polarity p in pp, and add them to xData and yData.
+% Even if we don't do fits with this (they're not very good), we need these in order to compute the
+% ratio of voltages per electrode.
+goodP = [];
 sortable = [];
 xlimhigh = -Inf;
 clear xData yData;
@@ -135,19 +138,19 @@ for p = 1:length(pp) % p is the index into the CSC names; pp is the list of pola
         yData{p} = []; % Probability of response over all stimulations in the sweep
         for s = 1:length(j)
             xData{p} = [xData{p} V{s}];
-            yData{p} = [yData{p} prob{pp(p)}(response_electrode,indices{s})];
+            yData{p} = [yData{p} prob{pp(p)}(indices{s})];
         end
         
         [xData{p}, yData{p}] = prepareCurveData(xData{p}, yData{p});
     else
-        [xData{p}, yData{p}] = prepareCurveData(current{pp(p)}, prob{pp(p)}(response_electrode,:));
+        [xData{p}, yData{p}] = prepareCurveData(current{pp(p)}, prob{pp(p)});
     end
     
     if length(xData{p}) < 5
         continue;
     end
 
-    GoodP = [GoodP p];
+    goodP = [goodP p];
     
     % Set up fittype and options.
     ft = fittype( mytansig, 'independent', 'x', 'dependent', 'y' );
@@ -164,18 +167,63 @@ for p = 1:length(pp) % p is the index into the CSC names; pp is the list of pola
     sortable(p) = fits{p}.mu;
 end
 
+colours = distinguishable_colors(length(goodP));
 
-save('reanalysed_thresholds.mat', 'reanalysed_thresholds');
+% What's the best bet for a channel for the response graphs?
+clear response_means response_stds response_stes;
+for p = goodP
+    all_res = [];
+    [~, best_response{pp(p)}] = max(mean(probs{pp(p)}, 2), [], 1);
+    % Accumulate all the response recordings for the best channel:
+    for i = 1:length(response_recordings{pp(p)})
+        response_recording_ind = find(response_channels{pp(p)}{i} == best_response{pp(p)});
+        all_res = [all_res; response_recordings{pp(p)}{i}(:, :, response_recording_ind)];
+    end
+    response_means(p,:) = mean(all_res, 1);
+    response_stds(p,:) = std(all_res, 0, 1);
+    response_ste95(p,:) = 1.96 * response_stds(p,:) / sqrt(size(all_res, 1));
+end
+roii = find(times{pp(p)}{1} >= detrend_param.response_roi(1) & times{pp(p)}{1} <= detrend_param.response_roi(2));
+roitimes = times{pp(p)}{1}(roii);
+% Plot the mean+std on top, and the mean+ste underneath:
+figure(4);
+subplot(2,1,1);
+cla;
+hold on;
+pi = 1;
+for p = goodP
+    shadedErrorBar(roitimes, response_means(p, roii), response_stds(p,roii), {'color', colours(pi,:)});
+    pi = pi + 1;
+end
+hold off;
+ylabel('V (\mu V)');
+set(gca, 'YLim', [-0.03 0.03]);
+title('Response shapes \pm \sigma');
+subplot(2,1,2);
+cla;
+hold on;
+pi = 1;
+for p = goodP
+    shadedErrorBar(roitimes, response_means(p, roii), response_ste95(p,roii), {'color', colours(pi,:)});
+    pi = pi + 1;
+end
+hold off;
+xlabel('Time post-stimulus (ms)');
+ylabel('V (\mu V)');
+title('Response shapes (95% confidence)');
+set(gca, 'YLim', [-0.03 0.03]);
+
+
 
 %[~, order] = sort(sortable);
 order = 1:length(pp);
 
 %order = order(2:17)
-sp1 = ceil(sqrt(length(GoodP)));
+sp1 = ceil(sqrt(length(goodP)));
 
 figure(1);
 plotind = 1;
-for p = GoodP
+for p = goodP
     %% Draw stuff...
     if isempty(xData{order(p)})
         disp(sprintf('Could not get data for p=%d', p));
@@ -204,7 +252,7 @@ end
 
 % Plot the fits
 plotind = 1;
-for p = GoodP
+for p = goodP
     if isempty(fits{order(p)})
         continue;
     end
@@ -226,7 +274,7 @@ end
 figure(11);
 plotind = 1;
 
-for p = GoodP
+for p = goodP
     if isempty(xData{order(p)})
         continue;
     end
@@ -243,7 +291,7 @@ figure(2);
 plotind = 1;
 Vest = {};
 Pest = {};
-for p = GoodP
+for p = goodP
     
     % Position in vol_s that contains the maximum voltage over an average of the sweeps:
     voltage_s = mean(vol_s{p})/max(mean(vol_s{p}));
@@ -258,7 +306,7 @@ for p = GoodP
 
     for i = 1:length(current{pp(p)})
         Vest{p}(i) = voltage{pp(p)}(i) / voltage_scale{p}(monitor{pp(p)}(i));
-        Pest{p}(i) = prob{pp(p)}(response_electrode, i);
+        Pest{p}(i) = prob{pp(p)}(i);
     end
     
     % Every time there is no detection, add that v
@@ -280,7 +328,7 @@ for p = GoodP
     % Fit model to data.
     fits{p} = fit(xData2{p}, yData2{p}, ft, opts );
     conf_ints = confint(fits{p});
-    reanalysed_thresholds_2(p,:) = [ polarity_for_bar{pp(p)} fits{p}.mu fits{p}.a conf_ints(:,2)'];
+    reanalysed_thresholds(p,:) = [ polarity_for_bar{pp(p)} fits{p}.mu fits{p}.a conf_ints(:,2)'];
    
     
     % Scatterplot the new data
@@ -308,4 +356,4 @@ for p = GoodP
 
 end
 
-save('reanalysed_thresholds.mat', 'reanalysed_thresholds', 'reanalysed_thresholds_2');
+save('reanalysed_thresholds.mat', 'reanalysed_thresholds');

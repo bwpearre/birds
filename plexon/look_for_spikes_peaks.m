@@ -1,4 +1,5 @@
-function [ spikes response probability ] = look_for_spikes_peaks(d, data, detrend_param, response_detrended, handles);
+function [ spikes response_probabilities response_detrended ] ...
+    = look_for_spikes_peaks(d, data, detrend_param, response_detrended, handles);
 
 MAX_JITTER = 0.0002; % seconds.  Projectors should be synchronous to within 50 us, while intraneurons might be 200 us.
 
@@ -18,6 +19,17 @@ if ~exist('detrend_param', 'var') | isempty(detrend_param)
     detrend_param = data.detrend_param;
 end
 
+%if ~isfield(d, 'response_detrended') & (...the things below...) ...
+if exist('detrend_param') & ~isempty(detrend_param) ...
+        & ~isequal(detrend_param, data.detrend_param) ...
+        & isempty(response_detrended)
+    disp('look_for_spikes_peaks: re-detrending as follows:');
+    detrend_param
+    response_detrended = detrend_response(d, data, detrend_param);
+else
+    response_detrended = d.response_detrended;
+end
+
 roi = detrend_param.response_roi;
 baseline = detrend_param.response_baseline;
 roi(1) = max(roi(1), minstarttime);
@@ -31,7 +43,7 @@ baselinei = find(times > baseline(1) & times < baseline(2));
 %end
 %validi = find(times > roi(1) & times < baseline(2));
 
-
+time_detrended = times(roii);
 
 %disp(sprintf('Look for spikes: toi [%g %g] ms, baseline [%g %g] ms', ...
 %    roi(1)*1000, roi(2)*1000, baseline(1)*1000, baseline(2)*1000));
@@ -46,17 +58,6 @@ if length(roii) < 10
     response = zeros(1, nchannels);
     spikes = zeros(1, nchannels);
     return;
-end
-
-if ~isfield(d, 'response_detrended') ...
-        | (exist('detrend_param') & ~isempty(detrend_param) ...
-           & ~isequal(detrend_param, data.detrend_param) ...
-           & isempty(response_detrended))
-    disp('look_for_spikes_peaks: re-detrending as follows:');
-    detrend_param
-    response_detrended = detrend_response(d, data, detrend_param);
-else
-    response_detrended = d.response_detrended;
 end
 
 
@@ -108,9 +109,8 @@ end
 % If fewer than 2 peaks line up, toss the singletons:
 pp(find(pp < 2)) = 0;
 pp = pp / nstims;
-response = max(pp);
-spikes = response >= detrend_param.response_prob;
-probability = max(response);
+response_probabilities = max(pp, [], 1);
+spikes = response_probabilities >= detrend_param.response_prob;
 
 % Plot curves and detected spikes on channel 'channel'
 if exist('handles')
