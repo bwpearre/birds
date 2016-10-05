@@ -35,6 +35,10 @@ for f = 1:length(files)
     else
         d = data.ni;
     end
+    if any(data.tdt.index_recording ~= 11)
+        disp('Rejected one file...');
+        continue;
+    end
     
     act = find(data.stim.active_electrodes);
     
@@ -62,7 +66,7 @@ for f = 1:length(files)
     %detrend_param.response_detection_threshold = zeros(1, 16);
     %detrend_param.response_detection_threshold(11) = -8.8;
     %[~, response_probabilities] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
-    [~, response_probabilities, response_detrended] = look_for_spikes_peaks(d, data, detrend_param);
+    [~, response_probabilities, response_detrended, aligning_stims] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
     current{polarity} = [current{polarity} data.stim.current_uA];
     voltage{polarity} = [voltage{polarity} data.voltage];
     monitor{polarity} = [monitor{polarity} data.stim.plexon_monitor_electrode];
@@ -74,8 +78,8 @@ for f = 1:length(files)
     times{polarity}{end+1} = d.times_aligned;
     
     % If we're seeing a good response, then add the response to a collection for plotting:
-    if max(response_probabilities) >= 0.9
-        response_recordings{polarity}{end+1} = response_detrended;
+    if max(response_probabilities) >= 0.6
+        response_recordings{polarity}{end+1} = response_detrended(aligning_stims{1},:);
         response_channels{polarity}{end+1} = data.tdt.index_recording;
     end
 end
@@ -177,13 +181,19 @@ colours = distinguishable_colors(length(goodP));
 %% Plot responses to the different CSCs...
 % What's the best bet for a channel for the response graphs?
 figure(4);
+% Delete old checkboxes and re-create them:
+if exist('checkboxes', 'var')
+    for i = 1:length(checkboxes)
+        delete(checkboxes{i});
+    end
+end
 pi = 1;
 for i = goodP
         checkboxes{i} = uicontrol('Style', 'checkbox',...
            'String', sprintf('%d', i), ...
            'Position', [5 5+20*pi 40 18],...
            'Value', 1, ...
-           'BackgroundColor', colours(pi,:), ...
+           'ForegroundColor', colours(pi,:), ...
            'Callback', @plotwhich);
        pi = pi + 1;
 end
@@ -197,11 +207,17 @@ for p = goodP
         response_recording_ind = find(response_channels{pp(p)}{i} == best_response{pp(p)});
         all_res = [all_res; response_recordings{pp(p)}{i}(:, :, response_recording_ind)];
     end
-    response_means(p,:) = mean(all_res, 1);
-    response_stds(p,:) = std(all_res, 0, 1);
-    response_ste95(p,:) = 1.96 * response_stds(p,:) / sqrt(size(all_res, 1));
+    try
+        response_means(p,:) = mean(all_res, 1);
+        response_stds(p,:) = std(all_res, 0, 1);
+        response_ste95(p,:) = 1.96 * response_stds(p,:) / sqrt(size(all_res, 1));
+    catch ME
+        showP = showP(find(showP ~= p));
+        set(checkboxes{p}, 'Value', 0, 'Enable', 'off');
+        disp(sprintf('No robust responses found for CSC %d', p));
+    end
 end
-roii = find(times{pp(p)}{1} >= detrend_param.response_roi(1)-0.001 & times{pp(p)}{1} <= detrend_param.response_roi(2));
+roii = find(times{pp(p)}{1} >= detrend_param.response_roi(1) & times{pp(p)}{1} <= detrend_param.response_roi(2));
 roitimes = times{pp(p)}{1}(roii);
 % Plot the mean+std on top, and the mean+ste underneath:
 plot_wiggles(goodP, colours, roitimes, roii, response_means, response_stds, response_ste95);
@@ -261,25 +277,27 @@ for p = goodP
 end
 
 
+
 % Plot the relative voltage of each electrode.  This is a visual sanity
 % check for extrapolating max voltages for the non-sweep data.
-figure(11);
-plotind = 1;
-
-for p = goodP
-    if isempty(xData{order(p)})
-        continue;
+if false
+    figure(11);
+    plotind = 1;
+    
+    for p = goodP
+        if isempty(xData{order(p)})
+            continue;
+        end
+        subplot(sp1, sp1, plotind);
+        plotind = plotind + 1;
+        plot(vol_s{order(p)}');
+        title(sprintf('%s: %s %s', polarity_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
     end
-    subplot(sp1, sp1, plotind);
-    plotind = plotind + 1;
-    plot(vol_s{order(p)}');
-    title(sprintf('%s: %s %s', polarity_string{pp(order(p))}, sigfig(fits{order(p)}.mu), show));
-end
-
+end    
 
 % Go through all data and add all stimulations for fitting with the synthesised (estimated) voltage
 % data:
-figure(2);
+figure(1);
 plotind = 1;
 Vest = {};
 Pest = {};

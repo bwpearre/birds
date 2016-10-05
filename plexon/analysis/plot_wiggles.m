@@ -4,13 +4,15 @@ global showP;
 persistent previous;
 
 
-optional_inputs = {'goodP', 'colours', 'roitimes', 'roii', 'response_means', 'response_stds', 'response_ste95'};
+cached_inputs = {'goodP', 'colours', 'roitimes', 'roii', 'response_means', 'response_stds', 'response_ste95'};
 
-for i = 1:length(optional_inputs)
-    if ~exist(optional_inputs{i}, 'var')
-        eval(sprintf('%s = previous.%s;', optional_inputs{i}, optional_inputs{i}));
-    else
-        eval(sprintf('previous.%s = %s;', optional_inputs{i}, optional_inputs{i}));
+if nargin > 0
+    for i = 1:length(cached_inputs)
+        eval(sprintf('previous.%s = %s;', cached_inputs{i}, cached_inputs{i}));
+    end
+else
+    for i = 1:length(cached_inputs)
+        eval(sprintf('%s = previous.%s;', cached_inputs{i}, cached_inputs{i}));
     end
 end
 
