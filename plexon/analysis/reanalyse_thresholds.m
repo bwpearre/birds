@@ -6,7 +6,7 @@ files = dir('stim*.mat');
 [~, sorted_index] = sortrows({files.date}');
 files = files(sorted_index);
 
-detrend_param.model = 'fourier8';
+detrend_param.model = 'fourier5';
 detrend_param.range = [0.0025 0.025];
 detrend_param.response_roi = [0.003 0.008];
 detrend_param.response_baseline = [0.012 0.025];
@@ -27,7 +27,13 @@ polarity_string = {};
 pp = [];
 %look_for_spikes = @look_for_spikes_xcorr
 
-for f = 1:length(files)
+if exist('wbar', 'var');
+    waitbar(0, wbar);
+else
+    wbar = waitbar(0, 'Loading files...');
+end
+nfiles = length(files);
+for f = 1:nfiles
     load(files(f).name);
     data = update_data_struct(data, detrend_param, []);
     if isfield(data, 'tdt')
@@ -82,8 +88,9 @@ for f = 1:length(files)
         response_recordings{polarity}{end+1} = response_detrended(aligning_stims{1},:);
         response_channels{polarity}{end+1} = data.tdt.index_recording;
     end
+    waitbar(f/nfiles, wbar);
 end
-
+close(wbar);
 
 mytansig = @(a, mu, x) 0.5 + 0.5*tanh(a*(x-mu));
 

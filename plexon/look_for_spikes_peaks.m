@@ -112,7 +112,11 @@ for channel = 1:nchannels
     % Which stims showed the aligned peaks?
     % Using the maximal value of "counts", average the time values and pull that as the official peak time:
     [max_aligning, max_aligning_posneg] = max(m);
-    aligning_stims{channel} = unique(stim_i{max_aligning_posneg,channel}(find(counts{max_aligning_posneg,channel} == max_aligning)));
+    if max_aligning >= 2
+        aligning_stims{channel} = unique(stim_i{max_aligning_posneg,channel}(find(counts{max_aligning_posneg,channel} == max_aligning)));
+    else
+        aligning_stims{channel} = {};
+    end
 end
 
 

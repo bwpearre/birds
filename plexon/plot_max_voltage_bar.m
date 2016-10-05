@@ -55,7 +55,6 @@ hBar = bar(channel_voltage_means(sortorder));
 % Pull in the maximum-likelihood sigmoid fit results:
 if exist('reanalysed_thresholds.mat', 'file')
     load('reanalysed_thresholds.mat');
-    reanalysed_thresholds = reanalysed_thresholds_2;
 end
 for i = 1:length(polarities)
     foo = find(reanalysed_thresholds(:,1) == polarities(i) & reanalysed_thresholds(:,2) ~= 0);

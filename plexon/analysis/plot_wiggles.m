@@ -30,7 +30,7 @@ for p = goodP
 end
 hold off;
 ylabel('V (\mu V)');
-title('Response shapes \pm \sigma');
+title('Response shapes: \mu \pm \sigma');
 
 
 
