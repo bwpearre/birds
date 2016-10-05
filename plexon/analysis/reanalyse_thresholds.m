@@ -1,11 +1,13 @@
 clear;
 
+global showP;
+
 files = dir('stim*.mat');
 [~, sorted_index] = sortrows({files.date}');
 files = files(sorted_index);
 
-detrend_param.model = 'exp1';
-detrend_param.range = [0.002 0.025];
+detrend_param.model = 'fourier8';
+detrend_param.range = [0.0025 0.025];
 detrend_param.response_roi = [0.003 0.008];
 detrend_param.response_baseline = [0.012 0.025];
 detrend_param.response_sigma = 3;
@@ -59,7 +61,8 @@ for f = 1:length(files)
     %[~, p] = detrend_param.spike_detect(d, data, detrend_param, d.response_detrended);
     %detrend_param.response_detection_threshold = zeros(1, 16);
     %detrend_param.response_detection_threshold(11) = -8.8;
-    [~, response_probabilities] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
+    %[~, response_probabilities] = look_for_spikes_peaks(d, data, detrend_param, d.response_detrended);
+    [~, response_probabilities, response_detrended] = look_for_spikes_peaks(d, data, detrend_param);
     current{polarity} = [current{polarity} data.stim.current_uA];
     voltage{polarity} = [voltage{polarity} data.voltage];
     monitor{polarity} = [monitor{polarity} data.stim.plexon_monitor_electrode];
@@ -72,7 +75,7 @@ for f = 1:length(files)
     
     % If we're seeing a good response, then add the response to a collection for plotting:
     if max(response_probabilities) >= 0.9
-        response_recordings{polarity}{end+1} = data.tdt.response_detrended;
+        response_recordings{polarity}{end+1} = response_detrended;
         response_channels{polarity}{end+1} = data.tdt.index_recording;
     end
 end
@@ -167,9 +170,24 @@ for p = 1:length(pp) % p is the index into the CSC names; pp is the list of pola
     sortable(p) = fits{p}.mu;
 end
 
+showP = goodP;
 colours = distinguishable_colors(length(goodP));
 
+
+%% Plot responses to the different CSCs...
 % What's the best bet for a channel for the response graphs?
+figure(4);
+pi = 1;
+for i = goodP
+        checkboxes{i} = uicontrol('Style', 'checkbox',...
+           'String', sprintf('%d', i), ...
+           'Position', [5 5+20*pi 40 18],...
+           'Value', 1, ...
+           'BackgroundColor', colours(pi,:), ...
+           'Callback', @plotwhich);
+       pi = pi + 1;
+end
+
 clear response_means response_stds response_stes;
 for p = goodP
     all_res = [];
@@ -183,36 +201,10 @@ for p = goodP
     response_stds(p,:) = std(all_res, 0, 1);
     response_ste95(p,:) = 1.96 * response_stds(p,:) / sqrt(size(all_res, 1));
 end
-roii = find(times{pp(p)}{1} >= detrend_param.response_roi(1) & times{pp(p)}{1} <= detrend_param.response_roi(2));
+roii = find(times{pp(p)}{1} >= detrend_param.response_roi(1)-0.001 & times{pp(p)}{1} <= detrend_param.response_roi(2));
 roitimes = times{pp(p)}{1}(roii);
 % Plot the mean+std on top, and the mean+ste underneath:
-figure(4);
-subplot(2,1,1);
-cla;
-hold on;
-pi = 1;
-for p = goodP
-    shadedErrorBar(roitimes, response_means(p, roii), response_stds(p,roii), {'color', colours(pi,:)});
-    pi = pi + 1;
-end
-hold off;
-ylabel('V (\mu V)');
-set(gca, 'YLim', [-0.03 0.03]);
-title('Response shapes \pm \sigma');
-subplot(2,1,2);
-cla;
-hold on;
-pi = 1;
-for p = goodP
-    shadedErrorBar(roitimes, response_means(p, roii), response_ste95(p,roii), {'color', colours(pi,:)});
-    pi = pi + 1;
-end
-hold off;
-xlabel('Time post-stimulus (ms)');
-ylabel('V (\mu V)');
-title('Response shapes (95% confidence)');
-set(gca, 'YLim', [-0.03 0.03]);
-
+plot_wiggles(goodP, colours, roitimes, roii, response_means, response_stds, response_ste95);
 
 
 %[~, order] = sort(sortable);
@@ -357,3 +349,6 @@ for p = goodP
 end
 
 save('reanalysed_thresholds.mat', 'reanalysed_thresholds');
+
+
+
