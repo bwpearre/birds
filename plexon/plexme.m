@@ -124,8 +124,8 @@ smoothnessParams.pauseStep = 50;
 smoothnessParams.ampNumSteps = 10;
 smoothnessParams.pauseNumSteps = 10;
 
-stim.n_repetitions = 10;
-stim.repetition_Hz = 25;
+stim.n_repetitions = 20;
+stim.repetition_Hz = 27;
 
 
 % NI control rubbish
@@ -1703,7 +1703,6 @@ for iVar = 1:numel(globalVars)
   eval(sprintf('global %s', globalVars{iVar}));  % [EDITED]
 end
 disp('Made all vars global.  Not throwing an error.  Edit plexme.m if you want that.');
- a(0)
 
 
 
@@ -2283,11 +2282,11 @@ for i = find(stim.active_electrodes)
     [ ~, ~, voltages(i)] = stimulate_wrapper(stim, hardware, detrend_param, handles);
 end
 
-% Don't reset--leave it at the highest voltage found so far!
+% Don't reset--leave it at the highest voltage found so far?
 stim = stim_orig;
 voltages
 [~, pos] = max(voltages);
-stim.plexon_monitor_electrode = pos(1);
+stim.plexon_monitor_electrode = pos(1)
 set(handles.monitor_electrode_auto, 'BackgroundColor', 0.94 * [1 1 1]);
 
 %if one_pulse
@@ -2307,7 +2306,7 @@ global stop_button_pressed;
 global response_thresholds;
 global datadir;
 global thewaitbar;
-global scriptdir;
+global scriptdir data_basedir;
 global paused;
 
 if ~exist('pause', 'var')
@@ -2351,21 +2350,23 @@ if exist('repeat_experiment', 'var')
 elseif true
     NPOLARITIES = 16; % Perfect squares are easiest to subplot...
     
-    frequencies = [ 27 27 27 27 27 27]
+    frequencies = [ 27 27 27 27 27 27 27 ]
     durations = [200e-6]
     polarities = randperm(2^sum(stim.active_electrodes) - 2); % Will add 000 and 111 manually
     polarities = polarities(1:min([length(polarities) NPOLARITIES-2]));
     % Always test non-current-steering configurations!
     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
     
-    old_experiment_file = strcat(data_basedir, '/lr7-2016-09-29/experiment.mat');
-    warning('Using polarities from past experiment %s', old_experiment_file);
-    old_experiment = load(old_experiment_file);
-    polarities = old_experiment.polarities;
-    polarity_strings = old_experiment.polarity_strings;
-    i_want_these_polarities = [1:7 9:11 13:18];
-    polarities = polarities(i_want_these_polarities)
-    polarity_strings = polarity_strings(i_want_these_polarities)
+    if true
+        old_experiment_file = strcat(data_basedir, '/lr7-2016-09-29/experiment.mat');
+        warning('Using polarities from past experiment %s', old_experiment_file);
+        old_experiment = load(old_experiment_file);
+        polarities = old_experiment.polarities;
+        polarity_strings = old_experiment.polarity_strings;
+        i_want_these_polarities = [1:7 9:11 13:18];
+        polarities = polarities(i_want_these_polarities)
+        polarity_strings = polarity_strings(i_want_these_polarities)
+    end
 end
 
 
@@ -3332,12 +3333,12 @@ val = contents{get(hObject,'Value')};
 %% Defaults cater to my experiment. Should add controls for multiple defaults...
 if strcmp(val, 'CNS') % For my X--HVC experiment
     detrend_param.model = 'fourier8';
-    detrend_param.range = [0.002 0.025];
-    detrend_param.response_roi = [0.0025 0.008];
+    detrend_param.range = [0.0025 0.025];
+    detrend_param.response_roi = [0.003 0.008];
     detrend_param.response_baseline = [0.012 0.025];
     detrend_param.response_detection_threshold = 0.5;
     detrend_param.spike_detect = @look_for_spikes_peaks;
-    detrend_param.response_sigma = 5;
+    detrend_param.response_sigma = 3;
     detrend_param.response_prob = 0.5;
     voltage_limit = 3;
 elseif strcmp(val, 'Peripheral')
