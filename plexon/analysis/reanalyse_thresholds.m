@@ -30,6 +30,7 @@ pp = [];
 nfiles = length(files);
 
 if exist('wbar', 'var');
+    close(wbar);
     waitbar(0, wbar);
 else
     wbar = waitbar(0, sprintf('Loading %d files...', nfiles));
@@ -199,7 +200,7 @@ colours = distinguishable_colors(length(goodP));
 figure(4);
 showP = goodP;
 
-showP = 6;
+showP = goodP(1);
 
 global checkboxes;
 % Delete old checkboxes and re-create them:
@@ -207,13 +208,14 @@ if exist('checkboxes', 'var')
     for i = 1:length(checkboxes)
         delete(checkboxes{i});
     end
+    checkboxes = {};
 end
 pi = 1;
-for i = goodP
+for i = 1:length(goodP)
     value = length(intersect(showP, goodP(i)));
     checkboxes{i} = uicontrol('Style', 'checkbox',...
-        'String', polarity_string{pp(i)}, ...
-        'Tag', sprintf('%d', i), ...
+        'String', polarity_string{pp(goodP(i))}, ...
+        'Tag', sprintf('%d', goodP(i)), ...
         'Position', [1 20*pi 130 17], ...
         'Value', value, ...
         'ForegroundColor', colours(pi,:), ...

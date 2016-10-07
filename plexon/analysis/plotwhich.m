@@ -2,8 +2,6 @@ function plotwhich(source, event)
 global showP;
 global checkboxes;
 
-
-
 for i = 1:length(checkboxes)
     whichone = str2double(checkboxes{i}.Tag);
     v = checkboxes{i}.Value;
@@ -12,6 +10,6 @@ for i = 1:length(checkboxes)
     else
         showP = showP(find(showP ~= whichone));
     end
-
 end
+
 plot_wiggles();
