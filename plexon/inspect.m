@@ -113,6 +113,7 @@ function do_file(hObject, handles, file, doplot)
 global tdt_show_now tdt_show_data tdt_show_data_last;
 global detrend_param detrend_param_orig;
 persistent last_file;
+global data; % Expose this for debugging; say "global data" in the root workspace to gain access.
 
 %set(handles.listbox1, 'Enable', 'inactive');
 drawnow;

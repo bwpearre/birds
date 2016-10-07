@@ -2357,6 +2357,15 @@ elseif true
     polarities = polarities(1:min([length(polarities) NPOLARITIES-2]));
     % Always test non-current-steering configurations!
     polarities = [ polarities,  0,   2^sum(stim.active_electrodes) - 1 ]
+    
+    old_experiment_file = strcat(data_basedir, '/lr7-2016-09-29/experiment.mat');
+    warning('Using polarities from past experiment %s', old_experiment_file);
+    old_experiment = load(old_experiment_file);
+    polarities = old_experiment.polarities;
+    polarity_strings = old_experiment.polarity_strings;
+    i_want_these_polarities = [1:7 9:11 13:18];
+    polarities = polarities(i_want_these_polarities)
+    polarity_strings = polarity_strings(i_want_these_polarities)
 end
 
 

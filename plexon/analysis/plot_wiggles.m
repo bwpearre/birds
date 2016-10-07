@@ -18,7 +18,7 @@ end
 
 
 
-subplot(2,1,1);
+subplot(2,16,2:16);
 cla;
 hold on;
 pi = 1;
@@ -35,7 +35,7 @@ title('Response shapes: \mu \pm \sigma');
 
 
 
-subplot(2,1,2);
+subplot(2,16,18:32);
 cla;
 hold on;
 pi = 1;
