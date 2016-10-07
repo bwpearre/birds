@@ -76,6 +76,11 @@ end
 
 % Find the std dev of the non-roi.  BASERMS is indexed in matrix indices [1 2 3...]
 
+MINPEAKDISTANCE = 0.0005;
+if MINPEAKDISTANCE <= MAX_JITTER
+    error('MINPEAKDISTANCE <= MAX_JITTER. This will lead to self-matching.');
+end
+
 pp = zeros(2, nchannels); % Counts of peaks that line up.
 ppos = NaN * zeros(2, nchannels);
 for channel = 1:nchannels
@@ -85,35 +90,53 @@ for channel = 1:nchannels
     stim_i{2,channel} = [];
     basestd(channel) = std(reshape(response_detrended(:, baselinei, channel), 1, []));
 
-    % Find peaks, but they must be separated from each other by at least MinPeakDistance
+    % Find peaks, but they must be separated from each other by at least MinPeakDistance (0.5 ms)
     for stim = 1:nstims
         [ ~, x ] = findpeaks(response_detrended(stim, roii, channel), times(roii), ...
             'MinPeakHeight', detrend_param.response_sigma*basestd(channel), ...
-            'MinPeakDistance', 0.0005);
+            'MinPeakDistance', MINPEAKDISTANCE);
         peaks{1,channel} = [peaks{1,channel} x];
         stim_i{1,channel} = [stim_i{1,channel} zeros(size(x))+stim];
         [ ~, x ] = findpeaks(-response_detrended(stim, roii, channel), times(roii), ...
             'MinPeakHeight', detrend_param.response_sigma*basestd(channel), ...
-            'MinPeakDistance', 0.0005);
+            'MinPeakDistance', MINPEAKDISTANCE);
         peaks{2,channel} = [peaks{2,channel} x];
         stim_i{2,channel} = [stim_i{2,channel} zeros(size(x))+stim];
     end
 
-    
+    % peaks{2,channel}(i) is the location of downward peak i on this channel
+    % stim_i{2,channel}(i) is the stim number of downward peak i on this channel
     for posneg = [1 2]
         % How big is each group of spikes within 100us of each other?
-        dists = squareform(pdist(peaks{posneg,channel}'));
-        counts{posneg,channel} = sum(dists <= MAX_JITTER);
+        dists = squareform(pdist(peaks{posneg,channel}')); % pairwise peak distances
+        
+        % counts of all pairwise distances between all peaks.  On any given channel, peaks must be
+        % at least MinPeakDistance apart and also (next line) <= MAX_JITTER, so self-matching is
+        % impossible.
+        matching_dists = dists <= MAX_JITTER;
+        counts{posneg,channel} = sum(matching_dists);
         if max(counts{posneg,channel}) > 0
             [pp(posneg,channel) ppos(posneg,channel)] = max(counts{posneg,channel});
         end
         m(posneg) = max(counts{posneg,channel});
+        
+        if m(posneg) >= 2
+            % Find the first peak that matched the most others.  That lists all matching peaks.
+            which_peaks = find(matching_dists(ppos(posneg,channel),:));
+            % Which stims were associated with those peaks?
+            which_stims{posneg,channel} = stim_i{posneg,channel}(which_peaks);
+            if length(which_stims{posneg,channel}) ~= length(unique(which_stims{posneg,channel}))
+                error('Are the peaks overlapping?');
+            end
+        else
+            which_stims{posneg,channel} = {};
+        end
     end
     % Which stims showed the aligned peaks?
     % Using the maximal value of "counts", average the time values and pull that as the official peak time:
     [max_aligning, max_aligning_posneg] = max(m);
     if max_aligning >= 2
-        aligning_stims{channel} = unique(stim_i{max_aligning_posneg,channel}(find(counts{max_aligning_posneg,channel} == max_aligning)));
+        aligning_stims{channel} = which_stims{max_aligning_posneg,channel};
     else
         aligning_stims{channel} = {};
     end

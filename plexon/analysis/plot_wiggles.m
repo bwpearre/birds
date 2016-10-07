@@ -1,10 +1,10 @@
-function [] = plot_wiggles(goodP, colours, roitimes, roii, response_means, response_stds, response_ste95);
+function [] = plot_wiggles(goodP, colours, roitimes, roii, responses, response_means, response_stds, response_ste95);
 
 global showP;
 persistent previous;
 
 
-cached_inputs = {'goodP', 'colours', 'roitimes', 'roii', 'response_means', 'response_stds', 'response_ste95'};
+cached_inputs = {'goodP', 'colours', 'roitimes', 'roii', 'responses', 'response_means', 'response_stds', 'response_ste95'};
 
 if nargin > 0
     for i = 1:length(cached_inputs)
@@ -25,6 +25,7 @@ pi = 1;
 for p = goodP
     if ~isempty(find(p==showP))
         shadedErrorBar(roitimes, response_means(p, roii), response_stds(p,roii), {'color', colours(pi,:)}, 1);
+        %plot(roitimes, responses{p}(:, roii), 'color', colours(pi,:));
     end
     pi = pi + 1;
 end

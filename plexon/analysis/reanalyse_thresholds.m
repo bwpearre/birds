@@ -6,7 +6,7 @@ files = dir('stim*.mat');
 [~, sorted_index] = sortrows({files.date}');
 files = files(sorted_index);
 
-detrend_param.model = 'fourier5';
+detrend_param.model = 'fourier8';
 detrend_param.range = [0.0025 0.025];
 detrend_param.response_roi = [0.003 0.008];
 detrend_param.response_baseline = [0.012 0.025];
@@ -27,12 +27,14 @@ polarity_string = {};
 pp = [];
 %look_for_spikes = @look_for_spikes_xcorr
 
+nfiles = length(files);
+
 if exist('wbar', 'var');
     waitbar(0, wbar);
 else
-    wbar = waitbar(0, 'Loading files...');
+    wbar = waitbar(0, sprintf('Loading %d files...', nfiles));
 end
-nfiles = length(files);
+
 for f = 1:nfiles
     load(files(f).name);
     data = update_data_struct(data, detrend_param, []);
@@ -42,7 +44,7 @@ for f = 1:nfiles
         d = data.ni;
     end
     if any(data.tdt.index_recording ~= 11)
-        disp('Rejected one file...');
+        disp(sprintf('Rejected file %d', f));
         continue;
     end
     
@@ -84,8 +86,9 @@ for f = 1:nfiles
     times{polarity}{end+1} = d.times_aligned;
     
     % If we're seeing a good response, then add the response to a collection for plotting:
+    CHANNEL_INDEX = 1; % FIXME
     if max(response_probabilities) >= 0.6
-        response_recordings{polarity}{end+1} = response_detrended(aligning_stims{1},:);
+        response_recordings{polarity}{end+1} = response_detrended(aligning_stims{CHANNEL_INDEX},:);
         response_channels{polarity}{end+1} = data.tdt.index_recording;
     end
     waitbar(f/nfiles, wbar);
@@ -124,24 +127,31 @@ for p = 1:length(pp) % p is the index into the CSC names; pp is the list of pola
         else
             disp(sprintf('Found %d sweeps in config  %s', length(j), polarity_string{pp(p)}));
         end
-        for s = 1:length(j)
-            % s is the sweep number
-            indices{s} = i(j(s)):i(j(s))+k(s);
-            
-            % Going to reverse-fudge other voltage data.  Store extra data as well
-            %indices_presweep{s} = 1:i(j(s))-1;
-            
-            
-            if length(unique(current{pp(p)}(indices{s}))) ~= 1
-                warning('Different values for current in a sweep.');
+        try
+            for s = 1:length(j)
+                % s is the sweep number
+                indices{s} = i(j(s)):i(j(s))+k(s);
+                
+                % Going to reverse-fudge other voltage data.  Store extra data as well
+                %indices_presweep{s} = 1:i(j(s))-1;
+                
+                
+                if length(unique(current{pp(p)}(indices{s}))) ~= 1
+                    warning('Different values for current in a sweep.');
+                end
+                % Maximum monitor voltage over the monitor electrodes:
+                
+                V{s} = max(voltage{pp(p)}(indices{s})) * ones(1, k(s)+1);
+                
+                cur_s{p}(s) = current{pp(p)}(indices{s}(1));
+                vol_s{p}(s,:) = voltage{pp(p)}(indices{s});
+                
             end
-            % Maximum monitor voltage over the monitor electrodes:
-            
-            V{s} = max(voltage{pp(p)}(indices{s})) * ones(1, k(s)+1);
-           
-            cur_s{p}(s) = current{pp(p)}(indices{s}(1));
-            vol_s{p}(s,:) = voltage{pp(p)}(indices{s});
-            
+        catch ME
+            j = j(1:end-1);
+            indices = indices(1:end-1);
+            V = V(1:end-1);
+            cur_s{p} = cur_s{p}(1:end-1);
         end
         
         
@@ -189,6 +199,9 @@ colours = distinguishable_colors(length(goodP));
 figure(4);
 showP = goodP;
 
+showP = 6;
+
+global checkboxes;
 % Delete old checkboxes and re-create them:
 if exist('checkboxes', 'var')
     for i = 1:length(checkboxes)
@@ -197,29 +210,30 @@ if exist('checkboxes', 'var')
 end
 pi = 1;
 for i = goodP
-        checkboxes{i} = uicontrol('Style', 'checkbox',...
-           'String', polarity_string{pp(i)}, ...
-           'Tag', sprintf('%d', i), ...
-           'Position', [1 20*pi 130 17], ...
-           'Value', 1, ...
-           'ForegroundColor', colours(pi,:), ...
-           'Callback', @plotwhich);
-       pi = pi + 1;
+    value = length(intersect(showP, goodP(i)));
+    checkboxes{i} = uicontrol('Style', 'checkbox',...
+        'String', polarity_string{pp(i)}, ...
+        'Tag', sprintf('%d', i), ...
+        'Position', [1 20*pi 130 17], ...
+        'Value', value, ...
+        'ForegroundColor', colours(pi,:), ...
+        'Callback', @plotwhich);
+    pi = pi + 1;
 end
 
-clear response_means response_stds response_stes;
+clear all_res response_means response_stds response_stes;
 for p = goodP
-    all_res = [];
+    all_res{p} = [];
     [~, best_response{pp(p)}] = max(mean(probs{pp(p)}, 2), [], 1);
     % Accumulate all the response recordings for the best channel:
     for i = 1:length(response_recordings{pp(p)})
         response_recording_ind = find(response_channels{pp(p)}{i} == best_response{pp(p)});
-        all_res = [all_res; response_recordings{pp(p)}{i}(:, :, response_recording_ind)];
+        all_res{p} = [all_res{p}; response_recordings{pp(p)}{i}(:, :, response_recording_ind)];
     end
     try
-        response_means(p,:) = mean(all_res, 1);
-        response_stds(p,:) = std(all_res, 0, 1);
-        response_ste95(p,:) = 1.96 * response_stds(p,:) / sqrt(size(all_res, 1));
+        response_means(p,:) = mean(all_res{p}, 1);
+        response_stds(p,:) = std(all_res{p}, 0, 1);
+        response_ste95(p,:) = 1.96 * response_stds(p,:) / sqrt(size(all_res{p}, 1));
     catch ME
         showP = showP(find(showP ~= p));
         set(checkboxes{p}, 'Value', 0, 'Enable', 'off');
@@ -229,7 +243,7 @@ end
 roii = find(times{pp(p)}{1} >= detrend_param.response_roi(1) & times{pp(p)}{1} <= detrend_param.response_roi(2));
 roitimes = times{pp(p)}{1}(roii);
 % Plot the mean+std on top, and the mean+ste underneath:
-plot_wiggles(goodP, colours, roitimes, roii, response_means, response_stds, response_ste95);
+plot_wiggles(goodP, colours, roitimes, roii, all_res, response_means, response_stds, response_ste95);
 
 
 %[~, order] = sort(sortable);
@@ -289,7 +303,7 @@ end
 
 % Plot the relative voltage of each electrode.  This is a visual sanity
 % check for extrapolating max voltages for the non-sweep data.
-if false
+if true
     figure(11);
     plotind = 1;
     

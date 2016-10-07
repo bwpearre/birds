@@ -123,7 +123,7 @@ set(gca, 'YLim', autoylim);
 
 
 set(gca, 'XLim', [0 npolarities+1]);
-xticklabel_rotate((1:npolarities)-0.4, 90, labels(sortorder), 'Fontsize', 8);
+xticklabel_rotate((1:npolarities)+0.1, 30, labels(sortorder), 'Fontsize', 8);
 ylabel('Volts');
 %xlabel('CSC');
 title('Maximum absolute voltage of any electrode vs. CSC');
