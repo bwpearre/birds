@@ -135,12 +135,14 @@ else
     set(handles.response_indicator, 'BackgroundColor', 0.94 * [1 1 1], 'String', 'Response?');
 end
 
-for ch = 1:length(d.index_recording)
-    chr = d.index_recording(ch);
-    if d.spikes(ch)
-        set(handles.tdt_show_buttons{chr}, 'BackgroundColor', [1 0 1]);
-    else
-        set(handles.tdt_show_buttons{chr}, 'BackgroundColor', 0.94 * [1 1 1]);
+if isfield(data, 'tdt')
+    for ch = 1:length(d.index_recording)
+        chr = d.index_recording(ch);
+        if d.spikes(ch)
+            set(handles.tdt_show_buttons{chr}, 'BackgroundColor', [1 0 1]);
+        else
+            set(handles.tdt_show_buttons{chr}, 'BackgroundColor', 0.94 * [1 1 1]);
+        end
     end
 end
 
