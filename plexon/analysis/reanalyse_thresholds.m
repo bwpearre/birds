@@ -2,6 +2,7 @@ clear;
 
 global showP;
 
+
 files = dir('stim*.mat');
 [~, sorted_index] = sortrows({files.date}');
 files = files(sorted_index);
@@ -29,7 +30,7 @@ pp = [];
 
 nfiles = length(files);
 
-if exist('wbar', 'var');
+if exist('wbar', 'var') & ishandle(wbar) & isvalid(wbar)
     close(wbar);
     waitbar(0, wbar);
 else
@@ -43,10 +44,6 @@ for f = 1:nfiles
         d = data.tdt;
     else
         d = data.ni;
-    end
-    if any(data.tdt.index_recording ~= 11)
-        disp(sprintf('Rejected file %d', f));
-        continue;
     end
     
     act = find(data.stim.active_electrodes);
@@ -83,14 +80,22 @@ for f = 1:nfiles
     foo = zeros(16, 1);
     foo(data.tdt.index_recording) = response_probabilities;
     probs{polarity} = [probs{polarity} foo];
-    prob{polarity} = [prob{polarity} max(response_probabilities)];
+    prob{polarity} = [prob{polarity} max(response_probabilities)]; % FIXME ANALYSE_REC_CH ?
     times{polarity}{end+1} = d.times_aligned;
     
     % If we're seeing a good response, then add the response to a collection for plotting:
-    CHANNEL_INDEX = 1; % FIXME
-    if max(response_probabilities) >= 0.6
-        response_recordings{polarity}{end+1} = response_detrended(aligning_stims{CHANNEL_INDEX},:);
-        response_channels{polarity}{end+1} = data.tdt.index_recording;
+    for rec_ch = data.tdt.index_recording
+        rec_ch_i = find(data.tdt.index_recording == rec_ch);
+
+        if isempty(response_recordings{polarity}) | length(response_recordings{polarity}) < rec_ch
+            response_recordings{polarity}{rec_ch} = {};
+            response_channels{polarity}{rec_ch} = {};
+        end
+        
+        if response_probabilities(rec_ch_i) >= 0.5
+            response_recordings{polarity}{rec_ch}{end+1} = response_detrended(aligning_stims{rec_ch_i},:);
+            response_channels{polarity}{rec_ch}{end+1} = data.tdt.index_recording(rec_ch_i);
+        end
     end
     waitbar(f/nfiles, wbar);
 end
@@ -119,6 +124,16 @@ for p = 1:length(pp) % p is the index into the CSC names; pp is the list of pola
         i = find(diff(monitor{pp(p)}) > 0);
         j = find(diff([Inf i]) ~= 1);
         k = diff([j length(i)+1]);
+        
+        valid_sweep_i = find(k == max(k));
+        if length(valid_sweep_i) ~= length(k)
+            disp(sprintf('Config %s: sweep counts are %s; deleting low-count sweeps.', ...
+                polarity_string{pp(p)}, ...
+                sprintf(' %d', k)));
+        end
+        k = k(valid_sweep_i);
+        j = j(valid_sweep_i);
+        
         if length(j) == 0
             disp(sprintf('No sweeps found in config %s', polarity_string{pp(p)}));
             continue;
@@ -128,31 +143,25 @@ for p = 1:length(pp) % p is the index into the CSC names; pp is the list of pola
         else
             disp(sprintf('Found %d sweeps in config  %s', length(j), polarity_string{pp(p)}));
         end
-        try
-            for s = 1:length(j)
-                % s is the sweep number
-                indices{s} = i(j(s)):i(j(s))+k(s);
-                
-                % Going to reverse-fudge other voltage data.  Store extra data as well
-                %indices_presweep{s} = 1:i(j(s))-1;
-                
-                
-                if length(unique(current{pp(p)}(indices{s}))) ~= 1
-                    warning('Different values for current in a sweep.');
-                end
-                % Maximum monitor voltage over the monitor electrodes:
-                
-                V{s} = max(voltage{pp(p)}(indices{s})) * ones(1, k(s)+1);
-                
-                cur_s{p}(s) = current{pp(p)}(indices{s}(1));
-                vol_s{p}(s,:) = voltage{pp(p)}(indices{s});
-                
+        
+        for s = 1:length(j)
+            % s is the sweep number
+            indices{s} = i(j(s)):i(j(s))+k(s);
+            
+            % Going to reverse-fudge other voltage data.  Store extra data as well
+            %indices_presweep{s} = 1:i(j(s))-1;
+            
+            
+            if length(unique(current{pp(p)}(indices{s}))) ~= 1
+                error('Different values for current in a sweep.');
             end
-        catch ME
-            j = j(1:end-1);
-            indices = indices(1:end-1);
-            V = V(1:end-1);
-            cur_s{p} = cur_s{p}(1:end-1);
+            % Maximum monitor voltage over the monitor electrodes:
+            
+            V{s} = max(voltage{pp(p)}(indices{s})) * ones(1, k(s)+1);
+            
+            cur_s{p}(s) = current{pp(p)}(indices{s}(1));
+            vol_s{p}(s,:) = voltage{pp(p)}(indices{s});
+            
         end
         
         
@@ -223,14 +232,17 @@ for i = 1:length(goodP)
     pi = pi + 1;
 end
 
+ANALYSE_REC_CH = 11;
+
 clear all_res response_means response_stds response_stes;
 for p = goodP
     all_res{p} = [];
-    [~, best_response{pp(p)}] = max(mean(probs{pp(p)}, 2), [], 1);
+    [~, best_response_channel{pp(p)}] = max(mean(probs{pp(p)}, 2), [], 1);
+    best_response_channel{pp(p)} = ANALYSE_REC_CH; % Detect, or choose?  FIXME
     % Accumulate all the response recordings for the best channel:
-    for i = 1:length(response_recordings{pp(p)})
-        response_recording_ind = find(response_channels{pp(p)}{i} == best_response{pp(p)});
-        all_res{p} = [all_res{p}; response_recordings{pp(p)}{i}(:, :, response_recording_ind)];
+    for i = 1:length(response_recordings{pp(p)}{ANALYSE_REC_CH})
+        %response_recording_ind = find(response_channels{pp(p)}{ANALYSE_REC_CH}{i} == best_response_channel{pp(p)});
+        all_res{p} = [all_res{p}; response_recordings{pp(p)}{ANALYSE_REC_CH}{i}];
     end
     try
         response_means(p,:) = mean(all_res{p}, 1);

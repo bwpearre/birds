@@ -57,14 +57,6 @@ scriptdir = fileparts(mfilename('fullpath'));
 libdirs = {'/tdt/lib64', ...
     'C:\opt\PlexonSDKs\MATLAB SDK for PlexStim 2.0 - 64 bit'};
 
-for i = 1:length(libdirs)
-    if ~exist(libdirs{i}, 'dir')
-        error('The library directory "%s" does not exist.', libdirs{i});
-    else
-        addpath(libdirs{i});
-    end
-end
-addpath(sprintf('%s/../lib', scriptdir));
 
 
 % Choose default command line output for plexme
@@ -283,8 +275,38 @@ axes4 = handles.axes4;
 axes3 = handles.axes3;
 
 
+
+demo = true;
+demofile = '/Volumes/Data/plexon/lw95rhp-2015-08-05/stim_20150805_183907.299.mat';
+if demo
+    offsiteTest = true;
+    load(demofile);
+    data = update_data_struct(data, [], handles);
+    devices = {};
+    devices_perhaps = {'tdt', 'ni'};
+    for i = devices_perhaps
+        if isfield(data, i)
+            devices(end+1) = i;
+        end
+    end
+    set(handles.show_device, 'String', devices);
+
+    plot_stimulation(data, handles);
+end
+
+
 set(hObject, 'CloseRequestFcn', {@gui_close_callback, handles});
 if (~offsiteTest)
+    for i = 1:length(libdirs)
+        if ~exist(libdirs{i}, 'dir')
+            error('The library directory "%s" does not exist.', libdirs{i});
+        else
+            addpath(libdirs{i});
+        end
+    end
+    addpath(sprintf('%s/../lib', scriptdir));
+
+    
     handles = configure_acquisition_devices(hObject, handles);
     
     if isfield(hardware, 'tdt')
@@ -309,11 +331,18 @@ update_gui_values(hObject, handles);
 guidata(hObject, handles);
 
 
+
+
+
 function [handles] = configure_acquisition_devices_OFFSITE(hObject, handles);
 global hardware;
 
 % TDT fake initializations
 hardware.tdt.device = []; % Set empty so that parts of the code are skipped over
+
+
+
+
 
 
 function [handles] = configure_acquisition_devices(hObject, handles);
@@ -323,6 +352,7 @@ global offsiteTest;
 tic
 
 currently_reconfiguring = true;
+
 
 disp('Opening NI session...');
 init_ni(hObject, handles);
@@ -335,6 +365,7 @@ init_plexon(hObject, handles);
 disp('...done');
 
 currently_reconfiguring = false;
+
 guidata(hObject, handles);
 
 disp(sprintf('Reconfiguring finished.  Elapsed time %s s.', sigfig(toc)));
