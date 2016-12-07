@@ -1,4 +1,4 @@
-function [] = plotspikes(sessions, goodsessions, channels, n_min, window, colours);
+function [] = plotspikes(sessions, goodsessions, channels, n_min, window, colours, shadederror);
 
 nchannels = length(channels);
 nsessions = length(find(goodsessions));
@@ -46,7 +46,7 @@ for session = find(goodsessions)
         ste95 = ste * 1.96;
         
         if n >= n_min
-            if true
+            if shadederror
                 shadedErrorBar([window(1):1/fs:window(2)]*1e3, ...
                     mu, ...
                     sigma, ...

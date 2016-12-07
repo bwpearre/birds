@@ -1,5 +1,8 @@
 clear;
 
+show_ste = true;
+show_std = false;
+
 
 load response_thresholds;
 
@@ -60,8 +63,6 @@ fooste = foostd ./ repmat(sqrt(totalsamples'), ...
     1, ndurations, nsamples, nchannels);
 foo95 = fooste * 1.96;
 
-show_ste = true;
-show_std = true;
 %xlimits = [2e-3 data.tdt.times_aligned(max(v))]*1e3;
 xlimits = [2 12];
 show = [ 1:npolarities ];
@@ -85,7 +86,7 @@ if show_ste
                 squeeze(foo95(show(i), :, v, 1)), ...
                 {'color', colours(i,:)}, 1);
             hh(show(i)) = h.mainLine;
-            title(sprintf('HVC responses with different Area X stimulation patterns: stderr'));
+            title(sprintf('HVC responses with different Area X stimulation patterns: 95%%'));
         else
             h = plot(timeaxis, squeeze(allthethings(show(i), :, v, 1)), 'Color', colours(i,:));
             hh(show(i)) = h(1);
@@ -133,3 +134,4 @@ end
 %saveas(gcf, 'current_steering_hvc_responses.eps', 'epsc');
 %saveas(gcf, 'current_steering_hvc_responses.fig');
 
+set(gcf, 'renderer', 'painters');
