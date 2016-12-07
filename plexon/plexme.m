@@ -105,7 +105,7 @@ in_stim_loop = false;
 max_uAmps = 100;
 min_uAmps = 0.05;
 increase_step = 1.1;
-start_uAmps = 10;
+start_uAmps = 15;
 stim.current_uA = start_uAmps;
 inter_trial_s = 0.01; % Additional time between sets; not really used.
 hardware.plexon.id = 1;   % Assume (hardcode) 1 Plexon box
@@ -246,7 +246,7 @@ set(handles.n_repetitions_box, 'BackgroundColor', offcolour);
 set(handles.n_repetitions_hz_box, 'BackgroundColor', offcolour);
 set(handles.apply_params, 'BackgroundColor', [1 0 0], 'Visible', 'off');
 
-handles.disable_on_run = { handles.currentcurrent, handles.startcurrent, ...
+handles.disable_on_run = { handles.currentcurrent, ...
     handles.maxcurrent, handles.increasefactor, handles.halftime, handles.delaytime, ...
     handles.voltage_limit, ...
     handles.full_threshold_scan, handles.presets};
@@ -3371,7 +3371,7 @@ if strcmp(val, 'CNS') % For my X--HVC experiment
     detrend_param.spike_detect = @look_for_spikes_peaks;
     detrend_param.response_sigma = 3;
     detrend_param.response_prob = 0.5;
-    voltage_limit = 3;
+    voltage_limit = 4;
 elseif strcmp(val, 'Peripheral')
     detrend_param.model = 'fourier3'; % For Win's peripheral nerve experiment
     detrend_param.range = [0.0007 0.02];
