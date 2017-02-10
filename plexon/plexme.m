@@ -276,12 +276,18 @@ axes3 = handles.axes3;
 
 
 
-demo = true;
-demofile = '/Volumes/Data/plexon/lw95rhp-2015-08-05/stim_20150805_183907.299.mat';
+demo = false;
+if ispc
+    demofile = 'c:/Users/gardnerlab/Data/plexon/lw95rhp-2015-08-05/stim_20150805_183907.299.mat';
+else
+    demofile = '/Volumes/Data/plexon/lw95rhp-2015-08-05/stim_20150805_183907.299.mat';
+end
 if demo
     offsiteTest = true;
     load(demofile);
     data = update_data_struct(data, [], handles);
+    global detrend_param;
+    detrend_param = data.detrend_param;
     devices = {};
     devices_perhaps = {'tdt', 'ni'};
     for i = devices_perhaps
@@ -318,6 +324,10 @@ if (~offsiteTest)
     end
 else
     handles = configure_acquisition_devices_OFFSITE(hObject, handles);
+end
+
+if demo
+    hardware = [];
 end
 
 % We don't need to know when there are no spikes.
@@ -701,7 +711,7 @@ disp('Shutting down...');
 stop_everything(handles);
 
 disp('Shutting down NI session...');
-if ~isempty(hardware.ni.session)
+if isfield(hardware, 'ni') & ~isempty(hardware.ni.session)
     stop(hardware.ni.session);
     release(hardware.ni.session);
     hardware.ni.session = [];
@@ -709,7 +719,7 @@ end
 disp('...done.');
 
 disp('Shutting down Plexon session... NOT closing Plexon box!');
-if hardware.plexon.open & false
+if isfield(hardware, 'plexon') & hardware.plexon.open & false
     err = PS_CloseAllStim;
     if err
         msgbox({'ERROR CLOSING STIMULATOR', 'Could not contact Plexon stimulator for shutdown!'});
@@ -730,7 +740,7 @@ if false
 end
 
 disp('Shutting down TDT session...');
-if ~isempty(hardware.tdt.device)
+if isfield(hardware, 'tdt') & ~isempty(hardware.tdt.device)
     try
         hardware.tdt.device.Halt;
     catch
@@ -2006,7 +2016,7 @@ for i = devices_perhaps
 end
 set(handles.show_device, 'String', devices);
 
-if ~isempty(hardware.tdt.device)
+if isfield(hardware, 'tdt') & ~isempty(hardware.tdt.device)
     for i = 1:16
         if stim.tdt_valid(i)
             foo = 'on';
