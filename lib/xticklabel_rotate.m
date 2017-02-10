@@ -110,7 +110,7 @@ end
 %Make XTick a column vector
 XTick = XTick(:);
 
-if ~exist('xTickLabels'),
+if ~exist('xTickLabels', 'var'),
 	% Define the xtickLabels 
 	% If XtickLabel is passed as a cell array then use the text
 	if (length(varargin)>0) & (iscell(varargin{1})),

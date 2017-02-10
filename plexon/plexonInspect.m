@@ -1,35 +1,35 @@
-function varargout = inspect(varargin)
-% INSPECT MATLAB code for inspect.fig
-%      INSPECT, by itself, creates a new INSPECT or raises the existing
+function varargout = plexonInspect(varargin)
+% PLEXONINSPECT MATLAB code for plexonInspect.fig
+%      PLEXONINSPECT, by itself, creates a new PLEXONINSPECT or raises the existing
 %      singleton*.
 %
-%      H = INSPECT returns the handle to a new INSPECT or the handle to
+%      H = PLEXONINSPECT returns the handle to a new PLEXONINSPECT or the handle to
 %      the existing singleton*.
 %
-%      INSPECT('CALLBACK',hObject,eventData,handles,...) calls the local
-%      function named CALLBACK in INSPECT.M with the given input arguments.
+%      PLEXONINSPECT('CALLBACK',hObject,eventData,handles,...) calls the local
+%      function named CALLBACK in PLEXONINSPECT.M with the given input arguments.
 %
-%      INSPECT('Property','Value',...) creates a new INSPECT or raises the
+%      PLEXONINSPECT('Property','Value',...) creates a new PLEXONINSPECT or raises the
 %      existing singleton*.  Starting from the left, property value pairs are
-%      applied to the GUI before inspect_OpeningFcn gets called.  An
+%      applied to the GUI before plexonInspect_OpeningFcn gets called.  An
 %      unrecognized property name or invalid value makes property application
-%      stop.  All inputs are passed to inspect_OpeningFcn via varargin.
+%      stop.  All inputs are passed to plexonInspect_OpeningFcn via varargin.
 %
 %      *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
 %      instance to run (singleton)".
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Edit the above text to modify the response to help inspect
+% Edit the above text to modify the response to help plexonInspect
 
-% Last Modified by GUIDE v2.5 12-May-2016 17:07:41
+% Last Modified by GUIDE v2.5 06-Feb-2017 13:13:07
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
                    'gui_Singleton',  gui_Singleton, ...
-                   'gui_OpeningFcn', @inspect_OpeningFcn, ...
-                   'gui_OutputFcn',  @inspect_OutputFcn, ...
+                   'gui_OpeningFcn', @plexonInspect_OpeningFcn, ...
+                   'gui_OutputFcn',  @plexonInspect_OutputFcn, ...
                    'gui_LayoutFcn',  [] , ...
                    'gui_Callback',   []);
 if nargin && ischar(varargin{1})
@@ -44,8 +44,8 @@ end
 % End initialization code - DO NOT EDIT
 
 
-% --- Executes just before inspect is made visible.
-function inspect_OpeningFcn(hObject, eventdata, handles, varargin)
+% --- Executes just before plexonInspect is made visible.
+function plexonInspect_OpeningFcn(hObject, eventdata, handles, varargin)
 handles.output = hObject;
 
 scriptpath = fileparts(mfilename('fullpath'));
@@ -288,7 +288,7 @@ if ~isempty(file)
 end
 
 
-function varargout = inspect_OutputFcn(hObject, ~, handles) 
+function varargout = plexonInspect_OutputFcn(hObject, ~, handles) 
 varargout{1} = handles.output;
 
 
