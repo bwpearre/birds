@@ -78,15 +78,19 @@ lenfit = length(roitimes);
 trend = zeros(nstims_m, nsamples, nchannels);
 detrended = zeros(nstims_m, nsamples, nchannels);
 
-parfor stim = 1:nstims_m
-    for channel = 1:nchannels
-        f = fit(reshape(roitimes, [length(roii) 1]), ...
-            reshape(response(stim, roii, channel), [length(roii) 1]), ...
-            detrend_param.model, 'Normalize', 'on');
-        trend(stim, :, channel) = f(d.times_aligned(1:nsamples));
-        detrended(stim, :, channel) = squeeze(response(stim, :, channel)) - trend(stim, :, channel);
-        %detrendotron{channel} = f;
+try
+    parfor stim = 1:nstims_m
+        for channel = 1:nchannels
+            f = fit(reshape(roitimes, [length(roii) 1]), ...
+                reshape(response(stim, roii, channel), [length(roii) 1]), ...
+                detrend_param.model, 'Normalize', 'on');
+            trend(stim, :, channel) = f(d.times_aligned(1:nsamples));
+            detrended(stim, :, channel) = squeeze(response(stim, :, channel)) - trend(stim, :, channel);
+            %detrendotron{channel} = f;
+        end
     end
+catch ME
+    warning('Caught an error that is probably not too important, but manually doublecheck if needed:');
+    ME
 end
-
 last_detrend = detrend_param;
