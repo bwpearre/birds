@@ -22,11 +22,15 @@ if n_repetitions_actual == 0
 end
 
 
+try
 for n = length(trigger_ind):-1:1
     start_ind = trigger_ind(n) - trigger_ind(1) + 1;
     data_aligned(n,:,:) = data(start_ind:start_ind+ceil(0.030*fs),:);
 end
-
+catch ME
+    warning('Caught an error. This stim may suck:');
+    ME
+end
 
 triggertime = timestamps(find(triggers >= triggerthreshold, 1));
 if isempty(triggertime)
